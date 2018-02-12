@@ -1,0 +1,180 @@
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    <title>Design Goals &#8212; ethercattle 0.0.0 documentation</title>
+    <link rel="stylesheet" href="../_static/alabaster.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../',
+        VERSION:     '0.0.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true,
+        SOURCELINK_SUFFIX: '.txt'
+      };
+    </script>
+    <script type="text/javascript" src="../_static/jquery.js"></script>
+    <script type="text/javascript" src="../_static/underscore.js"></script>
+    <script type="text/javascript" src="../_static/doctools.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Approach" href="approach.html" />
+    <link rel="prev" title="Introduction" href="intro.html" />
+   
+  <link rel="stylesheet" href="../_static/custom.css" type="text/css" />
+  
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9" />
+
+  </head>
+  <body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <div class="section" id="design-goals">
+<span id="id1"></span><h1>Design Goals<a class="headerlink" href="#design-goals" title="Permalink to this headline">¶</a></h1>
+<p>The primary goal of the Ether Cattle intiative is to provide access to Ethereum
+RPC services with minimal operational complexity and cost. Ideally this will
+be achieved by enhancing an existing Ethereum client with capabilities that
+simplify the operational challenges.</p>
+<div class="section" id="health-checks">
+<h2>Health Checks<a class="headerlink" href="#health-checks" title="Permalink to this headline">¶</a></h2>
+<p>A major challenge with existing Ethereum nodes is evaluating the health of an
+individual node. Generally nodes should be considered healthy if they have the
+blockchain and state trie at the highest block, and are able to serve RPC
+requests relating to that state. If a node is more than a couple of blocks
+behind the network, it should be considered unhealthy.</p>
+</div>
+<div class="section" id="service-initialization">
+<span id="initialization"></span><h2>Service Initialization<a class="headerlink" href="#service-initialization" title="Permalink to this headline">¶</a></h2>
+<p>One of the major challenges with treating Ethereum nodes as disposable is the
+initialization time. Conventionally a new instance must find peers, download
+the latest blocks from those peers, and validate each transaction in those
+blocks. Even if the instance is built from a relatively recent snapshot, this
+can be a bandwidth intensive, computationally intensive, disk intensive, and
+time consuming process.</p>
+<p>In a trustless peer-to-peer system, these steps are unavoidable. Malicious
+peers could provide incorrect information, so it is necessary to validate all
+of the information received from untrusted peers. But given several nodes
+managed by the same operator, it is generally safe for those nodes to trust
+eachother, allowing us to avoid some of the computationally intensive and disk
+intensive steps that make the initialization process time consuming.</p>
+<p>Ideally node snapshots will be taken periodically, new instances will launch
+based on the most recent available snapshot, and then sync the blockchain and
+state trie from trusted peers without having to validate every successive
+transaction. Assuming relatively recent snapshots are available, this should
+allow new instances to start up in a matter of minutes rather than hours.</p>
+<p>Additionally, during the initialization process services should be identifiable
+as still initializing and excluded from the load balancer pool. This will
+avoid nodes serving outdated information during initialization.</p>
+</div>
+<div class="section" id="load-balancing">
+<span id="id2"></span><h2>Load Balancing<a class="headerlink" href="#load-balancing" title="Permalink to this headline">¶</a></h2>
+<p>Given reliable healthchecks and a quick initialization process, one challenge
+remains on loadbalancing. The Ethereum RPC protocol supports a concept of
+“filter subscriptions” where a filter is installed on an Ethereum node and
+subsequent requests about the subscription are served updates about changes
+matching the filter since the previous request. This requires a stateful
+session, which depends on having a single Ethereum node serve each successive
+request relating to a specific subscription.</p>
+<p>For now this can be addressed on the client application using <a class="reference external" href="https://github.com/MetaMask/provider-engine/blob/master/subproviders/filters.js">Provider Engine’s Filter Subprovider</a>.
+The Filter Subprovider mimics the functionality of installing a filter on a
+node and requesting updates about the subscription by making a series of
+stateless calls against the RPC server. Over the long term it might be
+beneficial to add a shared database that would allow the load balanced RPC
+nodes to manage filters on the server side instead of the client side, but due
+to the existence of the Filter Subprovider that is not necessary in the short
+term.</p>
+</div>
+<div class="section" id="reduced-computational-requirements">
+<h2>Reduced Computational Requirements<a class="headerlink" href="#reduced-computational-requirements" title="Permalink to this headline">¶</a></h2>
+<p>As discussed in <a class="reference internal" href="#initialization"><span class="std std-ref">Service Initialization</span></a>, a collection of nodes managed by a
+single operator do not have the same trust model amongst themselves as nodes in
+a fully peer-to-peer system. RPC Nodes can potentially decrease their
+computational overhead by relying on a subset of the nodes within a group to
+validate transactions. This would mean that a small portion of nodes would need
+the computational capacity to validate every transaction, while the remaining
+nodes would have lower resource requirements to serve RPC requests, allowing
+flexible scaling and redundancy.</p>
+</div>
+</div>
+
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="../index.html">ethercattle</a></h1>
+
+
+
+
+
+
+
+
+<h3>Navigation</h3>
+<p class="caption"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="intro.html">Introduction</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Design Goals</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#health-checks">Health Checks</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#service-initialization">Service Initialization</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#load-balancing">Load Balancing</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#reduced-computational-requirements">Reduced Computational Requirements</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="approach.html">Approach</a></li>
+<li class="toctree-l1"><a class="reference internal" href="implementation.html">Implementation</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="../index.html">Documentation overview</a><ul>
+      <li>Previous: <a href="intro.html" title="previous chapter">Introduction</a></li>
+      <li>Next: <a href="approach.html" title="next chapter">Approach</a></li>
+  </ul></li>
+</ul>
+</div>
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="../search.html" method="get">
+      <div><input type="text" name="q" /></div>
+      <div><input type="submit" value="Go" /></div>
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &copy;2018, Austin Roberts.
+      
+      |
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 1.6.4</a>
+      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.10</a>
+      
+      |
+      <a href="../_sources/topics/goals.rst.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>

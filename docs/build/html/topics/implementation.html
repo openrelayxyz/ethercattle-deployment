@@ -1,0 +1,322 @@
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    <title>Implementation &#8212; ethercattle 0.0.0 documentation</title>
+    <link rel="stylesheet" href="../_static/alabaster.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../',
+        VERSION:     '0.0.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true,
+        SOURCELINK_SUFFIX: '.txt'
+      };
+    </script>
+    <script type="text/javascript" src="../_static/jquery.js"></script>
+    <script type="text/javascript" src="../_static/underscore.js"></script>
+    <script type="text/javascript" src="../_static/doctools.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="prev" title="Approach" href="approach.html" />
+   
+  <link rel="stylesheet" href="../_static/custom.css" type="text/css" />
+  
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9" />
+
+  </head>
+  <body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <div class="section" id="implementation">
+<h1>Implementation<a class="headerlink" href="#implementation" title="Permalink to this headline">¶</a></h1>
+<p>In <cite>go-ethereum/internal/ethapi/backend.go</cite>, a Backend interface is specified.
+Objects filling this interface can be passed to ethapi.GetAPIS() to return
+<cite>[]rpc.API</cite>, which can be used to serve the Ethereum RPC APIs. Presently there
+are two implementations of the Backend interface, one for full Ethereum nodes
+and one for Light Ethereum nodes that depend on the LES protocol.</p>
+<p>This project will implement a third backend implementation, which will provide
+the necessary information to ethapi.GetAPIs() to in turn provide the RPC APIs.</p>
+<div class="section" id="backend-functions-to-implement">
+<h2>Backend Functions To Implement<a class="headerlink" href="#backend-functions-to-implement" title="Permalink to this headline">¶</a></h2>
+<p>This section explores each of the 26 methods required by the Backend interface.
+This is an initial pass, and attempts to implement these methods may prove more
+difficult than described below.</p>
+<div class="section" id="downloader">
+<h3>Downloader()<a class="headerlink" href="#downloader" title="Permalink to this headline">¶</a></h3>
+<p>Downloader must return a <cite>*go-ethereum/eth/downloader.Downloader</cite> object.
+Normally the <cite>Downloader</cite> object is responsible for managing relationships with
+remote peers, and synchronizing the block from remote peers. As our replicas
+will receive data directly via Kafka, the Downloader object won’t see much use.
+Even so, the <cite>PublicEthereumAPI</cite> struct expects to be able to retrieve a
+<cite>Downloader</cite> object so that it can provide the <cite>eth_syncing</cite> API call.</p>
+<p>If the Backend interface required an interface for a downloader rather than a
+specific Downloader object, we could stub out at Downloader that provided the
+<cite>eth_syncing</cite> data based on the current Kafka sync state. Unfortunately the
+Downloader requires a specific object constructed with the following
+properties:</p>
+<ul class="simple">
+<li><cite>mode SyncMode</cite> - An integer indicating whether the SyncMode is Fast, Full, or Light. We can probably specify “light” for our purposes.</li>
+<li><cite>stateDb ethdb.Database</cite> - An interface to LevelDB. Our backend will neeed a Database instance, so this should be easy.</li>
+<li><cite>mux *event.TypeMux</cite> - Used only for syncing with peers. If we avoid calling Downloader.Synchronize(), it appears this can safely be nil.</li>
+<li><cite>chain BlockChain</cite> - An object providing the downloader.BlockChain interface. If we only need to support Downloader.Progress(), and we set SyncMode to LightSync, this can be nil.</li>
+<li><cite>lightchain LightChain</cite> - An object providing the downloader.LightChain interface. If we only need to support Downloader.Progress(), and we set SyncMode to LightSync, we will need to stub this out and provide CurrentHeader() with the correct blocknumber.</li>
+<li><cite>dropPeer peerDropFn</cite> - Only used when syncing with peers. If we avoid calling Downloader.Synchronize(), this can be <cite>func(string) {}</cite></li>
+</ul>
+<p>Constructing a <cite>Downloader</cite> with the preceding arguments should provide the
+capabilities we need to offer the <cite>eth_progress</cite> RPC call.</p>
+</div>
+<div class="section" id="protocolversion">
+<h3>ProtocolVersion()<a class="headerlink" href="#protocolversion" title="Permalink to this headline">¶</a></h3>
+<p>This just needs to return an integer indicating the protocol version. This
+tells us what version of the peer-to-peer protocol the Ethereum client is
+using. As replicas will not use a peer-to-peer protocol, it might make sense
+for this to be a value like <cite>-1</cite>.</p>
+</div>
+<div class="section" id="suggestprice">
+<h3>SuggestPrice()<a class="headerlink" href="#suggestprice" title="Permalink to this headline">¶</a></h3>
+<p>Should return a <cite>big.Int</cite> gas price for a transaction. This can use
+<cite>*go-ethereum/eth/gasprice.Oracle</cite> to provide the same values a stanard
+Ethereum node would provide. Note, however, that gasprice.Oracle requires a
+Backend object of its own, so implementing SuggestPrice() will need to wait
+until the following backend methods have been implemented:</p>
+<ul class="simple">
+<li><cite>HeaderByNumber()</cite></li>
+<li><cite>BlockByNumber()</cite></li>
+<li><cite>ChainConfig()</cite></li>
+</ul>
+</div>
+<div class="section" id="chaindb">
+<h3>ChainDb()<a class="headerlink" href="#chaindb" title="Permalink to this headline">¶</a></h3>
+<p>Our backend will need to be constructed with an <cite>ethdb.Database</cite> object, which
+will be it’s primary source for much of the information about the blockchain
+and state. This method will return that object.</p>
+<p>For replicas, it might be prudent to have a wrapper that provides the
+<cite>ethdb.Database</cite> interface, but errors on any write operations, as we want to
+ensure that all write operations to the primary database come from the
+replication process.</p>
+</div>
+<div class="section" id="eventmux">
+<h3>EventMux()<a class="headerlink" href="#eventmux" title="Permalink to this headline">¶</a></h3>
+<p>This seem to be used by peer-to-peer systems. I can’t find anything in the RPC
+system that depends on <cite>EventMux()</cite>, so I think we can return <cite>nil</cite> for the
+Replica backend.</p>
+</div>
+<div class="section" id="accountmanager">
+<h3>AccountManager()<a class="headerlink" href="#accountmanager" title="Permalink to this headline">¶</a></h3>
+<p>This returns an <cite>*accounts.Manager</cite> object, which manages access to Ethereum
+wallets and other secret data. This would be used by the Private Ethereum APIs,
+which our Replicas will not implement. Services that need to manage accounts in
+conjunction with replica RPC nodes should utilize client side account managers
+such as <a class="reference external" href="https://www.npmjs.com/package/web3-provider-engine">Web3 Provider Engine</a>.</p>
+<p>In a future phase we may decide to implement an AccountManager service for
+replica nodes, but this would require serious consideration for how to securely
+store credentials and share them across the replicas in a cluster.</p>
+</div>
+<div class="section" id="sethead">
+<h3>SetHead()<a class="headerlink" href="#sethead" title="Permalink to this headline">¶</a></h3>
+<p>This is used by the private debug APIs, allowing developers to set the
+blockchain back to an earlier state in private environments. Replicas should
+not be able to roll back the blockchain to an earlier state, so this method
+should be a no-op.</p>
+</div>
+<div class="section" id="headerbynumber">
+<h3>HeaderByNumber()<a class="headerlink" href="#headerbynumber" title="Permalink to this headline">¶</a></h3>
+<p>HeaderByNumber needs to return a <cite>*core/types.Header</cite> object corresponding to
+the specified block number. This will need to get information from the
+database. It might be possible to leverage in-memory caches to speed up these
+data lookups, but it must not rely on information normally provided by the
+peer-to-peer protocol manager.</p>
+<p>This should be able to use <cite>core.GetCanonicalHash()</cite> to get the blockhash, then
+<cite>core.GetHeader()</cite> to get the Block Number.</p>
+</div>
+<div class="section" id="blockbynumber">
+<h3>BlockByNumber()<a class="headerlink" href="#blockbynumber" title="Permalink to this headline">¶</a></h3>
+<p>BlockByNumber needs to return a <cite>*core/types.Block</cite> object corresponding to the
+specified block number. This will need to get information from the
+database. It might be possible to leverage in-memory caches to speed up these
+data lookups, but it must not rely on information normally provided by the
+peer-to-peer protocol manager.</p>
+<p>This should be able to use <cite>core.GetCanonicalHash()</cite> to get the blockhash, then
+<cite>core.GetBlock()</cite> to get the Block Number.</p>
+</div>
+<div class="section" id="stateandheaderbynumber">
+<h3>StateAndHeaderByNumber()<a class="headerlink" href="#stateandheaderbynumber" title="Permalink to this headline">¶</a></h3>
+<p>Needs to return a <cite>*core/state.StateDB</cite> object and a <cite>*core/types.Header</cite>
+object corresponding to the specified block number.</p>
+<p>The header can be retrieved with <cite>backend.HeaderByNumber()</cite>. Then the stateDB
+object can be created with <cite>core/state.New()</cite> given the hash from the retrieved
+header and the ethdb.Database.</p>
+</div>
+<div class="section" id="getblock">
+<h3>GetBlock()<a class="headerlink" href="#getblock" title="Permalink to this headline">¶</a></h3>
+<p>Needs to return a <cite>*core/types.Block</cite> given a <cite>common.Hash</cite>. This should be
+able to use <cite>core.GetBlockNumber()</cite> to get the block number for the hash, and
+<cite>core.GetBlock()</cite> to retrieve the <cite>*core/types.Block</cite>.</p>
+</div>
+<div class="section" id="getreceipts">
+<h3>GetReceipts()<a class="headerlink" href="#getreceipts" title="Permalink to this headline">¶</a></h3>
+<p>Needs to return a <cite>core/types.Receipts</cite> given a <cite>common.Hash</cite>. This should be
+able to use <cite>core.GetBlockNumber()</cite> to get the block number for the hash, and
+<cite>core.GetBlockReceipts()</cite> to retrieve the <cite>core/types.Receipts</cite>.</p>
+</div>
+<div class="section" id="gettd">
+<h3>GetTd()<a class="headerlink" href="#gettd" title="Permalink to this headline">¶</a></h3>
+<p>Needs to return a <cite>*big.Int</cite> given a <cite>common.Hash</cite>. This should be able to use
+<cite>core.GetBlockNumber()</cite> to get the block number for the hash, and
+<cite>core.GetTd()</cite> to retrieve the total difficulty.</p>
+</div>
+<div class="section" id="getevm">
+<h3>GetEVM()<a class="headerlink" href="#getevm" title="Permalink to this headline">¶</a></h3>
+<p>Needs to return a <cite>*core/vm.EVM</cite>.</p>
+<p>This requires a <cite>core.ChainContext</cite> object, which in turn needs to implement:</p>
+<ul class="simple">
+<li><cite>Engine()</cite> - A conensus engine instance. This should reflect the conensus
+engine of the server the replica is replicating. This would be Ethash for
+Mainnet, but may be Clique or eventually Casper for other networks.</li>
+<li><cite>GetHeader()</cite> - Can proxy <cite>backend.GetHeader()</cite></li>
+</ul>
+<p>Beyond the construction of a new <cite>ChainContext</cite>, this should be comparable to
+the implementation of eth/api_backend.go’s <cite>GetEVM()</cite></p>
+</div>
+<div class="section" id="subscribe-event-apis">
+<h3>Subscribe Event APIs<a class="headerlink" href="#subscribe-event-apis" title="Permalink to this headline">¶</a></h3>
+<p>The following methods exist as part of the Event Filtering system.</p>
+<ul class="simple">
+<li><cite>SubscribeChainEvent()</cite></li>
+<li><cite>SubscribeChainHeadEvent()</cite></li>
+<li><cite>SubscribeChainSideEvent()</cite></li>
+</ul>
+<p>As discussed in <a class="reference internal" href="goals.html#load-balancing"><span class="std std-ref">Load Balancing</span></a>, the initial implementation of the replica
+service will not support the filtering APIs. As such, these methods can be
+no-ops that simply return <cite>nil</cite>. In the future we may implement these methods,
+but it will need to be a completely new implementation to support filtering on
+the cluster instead of individual replicas.</p>
+</div>
+<div class="section" id="sendtx">
+<h3>SendTx()<a class="headerlink" href="#sendtx" title="Permalink to this headline">¶</a></h3>
+<p>As replica nodes will not have peer-to-peer connections, they will not be able
+to send transactions to the network via conventional methods. Instead, we
+propose that the replica will simply queue transactions onto a Kafka topic.
+Independent from the replica service we can have consumers of the transaction
+topic emit the transactions to the network using different methods. The scope
+of implementing <cite>SendTx()</cite> is limited to placing the transaction onto a Kafka
+topic. Processing those events and emitting them to the network will be
+discused in <a class="reference internal" href="#tx-emitters"><span class="std std-ref">Transaction Emitters</span></a>.</p>
+</div>
+<div class="section" id="getpooltransactions">
+<h3>GetPoolTransactions()<a class="headerlink" href="#getpooltransactions" title="Permalink to this headline">¶</a></h3>
+<p>GetPoolTransactions()</p>
+</div>
+<div class="section" id="getpooltransaction">
+<h3>GetPoolTransaction()<a class="headerlink" href="#getpooltransaction" title="Permalink to this headline">¶</a></h3>
+<p>GetPoolTransaction()</p>
+</div>
+<div class="section" id="getpoolnonce">
+<h3>GetPoolNonce()<a class="headerlink" href="#getpoolnonce" title="Permalink to this headline">¶</a></h3>
+<p>GetPoolNonce()</p>
+</div>
+<div class="section" id="stats">
+<h3>Stats()<a class="headerlink" href="#stats" title="Permalink to this headline">¶</a></h3>
+<p>Stats()</p>
+</div>
+<div class="section" id="txpoolcontent">
+<h3>TxPoolContent()<a class="headerlink" href="#txpoolcontent" title="Permalink to this headline">¶</a></h3>
+<p>TxPoolContent()</p>
+</div>
+<div class="section" id="subscribetxpreevent">
+<h3>SubscribeTxPreEvent()<a class="headerlink" href="#subscribetxpreevent" title="Permalink to this headline">¶</a></h3>
+<p>SubscribeTxPreEvent()</p>
+</div>
+<div class="section" id="chainconfig">
+<h3>ChainConfig()<a class="headerlink" href="#chainconfig" title="Permalink to this headline">¶</a></h3>
+<p>ChainConfig()</p>
+</div>
+<div class="section" id="currentblock">
+<h3>CurrentBlock()<a class="headerlink" href="#currentblock" title="Permalink to this headline">¶</a></h3>
+<p>CurrentBlock()</p>
+</div>
+</div>
+<div class="section" id="transaction-emitters">
+<span id="tx-emitters"></span><h2>Transaction Emitters<a class="headerlink" href="#transaction-emitters" title="Permalink to this headline">¶</a></h2>
+</div>
+</div>
+
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="../index.html">ethercattle</a></h1>
+
+
+
+
+
+
+
+
+<h3>Navigation</h3>
+<p class="caption"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="intro.html">Introduction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="goals.html">Design Goals</a></li>
+<li class="toctree-l1"><a class="reference internal" href="approach.html">Approach</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Implementation</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#backend-functions-to-implement">Backend Functions To Implement</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#transaction-emitters">Transaction Emitters</a></li>
+</ul>
+</li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="../index.html">Documentation overview</a><ul>
+      <li>Previous: <a href="approach.html" title="previous chapter">Approach</a></li>
+  </ul></li>
+</ul>
+</div>
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="../search.html" method="get">
+      <div><input type="text" name="q" /></div>
+      <div><input type="submit" value="Go" /></div>
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &copy;2018, Austin Roberts.
+      
+      |
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 1.6.4</a>
+      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.10</a>
+      
+      |
+      <a href="../_sources/topics/implementation.rst.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>
