@@ -13,6 +13,7 @@ BLOCK_AGE_REP_RE = re.compile(r"blockAge=(\d+w)?(\d+d)?(\d+h)?(\d+m)?(\d+s)?")
 BLOCK_NUM_REP_RE = re.compile("num=(\d+)")
 OFFSET_NUM_RE = re.compile("offset=(\d+)")
 OFFSET_AGE_RE = re.compile(r"offsetAge=(\d+w)?(\d+d)?(\d+h)?(\d+m)?(\d+s)?")
+PEER_COUNT_RE = re.compile(r"peerCount: (\d+)")
 
 
 def numberFromRe(message, regex):
@@ -78,6 +79,11 @@ def masterHandler(event, context):
         try:
             appendMetric(item, metricData, "age",
                          ageFromRe(item["message"], BLOCK_AGE_RE), "Seconds")
+        except ValueError:
+            pass
+        try:
+            appendMetric(item, metricData, "peerCount",
+                         numberFromRe(item["message"], PEER_COUNT_RE))
         except ValueError:
             pass
 
