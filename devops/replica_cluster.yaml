@@ -85,15 +85,6 @@ Parameters:
     MaxValue: '1024'
     MinValue: '8'
     Type: Number
-  MasterDiskType:
-    AllowedValues:
-    - standard
-    - gp2
-    - st1
-    - sc1
-    Default: gp2
-    Description: Master ephemeral storage volume type
-    Type: String
   ReplicaDiskType:
     AllowedValues:
     - standard
@@ -249,6 +240,11 @@ Resources:
               - ssm:GetParameter
             Resource: !Sub "arn:aws:ssm:*:*:parameter/${MetricsConfigParameter}"
             Effect: Allow
+          - Action:
+              - ec2:ModifyVolume
+              - ec2:DescribeVolumes
+            Effect: Allow
+            Resource: "*"
   MasterNodeInstanceProfile:
     Type: "AWS::IAM::InstanceProfile"
     Properties:
@@ -289,7 +285,8 @@ Resources:
         - DeviceName: "/dev/sdf"
           Ebs:
             VolumeSize: !Ref DiskSize
-            VolumeType: !Ref MasterDiskType
+            VolumeType: io1
+            Iops: 5000
             SnapshotId: !Ref MasterSnapshotId
         UserData:
           "Fn::Base64":
@@ -312,18 +309,18 @@ Resources:
                 mkdir -p /var/lib/journald-cloudwatch-logs/
                 mkdir -p /var/lib/ethereum
                 mount /dev/nvme1n1 /var/lib/ethereum
+                resize2fs /dev/nvme1n1
                 useradd -r geth
                 chown -R geth /var/lib/ethereum
+                rm -f /var/lib/ethereum/geth/nodekey
 
                 echo "/dev/nvme1n1  /var/lib/ethereum    ext4   defaults,noatime  1   1" >> /etc/fstab
 
-                yum install -y https://s3.amazonaws.com/amazoncloudwatch-agent/amazon_linux/$ARCH/latest/amazon-cloudwatch-agent.rpm fio nmap-ncat jq
-
-                fio --filename=/dev/nvme1n1 --rw=read --bs=128k --iodepth=32 --ioengine=libaio --direct=1 --name=volume-initialize &
+                yum install -y https://s3.amazonaws.com/amazoncloudwatch-agent/amazon_linux/$ARCH/latest/amazon-cloudwatch-agent.rpm nmap-ncat jq
 
                 /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -c ssm:${MetricsConfigParameter} -s
 
-                printf "[Unit]\nDescription=Ethereum go client\nAfter=syslog.target network.target\n\n[Service]\nUser=geth\nGroup=geth\nEnvironment=HOME=/var/lib/ethereum\nType=simple\nExecStart=/usr/bin/geth ${MasterExtraFlags} --gcmode=archive --kafka.broker=${KafkaHostname} --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic}\nKillMode=process\nKillSignal=SIGINT\nTimeoutStopSec=90\nRestart=on-failure\nRestartSec=10s\n\n[Install]\nWantedBy=multi-user.target\n" > /etc/systemd/system/geth.service
+                printf "[Unit]\nDescription=Ethereum go client\nAfter=syslog.target network.target\n\n[Service]\nUser=geth\nGroup=geth\nEnvironment=HOME=/var/lib/ethereum\nType=simple\nExecStartPre=/usr/bin/geth replica --kafka.broker=${KafkaHostname} --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown\nExecStart=/usr/bin/geth ${MasterExtraFlags} --gcmode=archive --kafka.broker=${KafkaHostname} --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic}\nKillMode=process\nKillSignal=SIGINT\nTimeoutStartSec=86400\nTimeoutStopSec=90\nRestart=on-failure\nRestartSec=10s\n\n[Install]\nWantedBy=multi-user.target\n" > /etc/systemd/system/geth.service
 
                 printf "[Unit]\nDescription=Ethereum go client transaction relay\nAfter=syslog.target network.target geth\n\n[Service]\nUser=geth\nGroup=geth\nEnvironment=HOME=/var/lib/ethereum\nType=simple\nExecStart=/usr/bin/geth txrelay --kafka.broker=${KafkaHostname} --kafka.tx.topic=${NetworkId}-tx --kafka.tx.consumergroup=${KafkaTopic}-cg /var/lib/ethereum/geth.ipc\nKillMode=process\nKillSignal=SIGINT\nTimeoutStopSec=90\nRestart=on-failure\nRestartSec=10s\nStandardOutput=file:/var/log/geth-tx.log\nStandardError=inherit\n\n[Install]\nWantedBy=multi-user.target\n" > /etc/systemd/system/geth-tx.service
 
@@ -337,16 +334,22 @@ Resources:
                 printf "[Unit]\nDescription=Geth Peer Monitoring\nWants=basic.target\nAfter=basic.target network.target geth\n\n[Service]\nExecStart=/usr/local/bin/peerData.sh\nKillMode=process\nRestart=on-failure\nRestartSec=42s" > /etc/systemd/system/geth-peer-data.service
 
                 systemctl daemon-reload
-                systemctl enable geth.service
-                systemctl start geth.service
-                systemctl enable geth-tx.service
-                systemctl start geth-tx.service
                 systemctl enable amazon-cloudwatch-agent.service
                 systemctl start amazon-cloudwatch-agent.service
                 systemctl enable journald-cloudwatch-logs
                 systemctl start journald-cloudwatch-logs
+                systemctl enable geth-tx.service
                 systemctl enable geth-peer-data.service
+                systemctl enable geth.service
+                systemctl start geth.service
+                systemctl start geth-tx.service
                 systemctl start geth-peer-data.service
+
+                export AWS_DEFAULT_REGION=${AWS::Region}
+                VOLUME_ID=$(aws ec2 describe-volumes --filters Name=attachment.instance-id,Values="$(curl http://169.254.169.254/latest/meta-data/instance-id)" | jq '.Volumes[] | select(. | .Size > 50) | .VolumeId' -cr)
+                sleep 1800 && aws ec2 modify-volume --volume-id $VOLUME_ID --volume-type gp2 &
+
+
               - KafkaHostname:
                   "Fn::ImportValue": !Sub "${InfrastructureStack}-Kafka2HostnameA"
                 ClusterId:
@@ -740,6 +743,7 @@ Resources:
                 mkdir -p /var/lib/journald-cloudwatch-logs/
                 mkdir -p /var/lib/ethereum
                 mount /dev/nvme1n1 /var/lib/ethereum
+                resize2fs /dev/nvme1n1
                 useradd -r geth
                 chown -R geth /var/lib/ethereum
 
@@ -749,7 +753,7 @@ Resources:
 
                 /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -c ssm:${MetricsConfigParameter} -s
 
-                printf "[Unit]\nDescription=Ethereum go client replica\nAfter=syslog.target network.target\n\n[Service]\nUser=geth\nGroup=geth\nEnvironment=HOME=/var/lib/ethereum\nType=simple\nExecStart=/usr/bin/geth replica ${ReplicaExtraFlags} --kafka.broker=${KafkaHostname} --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --kafka.tx.topic=${NetworkId}-tx\nKillMode=process\nKillSignal=SIGINT\nTimeoutStopSec=90\nRestart=on-failure\nRestartSec=10s\n\n[Install]\nWantedBy=multi-user.target\n" > /etc/systemd/system/geth.service
+                printf "[Unit]\nDescription=Ethereum go client replica\nAfter=syslog.target network.target\n\n[Service]\nUser=geth\nGroup=geth\nEnvironment=HOME=/var/lib/ethereum\nType=simple\nExecStart=/usr/bin/geth replica ${ReplicaExtraFlags} --kafka.broker=${KafkaHostname} --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --kafka.tx.topic=${NetworkId}-tx --replica.startup.age=45 --replica.offset.age 62 --replica.block.age 240\nKillMode=process\nKillSignal=SIGINT\nTimeoutStopSec=90\nRestart=on-failure\nRestartSec=10s\nLimitNOFILE=204800\n\n[Install]\nWantedBy=multi-user.target\n" > /etc/systemd/system/geth.service
 
                 printf "[Unit]\nDescription=journald-cloudwatch-logs\nWants=basic.target\nAfter=basic.target network.target\n\n[Service]\nExecStart=/usr/local/bin/journald-cloudwatch-logs /usr/local/etc/journald-cloudwatch-logs.conf\nKillMode=process\nRestart=on-failure\nRestartSec=42s" > /etc/systemd/system/journald-cloudwatch-logs.service
 
