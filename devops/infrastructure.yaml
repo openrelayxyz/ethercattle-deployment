@@ -5,10 +5,6 @@ Parameters:
     Default: 3
     Type: Number
     Description: How many Kafka nodes should comprise the cluster.
-  KafkaSpotTargetCapacity:
-    Default: 0
-    Type: Number
-    Description: How many weighted capacity units to request from the spot fleet
   KafkaInstanceType:
     AllowedValues:
       - t2.micro
@@ -78,7 +74,7 @@ Parameters:
     Description: EC2 HVM instance type (t2.micro, m3.medium, etc).
     Type: String
   KafkaDiskSize:
-    Default: '8'
+    Default: '500'
     Description: Size of Kafka node's ephemeral storage volume in GiB
     MaxValue: '1024'
     MinValue: '8'
@@ -89,28 +85,141 @@ Parameters:
     - gp2
     - st1
     - sc1
-    Default: gp2
+    Default: st1
     Description: Kafka ephemeral storage volume type
     Type: String
   ClusterId:
     Type: String
     Description: An identifier for this ethercattle cluster.
-  ClusterAmi:
-    Default: ami-0f7f8edb4fe82cf70
-    Type: String
-    Description: The base AMI for all cluster nodes
   KeyName:
-    Type: String
+    Type: AWS::EC2::KeyPair::KeyName
     Description: The name of the SSH key pair allowed to SSH into the docker nodes
   VpcId:
-    Type: String
+    Type: AWS::EC2::VPC::Id
     Description: The VPC to deploy this stack into
   VpcBaseIp:
     Type: String
-    Description: First two octets of the VPC's ipv4 CIDR
+    Description: First two octets of the VPC's ipv4 CIDR (eg. "10.129")
   InternetGatewayId:
     Type: String
     Description: The resource ID of the Internet gateway for the specified VPC
+  SubnetAOctet:
+    Type: Number
+    MaxValue: 255
+    MinValue: 0
+    Description: An unused IP block on this VPC
+    Default: 160
+  SubnetBOctet:
+    Type: Number
+    MaxValue: 255
+    MinValue: 0
+    Description: An unused IP block on this VPC
+    Default: 161
+  SubnetCOctet:
+    Type: Number
+    MaxValue: 255
+    MinValue: 0
+    Description: An unused IP block on this VPC
+    Default: 162
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: ECS Cluster
+        Parameters:
+          - ClusterId
+          - ClusterAmi
+          - KeyName
+      - Label:
+          default: Kafka
+        Parameters:
+          - KafkaInstanceType
+          - KafkaCount
+          - KafkaDiskSize
+          - KafkaDiskType
+      - Label:
+          default: Network
+        Parameters:
+          - VpcId
+          - InternetGatewayId
+          - VpcBaseIp
+          - SubnetAOctet
+          - SubnetBOctet
+          - SubnetCOctet
+    ParameterLabels:
+      KafkaCount:
+        default: Node Count
+      KafkaInstanceType:
+        default: Instance Type
+      KafkaDiskSize:
+        default: Disk Size
+      KafkaDiskType:
+        default: Disk Type
+      ClusterId:
+        default: Cluster ID
+      ClusterAmi:
+        default: ECS-optmized AMI
+      KeyName:
+        default: SSH Key Pair
+      VpcId:
+        default: VPC ID
+      VpcBaseIp:
+        default: VPC Base IP
+      InternetGatewayId:
+        default: Internet Gateway
+      SubnetAOctet:
+        default: Unused IP Octet
+      SubnetBOctet:
+        default: Unused IP Octet
+      SubnetCOctet:
+        default: Unused IP Octet
+
+Mappings:
+  RegionMap:
+    us-east-2:
+      ECSAMI: ami-0f7f8edb4fe82cf70	
+    us-east-1:
+      ECSAMI: ami-0be9e1908fe51a590
+    us-west-1:
+      ECSAMI: ami-0860832102c806acb
+    us-west-2:
+      ECSAMI: ami-01a82c3fce2c3ba58
+    ap-east-1:
+      ECSAMI: ami-06f9b7c717914a382
+    ap-northeast-1:
+      ECSAMI: ami-047281402e27cf0c5
+    ap-northeast-2:
+      ECSAMI: ami-07ef5505ecca20315
+    ap-south-1:
+      ECSAMI: ami-0cf953afde70921a2
+    ap-southeast-1:
+      ECSAMI: ami-04e47a1e7ce1d448a
+    ap-southeast-2:
+      ECSAMI: ami-0f0ba4af21d1e1766
+    ca-central-1:
+      ECSAMI: ami-0e73429acd3865bd2
+    cn-north-1:
+      ECSAMI: ami-0da0590b87d9022f2
+    cn-northwest-1:
+      ECSAMI: ami-0262c8e755ee0b0cf
+    eu-central-1:
+      ECSAMI: ami-02c40c6d994943b85
+    eu-north-1:
+      ECSAMI: ami-0719a9312994ac2cb
+    eu-west-1:
+      ECSAMI: ami-0f85d8192f90863dc
+    eu-west-2:
+      ECSAMI: ami-0bf096cb3ddbdffe0
+    eu-west-3:
+      ECSAMI: ami-0a6720df6a8239525
+    sa-east-1:
+      ECSAMI: ami-0656fd0f926c55fc6
+    us-gov-east-1:
+      ECSAMI: ami-0c6b0b15e70eb6f3e
+    us-gov-west-1:
+      ECSAMI: ami-22d3a443
+
 
 Conditions:
   HasKeyName: !Not [!Equals [!Ref KeyName, '']]
@@ -123,21 +232,21 @@ Resources:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref VpcId
-      CidrBlock: !Join ["", [!Ref VpcBaseIp, ".160.0/24"]]
+      CidrBlock: !Join ["", [!Ref VpcBaseIp, ".", !Ref SubnetAOctet, ".0/24"]]
       AvailabilityZone: !Join ["", [!Ref 'AWS::Region', "a"]]
       MapPublicIpOnLaunch: true
   PublicB:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref VpcId
-      CidrBlock: !Join ["", [!Ref VpcBaseIp, ".161.0/24"]]
+      CidrBlock: !Join ["", [!Ref VpcBaseIp, ".", !Ref SubnetBOctet, ".0/24"]]
       AvailabilityZone: !Join ["", [!Ref 'AWS::Region', "b"]]
       MapPublicIpOnLaunch: true
   PublicC:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref VpcId
-      CidrBlock: !Join ["", [!Ref VpcBaseIp, ".162.0/24"]]
+      CidrBlock: !Join ["", [!Ref VpcBaseIp, ".", !Ref SubnetCOctet, ".0/24"]]
       AvailabilityZone: !Join ["", [!Ref 'AWS::Region', "c"]]
       MapPublicIpOnLaunch: true
   PublicRouteTable:
@@ -307,7 +416,7 @@ Resources:
     Type: AWS::EC2::LaunchTemplate
     Properties:
       LaunchTemplateData:
-        ImageId: !Ref ClusterAmi
+        ImageId: !FindInMap [RegionMap, !Ref "AWS::Region", ECSAMI]
         CreditSpecification:
           CpuCredits: standard
         InstanceType: !Ref KafkaInstanceType
@@ -363,170 +472,6 @@ Resources:
             mount /dev/nvme1n1 /var/lib/docker/volumes
             systemctl enable amazon-cloudwatch-agent.service
             systemctl start amazon-cloudwatch-agent.service
-
-  KafkaClusterSpotFleet:
-    Type: AWS::EC2::SpotFleet
-    Properties:
-      SpotFleetRequestConfigData:
-        AllocationStrategy: diversified
-        IamFleetRole: !Sub "arn:aws:iam::${AWS::AccountId}:role/aws-ec2-spot-fleet-tagging-role"
-        TargetCapacity: !Ref KafkaSpotTargetCapacity
-        SpotPrice: 0.0104
-        LaunchTemplateConfigs:
-          - LaunchTemplateSpecification:
-              LaunchTemplateId: !Ref KafkaClusterLaunchTemplateStandard
-              Version: !Sub ${KafkaClusterLaunchTemplateStandard.LatestVersionNumber}
-            Overrides:
-              - InstanceType: t3.micro
-                SubnetId: !Ref PublicA
-                WeightedCapacity: 1
-              - InstanceType: t3.micro
-                SubnetId: !Ref PublicB
-                WeightedCapacity: 1
-              - InstanceType: t3.small
-                SubnetId: !Ref PublicA
-                WeightedCapacity: 2
-              - InstanceType: t3.small
-                SubnetId: !Ref PublicB
-                WeightedCapacity: 2
-              - InstanceType: t3.small
-                SubnetId: !Ref PublicC
-                WeightedCapacity: 2
-              - InstanceType: t3.medium
-                SubnetId: !Ref PublicA
-                WeightedCapacity: 4
-              - InstanceType: t3.medium
-                SubnetId: !Ref PublicB
-                WeightedCapacity: 4
-              - InstanceType: t3.medium
-                SubnetId: !Ref PublicC
-                WeightedCapacity: 4
-              - InstanceType: t2.small
-                SubnetId: !Ref PublicA
-                WeightedCapacity: 2
-              - InstanceType: t2.small
-                SubnetId: !Ref PublicB
-                WeightedCapacity: 2
-              - InstanceType: t2.small
-                SubnetId: !Ref PublicC
-                WeightedCapacity: 2
-              - InstanceType: t2.medium
-                SubnetId: !Ref PublicA
-                WeightedCapacity: 4
-              - InstanceType: t2.medium
-                SubnetId: !Ref PublicB
-                WeightedCapacity: 4
-              - InstanceType: t2.medium
-                SubnetId: !Ref PublicC
-                WeightedCapacity: 4
-              - InstanceType: m5.large
-                SubnetId: !Ref PublicA
-                WeightedCapacity: 9
-              - InstanceType: m5.large
-                SubnetId: !Ref PublicB
-                WeightedCapacity: 9
-              - InstanceType: m5.large
-                SubnetId: !Ref PublicC
-                WeightedCapacity: 9
-              - InstanceType: m5a.large
-                SubnetId: !Ref PublicA
-                WeightedCapacity: 8
-              - InstanceType: m5a.large
-                SubnetId: !Ref PublicB
-                WeightedCapacity: 8
-              - InstanceType: m5a.large
-                SubnetId: !Ref PublicC
-                WeightedCapacity: 8
-              - InstanceType: m5d.large
-                SubnetId: !Ref PublicA
-                WeightedCapacity: 9
-              - InstanceType: m5d.large
-                SubnetId: !Ref PublicB
-                WeightedCapacity: 9
-              - InstanceType: m5d.large
-                SubnetId: !Ref PublicC
-                WeightedCapacity: 9
-              - InstanceType: m4.large
-                SubnetId: !Ref PublicA
-                WeightedCapacity: 7
-              - InstanceType: m4.large
-                SubnetId: !Ref PublicB
-                WeightedCapacity: 7
-              - InstanceType: m4.large
-                SubnetId: !Ref PublicC
-                WeightedCapacity: 7
-              - InstanceType: c5.large
-                SubnetId: !Ref PublicA
-                WeightedCapacity: 8
-              - InstanceType: c5.large
-                SubnetId: !Ref PublicB
-                WeightedCapacity: 8
-              - InstanceType: c5.large
-                SubnetId: !Ref PublicC
-                WeightedCapacity: 8
-              - InstanceType: c5d.large
-                SubnetId: !Ref PublicA
-                WeightedCapacity: 8
-              - InstanceType: c5d.large
-                SubnetId: !Ref PublicB
-                WeightedCapacity: 8
-              - InstanceType: c5d.large
-                SubnetId: !Ref PublicC
-                WeightedCapacity: 8
-              - InstanceType: c4.large
-                SubnetId: !Ref PublicA
-                WeightedCapacity: 6
-              - InstanceType: c4.large
-                SubnetId: !Ref PublicB
-                WeightedCapacity: 6
-              - InstanceType: c4.large
-                SubnetId: !Ref PublicC
-                WeightedCapacity: 6
-              - InstanceType: r5.large
-                SubnetId: !Ref PublicA
-                WeightedCapacity: 9
-              - InstanceType: r5.large
-                SubnetId: !Ref PublicB
-                WeightedCapacity: 9
-              - InstanceType: r5.large
-                SubnetId: !Ref PublicC
-                WeightedCapacity: 9
-              - InstanceType: r5d.large
-                SubnetId: !Ref PublicA
-                WeightedCapacity: 9
-              - InstanceType: r5d.large
-                SubnetId: !Ref PublicB
-                WeightedCapacity: 9
-              - InstanceType: r5d.large
-                SubnetId: !Ref PublicC
-                WeightedCapacity: 9
-              - InstanceType: r5a.large
-                SubnetId: !Ref PublicA
-                WeightedCapacity: 8
-              - InstanceType: r5a.large
-                SubnetId: !Ref PublicB
-                WeightedCapacity: 8
-              - InstanceType: r5a.large
-                SubnetId: !Ref PublicC
-                WeightedCapacity: 8
-              - InstanceType: r4.large
-                SubnetId: !Ref PublicA
-                WeightedCapacity: 8
-              - InstanceType: r4.large
-                SubnetId: !Ref PublicB
-                WeightedCapacity: 8
-              - InstanceType: r4.large
-                SubnetId: !Ref PublicC
-                WeightedCapacity: 8
-              - InstanceType: r3.large
-                SubnetId: !Ref PublicA
-                WeightedCapacity: 7
-              - InstanceType: r3.large
-                SubnetId: !Ref PublicB
-                WeightedCapacity: 7
-              - InstanceType: r3.large
-                SubnetId: !Ref PublicC
-                WeightedCapacity: 7
 
   ServiceNamespace:
     Type: "AWS::ServiceDiscovery::PrivateDnsNamespace"
@@ -1014,6 +959,102 @@ Resources:
       Protocol: HTTP
       VpcId: !Ref VpcId
 
+  CloudwatchDashboard:
+    Type: AWS::CloudWatch::Dashboard
+    Properties:
+      DashboardName: !Sub "${AWS::StackName}"
+      DashboardBody:
+        Fn::Sub:
+          - |
+              {
+                "widgets": [
+                    {
+                        "type": "metric",
+                        "x": 0,
+                        "y": 0,
+                        "width": 6,
+                        "height": 6,
+                        "properties": {
+                            "view": "timeSeries",
+                            "stacked": false,
+                            "metrics": [
+                                [ "AWS/EC2", "EBSReadOps", "AutoScalingGroupName", "${ClusterASG}" ],
+                                [ ".", "EBSWriteOps", ".", "." ]
+                            ],
+                            "region": "${AWS::Region}",
+                            "title": "EBS IO",
+                            "period": 300
+                        }
+                    },
+                    {
+                        "type": "metric",
+                        "x": 6,
+                        "y": 0,
+                        "width": 6,
+                        "height": 6,
+                        "properties": {
+                            "metrics": [
+                                [ "AWS/EC2", "CPUUtilization", "AutoScalingGroupName", "${ClusterASG}" ],
+                                [ ".", "CPUCreditBalance", ".", ".", { "yAxis": "right" } ]
+                            ],
+                            "view": "timeSeries",
+                            "stacked": false,
+                            "region": "${AWS::Region}",
+                            "title": "CPU"
+                        }
+                    },
+                    {
+                        "type": "metric",
+                        "x": 12,
+                        "y": 0,
+                        "width": 6,
+                        "height": 6,
+                        "properties": {
+                            "view": "timeSeries",
+                            "stacked": false,
+                            "metrics": [
+                                [ "CWAgent", "mem_used_percent", "AutoScalingGroupName", "${ClusterASG}" ]
+                            ],
+                            "region": "${AWS::Region}",
+                            "title": "Memory"
+                        }
+                    },
+                    {
+                        "type": "metric",
+                        "x": 18,
+                        "y": 0,
+                        "width": 6,
+                        "height": 6,
+                        "properties": {
+                            "view": "timeSeries",
+                            "stacked": false,
+                            "metrics": [
+                                [ "AWS/AutoScaling", "GroupInServiceInstances", "AutoScalingGroupName", "${ClusterASG}" ]
+                            ],
+                            "region": "${AWS::Region}"
+                        }
+                    },
+                    {
+                        "type": "metric",
+                        "x": 0,
+                        "y": 6,
+                        "width": 6,
+                        "height": 6,
+                        "properties": {
+                            "metrics": [
+                                [ "CWAgent", "disk_used_percent", "path", "/var/lib/docker/volumes", "AutoScalingGroupName", "${ClusterASG}", "device", "nvme1n1", "fstype", "ext4", { "stat": "Maximum" } ]
+                            ],
+                            "view": "timeSeries",
+                            "stacked": false,
+                            "region": "${AWS::Region}",
+                            "title": "Disk Usage"
+                        }
+                    }
+                ]
+              }
+          - ClusterASG: !Ref KafkaClusterAutoScalingGroup
+
+
 Outputs:
   ClusterId:
     Description: The cluster ID
@@ -1030,6 +1071,16 @@ Outputs:
     Value: !Ref RPCALBGroup
     Export:
       Name: !Sub "${AWS::StackName}-RPCALBGroup"
+  RPCALBGroupName:
+    Description: The full name of the alb target group for the RPC load balancer
+    Value: !Sub ${RPCALBGroup.TargetGroupFullName}
+    Export:
+      Name: !Sub "${AWS::StackName}-RPCALBGroupName"
+  RPCALBName:
+    Description: The full name of the RPC load balancer
+    Value: !Sub ${RPCALB.LoadBalancerFullName}
+    Export:
+      Name: !Sub "${AWS::StackName}-RPCALBName"
   VpcId:
     Description: The VPC the stack is deployed to
     Value: !Ref VpcId
@@ -1070,3 +1121,7 @@ Outputs:
     Value: !Ref PublicC
     Export:
       Name: !Sub "${AWS::StackName}-PublicC"
+      Description: The DNS address of the Replica ALB
+      Value: !Sub ${RPCALB.DNSName}
+      Export:
+        Name: !Sub "${AWS::StackName}-RPCALBGroup"

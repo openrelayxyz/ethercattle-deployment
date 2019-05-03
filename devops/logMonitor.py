@@ -104,24 +104,33 @@ def replicaHandler(event, context):
             appendMetric(item, metricData, "num",
                          numberFromRe(item["message"], BLOCK_NUM_REP_RE),
                          stream=eventData["logStream"])
+            appendMetric(item, metricData, "num",
+                         numberFromRe(item["message"], BLOCK_NUM_REP_RE))
         except ValueError:
             pass
         try:
             appendMetric(item, metricData, "age",
                          ageFromRe(item["message"], BLOCK_AGE_REP_RE),
                          "Seconds", stream=eventData["logStream"])
+            appendMetric(item, metricData, "age",
+                         ageFromRe(item["message"], BLOCK_AGE_REP_RE),
+                         "Seconds")
         except ValueError:
             pass
         try:
             appendMetric(item, metricData, "offset",
                          numberFromRe(item["message"], OFFSET_NUM_RE),
                          stream=eventData["logStream"])
+            appendMetric(item, metricData, "offset",
+                         numberFromRe(item["message"], OFFSET_NUM_RE))
         except ValueError:
             pass
         try:
             appendMetric(item, metricData, "offsetAge",
                          ageFromRe(item["message"], OFFSET_AGE_RE), "Seconds",
                          stream=eventData["logStream"])
+            appendMetric(item, metricData, "offsetAge",
+                         ageFromRe(item["message"], OFFSET_AGE_RE), "Seconds")
         except ValueError:
             pass
 

@@ -1,0 +1,433 @@
+Description: Generate an chaindata snapshot - Stands up the resources necessary to get an initial chaindata snapshot from Geth.
+
+Parameters:
+  NodeInstanceType:
+    AllowedValues:
+      - t2.micro
+      - t3.micro
+      - t2.small
+      - t3.small
+      - t2.medium
+      - t3.medium
+      - t2.large
+      - t3.large
+      - t2.xlarge
+      - t3.xlarge
+      - t2.2xlarge
+      - t3.2xlarge
+      - m4.large
+      - m4.xlarge
+      - m4.2xlarge
+      - m4.4xlarge
+      - m4.10xlarge
+      - m5.large
+      - m5.xlarge
+      - m5.2xlarge
+      - m5.4xlarge
+      - m5.10xlarge
+      - m5a.large
+      - m5a.xlarge
+      - m5a.2xlarge
+      - m5a.4xlarge
+      - m5a.10xlarge
+      - m3.medium
+      - m3.large
+      - m3.xlarge
+      - m3.2xlarge
+      - c5.large
+      - c5.xlarge
+      - c5.2xlarge
+      - c5.4xlarge
+      - c5.8xlarge
+      - c5d.large
+      - c5d.xlarge
+      - c5d.2xlarge
+      - c5d.4xlarge
+      - c5d.8xlarge
+      - c4.large
+      - c4.xlarge
+      - c4.2xlarge
+      - c4.4xlarge
+      - c4.8xlarge
+      - c3.large
+      - c3.xlarge
+      - c3.2xlarge
+      - c3.4xlarge
+      - c3.8xlarge
+      - r3.large
+      - r3.xlarge
+      - r3.2xlarge
+      - r3.4xlarge
+      - r3.8xlarge
+      - r4.large
+      - r4.xlarge
+      - r4.2xlarge
+      - r4.4xlarge
+      - r4.8xlarge
+      - r4.16xlarge
+      - i2.xlarge
+      - i2.2xlarge
+      - i2.4xlarge
+      - i2.8xlarge
+      - i3.large
+      - i3.xlarge
+      - i3.2xlarge
+      - i3.4xlarge
+      - i3.8xlarge
+      - i3.16xlarge
+    ConstraintDescription: Must be a valid EC2 HVM instance type.
+    Default: m5a.large
+    Description: EC2 HVM instance type (t2.micro, m3.medium, etc).
+    Type: String
+  DiskSize:
+    Default: '250'
+    Description: Size of each node's chaindata storage volume in GiB
+    MaxValue: '1024'
+    MinValue: '8'
+    Type: Number
+  KeyName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: The name of the SSH key pair allowed to SSH into the nodes
+  SnapshotId:
+    Type: String
+    Default: ""
+    Description: A snapshot of the Ethereum folder with a synced blockchain
+  NodeExtraFlags:
+    Type: String
+    Description: Extra flags for the Geth master (mainly for running other than mainnet)
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: The VPC to deploy this stack into
+  VpcBaseIp:
+    Type: String
+    Description: First two octets of the VPC's ipv4 CIDR
+  SubnetId:
+    Type: AWS::EC2::Subnet::Id
+    Description: The subnet to deploy an instance onto
+  S3GethBucketName:
+    Default: ethercattle-binaries
+    Type: String
+    Description: The bucket containing EtherCattle Geth Binaries
+  NotificationEmail:
+    Type: String
+    Description: An optional e-mail address to receive notifications when the snapshot completes
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: EC2 Instance
+        Parameters:
+          - NodeInstanceType
+          - DiskSize
+          - KeyName
+      - Label:
+          default: Geth
+        Parameters:
+          - S3GethBucketName
+          - SnapshotId
+          - NodeExtraFlags
+      - Label:
+          default: Network
+        Parameters:
+          - VpcId
+          - VpcBaseIp
+          - SubnetId
+      - Label:
+          default: Notifications
+        Parameters:
+          - NotificationEmail
+    ParameterLabels:
+      NodeInstanceType:
+        default: Instance Type
+      DiskSize:
+        default: Disk Size
+      KeyName:
+        default: SSH Key Pair
+      VpcId:
+        default: VPC ID
+      VpcBaseIp:
+        default: VPC Base IP
+      SubnetId:
+        default: Subnet
+      NotificationEmail:
+        default: Notification Email
+      SnapshotId:
+        default: Chaindata Snapshot ID
+      NodeExtraFlags:
+        default: Geth Flags
+
+Mappings:
+  RegionMap:
+    us-west-1:
+      AL2AMI: ami-0019ef04ac50be30f
+    eu-central-1:
+      AL2AMI: ami-09def150731bdbcc2
+    cn-north-1:
+      AL2AMI: ami-0cad3dea07a7c36f9
+    us-east-1:
+      AL2AMI: ami-0de53d8956e8dcf80
+    ap-northeast-2:
+      AL2AMI: ami-047f7b46bd6dd5d84
+    us-gov-west1:
+      AL2AMI:  ami-6b157f0a
+    sa-east-1:
+      AL2AMI: ami-0669a96e355eac82f
+    ap-northeast-3:
+      AL2AMI: ami-088d713d672ed235e
+    ap-northeast-1:
+      AL2AMI: ami-0f9ae750e8274075b
+    ap-southeast-1:
+      AL2AMI: ami-0b419c3a4b01d1859
+    us-east-2:
+      AL2AMI: ami-02bcbb802e03574ba
+    ap-southeast-2:
+      AL2AMI: ami-04481c741a0311bbb
+    cn-northwest-1:
+      AL2AMI: ami-094b7433620966eb5
+    eu-west-1:
+      AL2AMI: ami-07683a44e80cd32c5
+    eu-north-1:
+      AL2AMI: ami-d16fe6af
+    us-gov-east1:
+      AL2AMI: ami-1208ee63
+    ap-south-1:
+      AL2AMI: ami-0889b8a448de4fc44
+    eu-west-3:
+      AL2AMI: ami-0451ae4fd8dd178f7
+    eu-west-2:
+      AL2AMI: ami-09ead922c1dad67e4
+    ca-central-1:
+      AL2AMI: ami-03338e1f67dae0168
+    us-west-2:
+      AL2AMI: ami-061392db613a6357b
+
+Conditions:
+  HasKeyName: !Not [!Equals [!Ref KeyName, '']]
+  HasSnapshot: !Not [!Equals [!Ref SnapshotId, '']]
+  HasNotificationEmail: !Not [!Equals [ !Ref NotificationEmail, "" ]]
+
+Resources:
+
+  NotificationSNS:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: Snapshot Notifications
+  NotificationSNSSubscription:
+    Type: AWS::SNS::Subscription
+    Condition: HasNotificationEmail
+    Properties:
+      Endpoint: !Ref NotificationEmail
+      Protocol: email
+      TopicArn: !Ref NotificationSNS
+
+  NodeSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow external SSH access
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: '22'
+        ToPort: '22'
+        CidrIp: !Join ["", [!Ref VpcBaseIp, ".0.0/16"]]
+      - IpProtocol: udp
+        FromPort: '30303'
+        ToPort: '30303'
+        CidrIp: '0.0.0.0/0'
+      - IpProtocol: tcp
+        FromPort: '30303'
+        ToPort: '30303'
+        CidrIp: '0.0.0.0/0'
+      - IpProtocol: udp
+        FromPort: '30301'
+        ToPort: '30301'
+        CidrIp: '0.0.0.0/0'
+  NodeRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Action:
+          - sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service:
+            - ec2.amazonaws.com
+            - autoscaling.amazonaws.com
+        Version: '2012-10-17'
+  NodePolicy:
+    Type: "AWS::IAM::Policy"
+    Properties:
+      Roles:
+        - !Ref NodeRole
+      PolicyName: "SnapshotterNode"
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Action:
+              - s3:GetObject
+            Resource: !Sub arn:aws:s3:::${S3GethBucketName}/*
+            Effect: Allow
+          - Action:
+              - sns:Publish
+            Resource: !Ref NotificationSNS
+            Effect: Allow
+          - Action:
+              - ec2:DescribeSnapshotAttribute
+              - ec2:CreateTags
+              - ec2:DescribeSnapshots
+              - ec2:DescribeVolumeStatus
+              - ec2:DescribeVolumes
+              - ec2:CreateSnapshot
+            Resource: "*"
+            Effect: Allow
+  NodeInstanceProfile:
+    Type: "AWS::IAM::InstanceProfile"
+    Properties:
+      Path: /
+      Roles:
+      - !Ref NodeRole
+    DependsOn: NodeRole
+
+  NodeLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateData:
+        ImageId: !FindInMap [RegionMap, !Ref "AWS::Region", AL2AMI]
+        InstanceType: !Ref NodeInstanceType
+        TagSpecifications:
+          - ResourceType: instance
+            Tags:
+              - Key: Name
+                Value: "Snapshotter-Node"
+          - ResourceType: volume
+            Tags:
+              - Key: Name
+                Value: "Snapshotter-Node"
+        SecurityGroupIds:
+          - !Sub ${NodeSecurityGroup.GroupId}
+        IamInstanceProfile:
+          Name: !Ref NodeInstanceProfile
+        KeyName: !If [HasKeyName, !Ref KeyName, !Ref 'AWS::NoValue']
+        InstanceInitiatedShutdownBehavior: terminate
+        BlockDeviceMappings:
+        - DeviceName: "/dev/xvda"
+          Ebs:
+            VolumeSize: 8
+            VolumeType: gp2
+        - DeviceName: "/dev/sdf"
+          Ebs:
+            VolumeSize: !Ref DiskSize
+            VolumeType: gp2
+            SnapshotId: !If [HasSnapshot, !Ref SnapshotId, !Ref 'AWS::NoValue']
+        UserData:
+          "Fn::Base64":
+            "Fn::Sub":
+              - |
+                #!/bin/bash -xe
+                if [ "$(arch)" == "x86_64" ]
+                then
+                  ARCH="amd64"
+                elif [ "$(arch)" == "aarch64" ]
+                then
+                  ARCH="arm64"
+                fi
+                GETH_BIN="geth-linux-$ARCH"
+                aws s3 cp s3://${S3GethBucketName}/$GETH_BIN /usr/bin/geth
+                chmod +x /usr/bin/geth
+                mkdir -p /var/lib/ethereum
+                if [ "${SnapshotId}" == "" ]
+                then
+                  mkfs.ext4 /dev/nvme1n1
+                fi
+                mount /dev/nvme1n1 /var/lib/ethereum
+                resize2fs /dev/nvme1n1
+                useradd -r geth
+                chown -R geth /var/lib/ethereum
+
+                yum install -y jq nmap-ncat
+
+                SUCCESS=0
+
+                while [ $SUCCESS -eq 0 ]; do
+                  # On our first pass, or if Geth crashes without having a current block,
+                  # start geth
+                  sudo -u geth /usr/bin/geth  ${NodeExtraFlags} --datadir=/var/lib/ethereum &
+                  SUDO_PID=$!
+                  sleep 1
+                  GETH_PID=$(ps --ppid $SUDO_PID -o pid=)
+                  LOOP_COUNTER=0
+
+                  while kill -0 $GETH_PID; do
+                    # While geth is running, check to see if syncing == false (meaning it either hasn't started, or thinks it's synced with the chain)
+                    SYNC_STATUS=$(echo '{"jsonrpc":"2.0","method":"eth_syncing","params":[],"id":64}' | nc -U /var/lib/ethereum/geth.ipc | jq '.result')
+                    if [ "$SYNC_STATUS" == "false" ]
+                    then
+                      # We're either synced, or haven't started syncing yet. Check whether the latest block is current
+                      BLOCK_TIMESTAMP=$(echo '{"jsonrpc":"2.0","method":"eth_getBlockByNumber","params":["latest", false],"id":64}' | nc -U /var/lib/ethereum/geth.ipc | jq -cr '"ibase=16;obase=A;" + (.result.timestamp | ltrimstr("0x") | ascii_upcase)' | bc)
+                      NOW=$(date +%s)
+                      if [ "$(expr $NOW - 45)" -lt "$BLOCK_TIMESTAMP" ]
+                      then
+                        # Latest block is current. We're done syncing!
+                        SUCCESS=1
+                        kill -HUP $GETH_PID
+                        continue
+                      fi
+                    fi
+                    if [ $LOOP_COUNTER -ge 60 ]
+                    then
+
+                      # Sometimes Geth gets into a bad state where it can't pull
+                      # state data from any of the peers it has. We haven't
+                      # figured out why this happens, but the workaround is
+                      # dropping peers and hoping new peers will work better
+                      # (and they usually do).
+                      PEERS=$(echo '{"jsonrpc":"2.0","method":"admin_peers","params":[],"id":64}' | nc -U /var/lib/ethereum/geth.ipc | jq '.result | map({enode: .enode, head: .protocols.eth.head, difficulty: .protocols.eth.difficulty})') || true
+                      if [ "$PEERS" == "" ]
+                      then
+                        continue
+                      fi
+                      MAX_DIFFICULTY=$(echo $PEERS | jq 'max_by(.difficulty).difficulty')
+                      # Get rid of any peers more than 0.01% behind in difficulty (that's hundreds of blocks behind)
+                      if ! echo $PEERS | jq "map(select(.difficulty < $MAX_DIFFICULTY * .9999)) | map(.enode)[]" -r | xargs -I % sh -c "echo '{\"jsonrpc\":\"2.0\",\"method\":\"admin_removePeer\",\"params\":[\"'%'\"],\"id\":64}' | nc -U /var/lib/ethereum/geth.ipc" | grep "true"
+                      then
+                        # If that didn't get rid of any peers and we have at least 10 peers, get rid of one
+                        if [ $(echo $PEERS | jq length) -ge 10 ]
+                        then
+                          echo $PEERS | jq '.[0].enode' -r | xargs -I % sh -c "echo '{\"jsonrpc\":\"2.0\",\"method\":\"admin_removePeer\",\"params\":[\"'%'\"],\"id\":64}' | nc -U /var/lib/ethereum/geth.ipc"
+                        fi
+                      fi
+                      LOOP_COUNTER=0
+
+                    fi
+                    LOOP_COUNTER=$(($LOOP_COUNTER + 1))
+                    sleep 10;
+                  done
+                done
+
+                # Now that we think we have a synced chiandata folder, take a snapshot
+                export AWS_DEFAULT_REGION=${AWS::Region}
+                VOLUME_ID=$(aws ec2 describe-volumes --filters Name=attachment.instance-id,Values="$(curl http://169.254.169.254/latest/meta-data/instance-id)" | jq '.Volumes[] | select(. | .Size >= 50) | .VolumeId' -cr)
+
+                SNAPSHOT_ID=`aws ec2 create-snapshot --volume-id $VOLUME_ID --tag-specification="ResourceType=snapshot,Tags=[{Key=cluster,Value=Snapshotter},{Key=Name,Value=Snapshotter-chaindata-$(date -Isecond -u)}]" | jq '.SnapshotId' -cr`
+                echo "Waiting for snapshot to complete"
+                while [ `aws ec2 describe-snapshots --filters=Name=snapshot-id,Values=$SNAPSHOT_ID | jq '.Snapshots[0].State' -cr` != "completed" ];
+                do
+                    sleep 10
+                done
+
+                aws sns publish --topic-arn=${NotificationSNS} --subject="${AWS::StackName} - Snapshot Created" --message="The CloudFormation stack you deployed has successfully generated an Ethereum ChainData snapshot with the snapshot id '$SNAPSHOT_ID'. You are now ready to deploy a replica cluster stack."
+
+                # Terminate this instance
+                poweroff
+              - {}
+
+
+  NodeInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      LaunchTemplate:
+        LaunchTemplateId: !Ref NodeLaunchTemplate
+        Version: !Sub ${NodeLaunchTemplate.LatestVersionNumber}
+      SubnetId: !Sub ${SubnetId}
