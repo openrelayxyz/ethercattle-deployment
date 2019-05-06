@@ -305,8 +305,6 @@ Resources:
             Tags:
               - Key: Name
                 Value: "Snapshotter-Node"
-        SecurityGroupIds:
-          - !Sub ${NodeSecurityGroup.GroupId}
         IamInstanceProfile:
           Name: !Ref NodeInstanceProfile
         KeyName: !If [HasKeyName, !Ref KeyName, !Ref 'AWS::NoValue']
@@ -430,4 +428,9 @@ Resources:
       LaunchTemplate:
         LaunchTemplateId: !Ref NodeLaunchTemplate
         Version: !Sub ${NodeLaunchTemplate.LatestVersionNumber}
-      SubnetId: !Sub ${SubnetId}
+      NetworkInterfaces:
+        - SubnetId: !Sub ${SubnetId}
+          AssociatePublicIpAddress: true
+          DeviceIndex: 0
+          GroupSet:
+            - !Sub ${NodeSecurityGroup.GroupId}

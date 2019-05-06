@@ -1130,6 +1130,7 @@ Resources:
               - ec2:DescribeVolumes
               - ec2:CreateSnapshot
               - events:DescribeRule
+              - ec2:DescribeKeyPairs
             Resource: "*"
             Effect: Allow
   SnapshotterNodeInstanceProfile:
