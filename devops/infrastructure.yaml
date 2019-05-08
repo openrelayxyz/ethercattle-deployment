@@ -364,11 +364,6 @@ Resources:
       - Key: Name
         Value: !Sub ${AWS::StackName}
         PropagateAtLaunch: 'true'
-      # TODO: Review and revise
-      NotificationConfigurations:
-        - NotificationTypes:
-            - "autoscaling:EC2_INSTANCE_LAUNCH"
-          TopicARN: arn:aws:sns:us-east-2:201322628656:asg-test
     DependsOn:
       - KafkaNodeRole
     UpdatePolicy:
