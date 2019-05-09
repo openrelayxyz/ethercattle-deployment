@@ -733,7 +733,7 @@ Resources:
       Period: 30
       Statistic: Maximum
       Threshold: 120
-      TreatMissingData: notBreaching
+      TreatMissingData: ignore
 
   ReplicaLG:
     Type: AWS::Logs::LogGroup
