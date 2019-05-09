@@ -634,15 +634,16 @@ Resources:
       Statistic: Maximum
       Threshold: 10
       TreatMissingData: missing
-  LogMetricsFunctionLG:
+  MasterLogMetricsFunctionLG:
     Type: AWS::Logs::LogGroup
     Properties:
       RetentionInDays: 7
-      LogGroupName:
-        "Fn::Sub":
-          - "/aws/lambda/${ClusterId}/${KafkaTopic}/logParser"
-          - ClusterId:
-              "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
+      LogGroupName: !Join ["", ["/aws/lambda/", !Ref MasterLogMetricsFunction]]
+  ReplicaLogMetricsFunctionLG:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays: 7
+      LogGroupName: !Join ["", ["/aws/lambda/", !Ref ReplicaLogMetricsFunction]]
 
   LogMetricsRole:
     Type: "AWS::IAM::Role"
