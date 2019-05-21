@@ -262,8 +262,15 @@ Conditions:
   UseSTG: !Equals [ !Ref UseStandardTargetGroup, 1]
   HasETG: !Not [!Equals [!Ref ExternalTargetGroup, '']]
   ReplicaHDD: !Or [!Equals [ !Ref ReplicaDiskType, "st1"], !Equals [ !Ref ReplicaDiskType, "sc1"]]
-  ReplicaDefaultSize: !Equals [ !Ref DiskSize, "250" ]
-  OverrideSize: !And [!Condition ReplicaDefaultSize, !Condition ReplicaHDD]
+  SmallDisk: !Or [
+      !Equals [ !Ref DiskSize, "200" ],
+      !Equals [ !Ref DiskSize, "250" ],
+      !Equals [ !Ref DiskSize, "300" ],
+      !Equals [ !Ref DiskSize, "350" ],
+      !Equals [ !Ref DiskSize, "400" ],
+      !Equals [ !Ref DiskSize, "450" ],
+    ]
+  OverrideSize: !And [!Condition SmallDisk, !Condition ReplicaHDD]
   HasNotificationEmail: !Not [!Equals [ !Ref NotificationEmail, "" ]]
   HasSNSTopic: !Not [!Equals [ !Ref AlarmSNSTopic, "" ]]
 
@@ -734,6 +741,34 @@ Resources:
       Statistic: Maximum
       Threshold: 120
       TreatMissingData: ignore
+
+  MasterBlockNumberSNS:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: Block Number
+  MasterBlockNumberAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmActions:
+        - !Ref MasterBlockNumberSNS
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+      AlarmDescription: "Alarms when the block number is missing"
+      ComparisonOperator: "LessThanThreshold"
+      Dimensions:
+        - Name: clusterId
+          Value : !Ref KafkaTopic
+      EvaluationPeriods: 3
+      MetricName: "number"
+      Namespace: BlockData
+      OKActions:
+        - !Ref MasterBlockNumberSNS
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+      Period: 30
+      Statistic: SampleCount
+      Threshold: 1
+      TreatMissingData: breaching
 
   ReplicaLG:
     Type: AWS::Logs::LogGroup
