@@ -423,8 +423,10 @@ Resources:
                 LOGS_BIN="journald-cloudwatch-logs-$ARCH"
                 aws s3 cp s3://${S3GethBucketName}/$GETH_BIN /usr/bin/geth
                 aws s3 cp s3://${S3GethBucketName}/$LOGS_BIN /usr/local/bin/journald-cloudwatch-logs
+                aws s3 cp s3://${S3GethBucketName}/peerManager.py /usr/local/bin/peerManager.py
                 chmod +x /usr/bin/geth
                 chmod +x /usr/local/bin/journald-cloudwatch-logs
+                chmod +x /usr/local/bin/peerManager.py
                 mkdir -p /var/lib/journald-cloudwatch-logs/
                 mkdir -p /var/lib/ethereum
                 mount /dev/nvme1n1 /var/lib/ethereum
@@ -435,11 +437,13 @@ Resources:
 
                 echo "/dev/nvme1n1  /var/lib/ethereum    ext4   defaults,noatime  1   1" >> /etc/fstab
 
-                yum install -y https://s3.amazonaws.com/amazoncloudwatch-agent/amazon_linux/$ARCH/latest/amazon-cloudwatch-agent.rpm nmap-ncat jq
+                yum install -y https://s3.amazonaws.com/amazoncloudwatch-agent/amazon_linux/$ARCH/latest/amazon-cloudwatch-agent.rpm nmap-ncat jq python-pip
+
+                pip install kafka-python
 
                 /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -c ssm:${MetricsConfigParameter} -s
 
-                printf "[Unit]\nDescription=Ethereum go client\nAfter=syslog.target network.target\n\n[Service]\nUser=geth\nGroup=geth\nEnvironment=HOME=/var/lib/ethereum\nType=simple\nExecStartPre=/usr/bin/geth replica --kafka.broker=${KafkaHostname} --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown\nExecStart=/usr/bin/geth ${MasterExtraFlags} --gcmode=archive --kafka.broker=${KafkaHostname} --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic}\nKillMode=process\nKillSignal=SIGINT\nTimeoutStartSec=86400\nTimeoutStopSec=90\nRestart=on-failure\nRestartSec=10s\n\n[Install]\nWantedBy=multi-user.target\n" > /etc/systemd/system/geth.service
+                printf "[Unit]\nDescription=Ethereum go client\nAfter=syslog.target network.target\n\n[Service]\nUser=geth\nGroup=geth\nEnvironment=HOME=/var/lib/ethereum\nType=simple\nExecStartPre=/usr/bin/geth replica --kafka.broker=${KafkaHostname} --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown\nExecStart=/usr/bin/geth ${MasterExtraFlags} --gcmode=archive --kafka.broker=${KafkaHostname} --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic}\nKillMode=process\nKillSignal=SIGINT\nTimeoutStartSec=86400\nTimeoutStopSec=90\nOnFailure=poweroff.target\n\n[Install]\nWantedBy=multi-user.target\n" > /etc/systemd/system/geth.service
 
                 printf "[Unit]\nDescription=Ethereum go client transaction relay\nAfter=syslog.target network.target geth\n\n[Service]\nUser=geth\nGroup=geth\nEnvironment=HOME=/var/lib/ethereum\nType=simple\nExecStart=/usr/bin/geth txrelay --kafka.broker=${KafkaHostname} --kafka.tx.topic=${NetworkId}-tx --kafka.tx.consumergroup=${KafkaTopic}-cg /var/lib/ethereum/geth.ipc\nKillMode=process\nKillSignal=SIGINT\nTimeoutStopSec=90\nRestart=on-failure\nRestartSec=10s\nStandardOutput=file:/var/log/geth-tx.log\nStandardError=inherit\n\n[Install]\nWantedBy=multi-user.target\n" > /etc/systemd/system/geth-tx.service
 
