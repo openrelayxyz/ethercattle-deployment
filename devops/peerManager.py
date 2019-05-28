@@ -22,8 +22,15 @@ logger = logging.getLogger(__name__)
 
 class IPCBackend(object):
     def __init__(self, path):
-        self.s = socket.socket(socket.AF_UNIX)
-        self.s.connect(path)
+        while True:
+            try:
+                self.s = socket.socket(socket.AF_UNIX)
+                self.s.connect(path)
+            except socket.error:
+                # Wait for socket to become avaialble
+                pass
+            else:
+                break
     def get(self, method, params=None):
         if params is None:
             params = []
@@ -76,17 +83,21 @@ def externalPeerManager(path):
     peers = {}
     while True:
         peer_list = backend.get("admin_peers")["result"]
+        logger.info("peerCount: %s" % len(peer_list))
         try:
-            max_difficulty = max(
+            max_difficulty = max(0, 0, *[
                 p.get("protocols", {}).get("eth", {}).get("difficulty", 0)
                 for p in peer_list
-            )
+                if isinstance(p.get("protocols", {}).get("eth"), dict)
+            ])
         except AttributeError:
             raise ValueError("Got %s" % peer_list)
-        print("peerCount: %s" % len(peer_list))
         for peer in peer_list:
             enode = peer["enode"]
-            peer_difficulty = peer["protocols"]["eth"]["difficulty"]
+            try:
+                peer_difficulty = peer["protocols"]["eth"]["difficulty"]
+            except TypeError:
+                peer_difficulty = 0
             clean_record = {"count": 0, "difficulty": peer_difficulty}
             peers.setdefault(enode, clean_record)
             if peer_difficulty < (max_difficulty * 0.9999):

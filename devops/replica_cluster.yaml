@@ -445,26 +445,24 @@ Resources:
 
                 printf "[Unit]\nDescription=Ethereum go client\nAfter=syslog.target network.target\n\n[Service]\nUser=geth\nGroup=geth\nEnvironment=HOME=/var/lib/ethereum\nType=simple\nExecStartPre=/usr/bin/geth replica --kafka.broker=${KafkaHostname} --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown\nExecStart=/usr/bin/geth ${MasterExtraFlags} --gcmode=archive --kafka.broker=${KafkaHostname} --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic}\nKillMode=process\nKillSignal=SIGINT\nTimeoutStartSec=86400\nTimeoutStopSec=90\nOnFailure=poweroff.target\n\n[Install]\nWantedBy=multi-user.target\n" > /etc/systemd/system/geth.service
 
-                printf "[Unit]\nDescription=Ethereum go client transaction relay\nAfter=syslog.target network.target geth\n\n[Service]\nUser=geth\nGroup=geth\nEnvironment=HOME=/var/lib/ethereum\nType=simple\nExecStart=/usr/bin/geth txrelay --kafka.broker=${KafkaHostname} --kafka.tx.topic=${NetworkId}-tx --kafka.tx.consumergroup=${KafkaTopic}-cg /var/lib/ethereum/geth.ipc\nKillMode=process\nKillSignal=SIGINT\nTimeoutStopSec=90\nRestart=on-failure\nRestartSec=10s\nStandardOutput=file:/var/log/geth-tx.log\nStandardError=inherit\n\n[Install]\nWantedBy=multi-user.target\n" > /etc/systemd/system/geth-tx.service
+                printf "[Unit]\nDescription=Ethereum go client transaction relay\nAfter=syslog.target network.target geth\n\n[Service]\nUser=geth\nGroup=geth\nEnvironment=HOME=/var/lib/ethereum\nType=simple\nExecStart=/usr/bin/geth txrelay --kafka.broker=${KafkaHostname} --kafka.tx.topic=${NetworkId}-tx --kafka.tx.consumergroup=${KafkaTopic}-cg /var/lib/ethereum/geth.ipc\nKillMode=process\nKillSignal=SIGINT\nTimeoutStopSec=90\nRestart=on-failure\nRestartSec=10s\n\n[Install]\nWantedBy=multi-user.target\n" > /etc/systemd/system/geth-tx.service
 
                 printf "[Unit]\nDescription=journald-cloudwatch-logs\nWants=basic.target\nAfter=basic.target network.target\n\n[Service]\nExecStart=/usr/local/bin/journald-cloudwatch-logs /usr/local/etc/journald-cloudwatch-logs.conf\nKillMode=process\nRestart=on-failure\nRestartSec=42s" > /etc/systemd/system/journald-cloudwatch-logs.service
 
                 printf "log_group = \"${MasterLG}\"\nstate_file = \"/var/lib/journald-cloudwatch-logs/state\"" > /usr/local/etc/journald-cloudwatch-logs.conf
 
-                printf "#!/bin/bash\nwhile true; do\n  printf \"peerCount: \"\n  echo '{\"jsonrpc\":\"2.0\",\"method\":\"net_peerCount\",\"params\":[],\"id\":64}' | nc -U /var/lib/ethereum/geth.ipc | jq -cr '\"ibase=16;obase=A;\" + (.result | ltrimstr(\"0x\") | ascii_upcase)' | bc\n  sleep 30\ndone" > /usr/local/bin/peerData.sh
-                chmod +x /usr/local/bin/peerData.sh
-
-                printf "[Unit]\nDescription=Geth Peer Monitoring\nWants=basic.target\nAfter=basic.target network.target geth\n\n[Service]\nExecStart=/usr/local/bin/peerData.sh\nKillMode=process\nRestart=on-failure\nRestartSec=42s" > /etc/systemd/system/geth-peer-data.service
+                printf "[Unit]\nDescription=Geth Peer Monitoring\nAfter=syslog.target network.target geth\n\n[Service]\nUser=geth\nGroup=geth\nEnvironment=HOME=/var/lib/ethereum\nType=simple\nExecStart=/usr/local/bin/peerManager.py /var/lib/ethereum/geth.ipc ${NetworkId}-peerlist ${KafkaHostname}\nKillMode=process\nKillSignal=SIGINT\nTimeoutStopSec=90\nRestart=on-failure\nRestartSec=10s\n" > /etc/systemd/system/geth-peer-data.service
 
                 systemctl daemon-reload
                 systemctl enable amazon-cloudwatch-agent.service
                 systemctl start amazon-cloudwatch-agent.service
                 systemctl enable journald-cloudwatch-logs
                 systemctl start journald-cloudwatch-logs
+                systemctl enable geth.service
                 systemctl enable geth-tx.service
                 systemctl enable geth-peer-data.service
-                systemctl enable geth.service
                 systemctl start geth.service
+                sleep 5
                 systemctl start geth-tx.service
                 systemctl start geth-peer-data.service
 
