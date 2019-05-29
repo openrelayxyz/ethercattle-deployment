@@ -1,0 +1,26 @@
+Upgrade Process
+===============
+
+Upgrading an Ether Cattle cluster should be handled carefully to avoid
+inconsistencies between the master and replica servers.
+
+We recommend an immutable server approach for both masters and replicas. Rather
+than updating the server in place, stand up a new server, let it sync, and then
+take down the old server. Note that you should not have two masters running for
+the same cluster at the same time, so this may involve some downtime.
+
+When upgrading geth, we recommend standing up a whole new cluster with a new
+Kafka topic. Using the most recent snapshot from your old cluster, stand up a
+new set of masters and replicas with the new version of geth, communicating over
+a new topic. Once the new replicas are synced and joined to your load balancer,
+you can take down the old replicas. This approach avoids any service downtime.
+
+Disk Considerations
+===================
+
+Because the master server must run in archival mode, its disk utilization grows
+faster than a typical geth server - generally around 25 GB per week. To keep
+disk consumption from getting out of hand, you may want to periodically rerun
+the Getting an Initial Snapshot process and creating a new cluster from that
+snapshot. This should get you back to the base level of disk usage for a fast
+synced node, which, at the time of this writing, is around 200 GB.

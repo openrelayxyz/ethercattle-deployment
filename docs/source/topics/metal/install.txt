@@ -1,0 +1,236 @@
+Prerequisites
+=============
+
+**Kafka**: This document does not cover the installation of Kafka. Refer to Apache’s `documentation for Kafka installation <https://kafka.apache.org/quickstart>`_
+
+Recommended Configuration Options:
+
+* `default.replication.factor` should be at least 3 to ensure you are tolerant to broker failures.
+* `min.insync.replicas` should be set to at least 2 to avoid loss of data
+* `compression.type` should be snappy to avoid using too much disk.
+
+
+Generating An Initial Snapshot
+------------------------------
+
+Before you can stand up the replicas or masters for an EtherCattle cluster, you
+will need a snapshot of the Geth chaindata folder. For this, you can simply run
+the Geth client until it is synced, stop the Geth process with :code:`kill -HUP $GethPID`
+then snapshot the `~/.ethereum` folder. Note that the syncing process can
+take a long time, and even on a highly performant system with lots of peers, you
+should allow at least 48 hours for this process.
+
+
+Master Setup
+------------
+
+System Configuration
+....................
+
+The master should be started with the initial snapshot described in the previous
+section. You can mount this where you like, but this document will assume it is
+mounted at `/var/lib/ethereum`
+
+
+Software Configuration
+.......................
+
+The master server needs the latest build of the Ether Cattle fork of geth. You
+can check out the code from Github here: https://github.com/NoteGio/go-ethereum
+and build with the command for your platform. This is most likely:
+
+.. code::
+
+  make geth-linux-amd64
+
+Preparation
+...........
+
+Before starting the master, it is recommended to sync the database from Kafka so
+that the master will always start syncing from the network at the same point as
+the replicas. This can be achieved by running:
+
+.. code::
+
+  geth replica --kafka.broker=$KafkaHostname --datadir=$DataDir --kafka.topic=$KafkaTopic --replica.syncshutdown
+
+* `--kafka.broker=$KafkaHostname` - Should point to a broker from your Kafka cluster.
+* `--kafka.topic=$KafkaTopic` - Should designate the Kafka topic your master will write to, and your replicas will sync from
+* `--datadir=$DataDir` - Should correspond to the directory where your geth database snapshot is mounted
+* `--replica.syncshutdown` - Tells geth to terminate with a 0 exit code when the database is caught up.
+
+
+Runtime
+.......
+
+The primary process for running a master will sync with the peer-to-peer network
+and write its change log to Kafka. This can be launched with:
+
+.. code::
+
+  geth --gcmode=archive --kafka.broker=$KafkaHostname --kafka.topic=$KafkaTopic --datadir=$DataDir
+
+* `--gcmode=archive` - tells geth to flush the state trie to disk every block. Without this the state trie on the master will exist only in memory, and will not be available to replicas until it periodically gets flushed.
+* Other flags are the same as in the previous section
+
+Transaction Broadcasting
+........................
+
+Replicas do not connect directly to the peer-to-peer network, thus when a user
+sends a transaction to the replica via RPC the replica cannot broadcast it
+directly. Optionally, you can set up a Kafka topic where replicas publish
+transactions they receive. The txrelay service follows this topic and
+rebroadcasts transactions to the network. If your application is read-only and
+does not require broadcasting transactions, you may skip this step, otherwise,
+run the relay with:
+
+.. code:
+
+  geth txrelay --kafka.broker=$KafkaHostname --kafka.tx.topic=$TxTopic --kafka.tx.consumergroup=$ConsumerGroup /var/lib/ethereum/geth.ipc
+
+* `--kafka.broker=$KafkaHostname` - Should match the broker used by the master and replicas
+* `--kafka.tx.topic=$TxTopic` - Is the topic on which replicas will submit transactions. This can be any string, but must batch between the txrelay service and replicas. Note that if you run multiple Ether Cattle clusters, you can use the same topic and broadcast transactions through multiple masters to help ensure prompt delivery.
+* `--kafka.tx.consumergroup=$ConsumerGroup` - Identifies this instance of txrelay to Kafka, so that if the service gets restarted it does not rebroadcast every transaction on the topic. This can be any string.
+* `/var/lib/ethereum/geth.ipc` - The endpoint the txrelay should broadcast transactions to. In this case, we’re using the master’s IPC endpoint, but this could also be an HTTP(S) based RPC endpoint.
+
+Putting It Together
+...................
+
+The following systemd service files will run the master and txrelay services,
+restarting if they exit in error:
+
+geth.service:
+
+.. code::
+
+  [Unit]
+  Description=Ethereum go client
+  After=syslog.target network.target
+
+  [Service]
+  User=geth
+  Group=geth
+  Environment=HOME=/var/lib/ethereum
+  Type=simple
+  ExecStartPre=geth replica --kafka.broker=${KafkaHostname} --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown
+  ExecStart=geth ${MasterExtraFlags} --gcmode=archive --kafka.broker=${KafkaHostname} --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic}
+  KillMode=process
+  KillSignal=SIGINT
+  TimeoutStartSec=86400
+  TimeoutStopSec=90
+  Restart=on-failure
+  RestartSec=10s
+
+  [Install]
+  WantedBy=multi-user.target
+
+geth-txrelay.service:
+
+.. code::
+
+    [Unit]
+    Description=Ethereum go client transaction relay
+    After=syslog.target network.target geth
+
+    [Service]
+    User=geth
+    Group=geth
+    Environment=HOME=/var/lib/ethereum
+    Type=simple
+    ExecStart=geth txrelay --kafka.broker=${KafkaHostname} --kafka.tx.topic=${NetworkId}-tx --kafka.tx.consumergroup=${KafkaTopic}-cg /var/lib/ethereum/geth.ipc
+    KillMode=process
+    KillSignal=SIGINT
+    TimeoutStopSec=90
+    Restart=on-failure
+    RestartSec=10s
+
+    [Install]
+    WantedBy=multi-user.target
+
+Replica Setup
+-------------
+
+System Configuration
+....................
+
+The replica should be started with the initial snapshot described earlier. You
+can mount this where you like, but this document will assume it is mounted at
+`/var/lib/ethereum`. It is important that for the initial setup, the same
+snapshot is used for both the master and replicas. When building or rebuilding
+systems after initialization, any snapshot can be used so long as it is within
+the retention period of Kafka (default 7 days).
+
+Runtime
+.......
+
+The replica process will connect with Kafka, syncing data from the master and
+serving RPC requests. This can be launched with:
+
+.. code::
+
+   geth replica --kafka.broker=$KafkaHostname --datadir=$DataDir --kafka.topic=$KafkaTopic --kafka.tx.topic=$TxTopic --replica.startup.age=45 --replica.offset.age=62 --replica.block.age=240
+
+* `--kafka.broker=$KafkaHostname` - Should point to a broker from your Kafka cluster.
+* `--kafka.topic=$KafkaTopic` - Should designate the Kafka topic your master will write to, and your replicas will sync from
+* `--datadir=$DataDir` - Should correspond to the directory where your geth database snapshot is mounted
+* `--kafka.tx.topic=$TxTopic` - Should match the topic used with the master’s txrelay, if applicable (otherwise this flag may be omitted).
+*-`replica.startup.age=45` - When the replica begins syncing, it will not start serving RPC requests until it is up-to-date with Kafka, and has a block younger than the number of seconds specified here. Setting to 0 or omitting the flag disables this limit, and the replica will start serving RPC requests as soon as it is in sync with Kafka. Do not set this value too low, as the time it takes to mine a block and propagate it through the network means that a replica may rarely see a block that is only a few seconds old.
+* `--replica.offset.age=62` - If the replica has not received any communication from the master via Kafka in this amount of time, shut down. The master sends a heartbeat message every 30 seconds, the recommended value of this flag indicates at least two missed heartbeats. Setting to 0 or omitting this flag disables shutting down in the event of missed heartbeats. This flag should only be used if:
+  * You have multiple clusters, and other replicas will be able to pick up the load if your master goes down, and
+  * You are using a process manager such as systemd or docker, which will restart the process after it shuts down to resume the synchronization process.
+* `--replica.block.age=240` - If the replica’s most recent block is older than this number of seconds, shutdown. This should be significantly higher than --repilca.offset.age. Do not set this value too low, or normal deviations in block time could cause your replicas to shutdown. This is in place to protect against a master that is sending heartbeats, but failing to sync with the network. This flag should only be used if:
+  * You have multiple clusters, and other replicas will be able to pick up the load if your master goes down, and
+  * You are using a process manager such as systemd or docker, which will restart the process after it shuts down to resume the synchronization process.
+
+Snapshotting Process
+....................
+
+As noted earlier, in order to run a cluster effectively, your infrastructure
+must support snapshotting of hard disks. In order to prepare a snapshot, we
+recommend the following process:
+
+* Start a new server containing the most recent snapshot and the Ether Cattle fork of Geth.
+* Run :code:`geth replica --kafka.broker=$KafkaHostname --datadir=$DataDir --kafka.topic=$KafkaTopic --replica.syncshutdown` (as described above) to sync the latest data from Kafka on top of the last snapshot.
+* Take a snapshot of your $DataDir with your snapshotting system.
+* Shutdown the server you launched to create the snapshot.
+* In the future when you stand up new instances (either replicas or masters) start them with the most recent snapshot. You do not need to replace existing servers - they have all the information contained in the snapshot.
+
+We recommend snapshotting every 24 hours. This keeps you well within Kafka’s
+retention period, and also reduces the amount of time required to sync a new
+server from Kafka. You will also want to make sure you have a process in place
+to clean up old snapshots. We recommend keeping at least 4 days worth of
+snapshots, so that if a problem is found with a recent snapshot you can revert
+to an older one.
+
+
+Firewall
+--------
+
+Master
+......
+
+The Master must enable the following ingress for the public internet:
+
+* 30303/udp
+* 30303/tcp
+* 30301/udp
+
+It must allow public egress on UDP and TCP for syncing with the blockchain, and must be able to contact every server in your Kafka cluster.
+
+Replica
+.......
+
+The Replica does not need any connectivity to the public internet for its normal
+operation. It requires:
+
+* 8545/tcp - Only needs to be reachable by the load balancer
+
+It must also be able to contact every server in your Kafka cluster.
+
+Kafka
+.....
+
+Kafka does not need any connectivity to the public internet for normal
+operation. It requires:
+
+* 9092/tcp - Must be reachable by master, replicas, and other Kafka brokers

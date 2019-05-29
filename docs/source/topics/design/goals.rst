@@ -33,8 +33,9 @@ In a trustless peer-to-peer system, these steps are unavoidable. Malicious
 peers could provide incorrect information, so it is necessary to validate all
 of the information received from untrusted peers. But given several nodes
 managed by the same operator, it is generally safe for those nodes to trust
-eachother, allowing us to avoid some of the computationally intensive and disk
-intensive steps that make the initialization process time consuming.
+eachother, allowing individual nodes to avoid some of the computationally
+intensive and disk intensive steps that make the initialization process time
+consuming.
 
 Ideally node snapshots will be taken periodically, new instances will launch
 based on the most recent available snapshot, and then sync the blockchain and

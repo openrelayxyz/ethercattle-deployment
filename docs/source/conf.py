@@ -30,7 +30,7 @@
 # Add any Sphinx extension module names here, as strings. They can be
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
-extensions = []
+extensions = ["sphinx.ext.mathjax"]
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
@@ -45,7 +45,7 @@ source_suffix = '.rst'
 master_doc = 'index'
 
 # General information about the project.
-project = u'ethercattle'
+project = u'Ether Cattle'
 copyright = u'2018, Austin Roberts'
 author = u'Austin Roberts'
 
@@ -141,9 +141,11 @@ latex_elements = {
 # (source start file, target name, title,
 #  author, documentclass [howto, manual, or own class]).
 latex_documents = [
-    (master_doc, 'ethercattle.tex', u'ethercattle Documentation',
+    (master_doc, 'ethercattle.tex', u'Ether Cattle Documentation',
      u'Austin Roberts', 'manual'),
 ]
+
+# latex_engine = "xelatex"
 
 
 # -- Options for manual page output ---------------------------------------
@@ -151,7 +153,7 @@ latex_documents = [
 # One entry per manual page. List of tuples
 # (source start file, name, description, authors, manual section).
 man_pages = [
-    (master_doc, 'ethercattle', u'ethercattle Documentation',
+    (master_doc, 'Ether Cattle', u'Ether Cattle Documentation',
      [author], 1)
 ]
 
@@ -162,10 +164,7 @@ man_pages = [
 # (source start file, target name, title, author,
 #  dir menu entry, description, category)
 texinfo_documents = [
-    (master_doc, 'ethercattle', u'ethercattle Documentation',
-     author, 'ethercattle', 'One line description of project.',
+    (master_doc, 'Ether Cattle', u'Ether Cattle Documentation',
+     author, 'Ether Cattle', 'Operationalized Ethereum Nodes',
      'Miscellaneous'),
 ]
-
-
-

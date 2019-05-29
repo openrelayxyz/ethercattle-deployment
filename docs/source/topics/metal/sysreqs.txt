@@ -1,0 +1,57 @@
+System Requirements
+===================
+
+This documentation assumes that your Ether Cattle cluster will run on Linux
+servers. It is likely possible to run Ether Cattle on other operating systems,
+but that is outside the scope of this document.
+
+Master
+------
+* **vCPU**: 2
+* **RAM**: 8 GB
+* **Disk**: >250 GB SSD
+
+The master needs high performance disks to be able to sync the blockchain.
+Because of the replication process, the master's disks have higher requirements
+than a typical disk.
+
+Replicas
+--------
+* **vCPU**: 1
+* **RAM**: 2 GB
+* **Disk**: >250 GB HDD
+
+For basic operation, Replicas have very low resource requirements. Synchronizing
+from the master does not require high performance disks, however heavy RPC
+request workloads may necessitate faster disks.
+
+Kafka
+-----
+
+Cluster: 3 Nodes
+* **vCPU**: 1
+* **RAM**: 2 GB
+* **Disk**: 100 GB HDD
+
+EtherCattle's use of Kafka is not very taxing by Kafka's standards, and so your
+Kafka cluster's specs do not need to be very high. HDDs are fine, as Kafka
+performs primarily sequential read / writes. It is possible to host multiple
+replica clusters on a single Kafka cluster, in which case you may need
+additional disk space. Managing Kafka can be somewhat challenging, and its
+importance for the stability of an EtherCattle cluster cannot be understated.
+Depending on your organizations needs, you may do well to find a managed Kafka
+provider.
+
+Snapshotting
+------------
+
+Ether Cattle relies on the ability to make volume level snapshots of Geth's
+chaindata folder. These snapshots need to be atomic, but if necessary that can
+be achieved by stopping a synced replica. Snapshots need to be taken more
+frequently than Kafka's retention period (default: 7 days), so that new replicas
+can spin up with a snapshot, then sync from Kafka.
+
+Depending on your snapshotting solution, you should be aware that volumes
+freshly created from snapshots may not perform as well as normal volumes. See if
+your snapshotting solution documents options for "warming" volumes, as this may
+be necessary when creating a new master from a snapshot.

@@ -1,0 +1,42 @@
+Monitoring
+==========
+
+To maximize the availability of your cluster, there are several aspects that should be monitored
+
+Master
+------
+* **Disk Utilization**: Monitoring disk utilization on the master is essential. Both masters and replicas will increase in disk utilization over time, and will eventually need to be increased. We recommend alarms at 95% disk utilization, which should be a couple days warning based on typical growth patterns. As the Master and all Replicas use disk at effectively the same rate, all generally need to be updated at the same time.
+* **Memory**: Memory usage on the master should be fairly constant. If you have 8 GB of RAM and the configuration described above, the master should stay consistently below 75% RAM utilization. If it exceeds this threshold for an extended period, we recommend rebooting your master server.
+* **CPU**: CPU utilization on the master will be a bit spikey - when new blocks come in it will ramp up to validate the block, then settle back down. With two modern CPUs, the CPU utilization will be around 60% averaged out over time. We recommend monitoring CPU utilization on the master, and if it regularly exceeds 85% consider adding additional CPUs.
+* **Peer Count**: A critical metric for master health is its number of peers. If a master has no peers, it will not receive new block information. By default, a master will establish connections with 25 peers. If the master drops below 10 peers, this could be a sign of a problem. Check firewall rules as described above. If a master drops to zero peers and stops syncing blocks, we recommend restarting the master.
+
+  The following Shell command can be used to retrieve the master’s current peer count (requires netcat and jq packages installed):
+
+  .. code::
+
+    echo '{"jsonrpc":"2.0", "method":"net_peerCount", "params":[], "id":64}' | nc -U /var/lib/ethereum/geth.ipc | jq -cr '"ibase=16;obase=A;" + (.result | ltrimstr("0x") | ascii_upcase)' | bc
+
+* **Block Age** : Every time it processes a block (or group of block, during the initial sync) geth logs a message about the processed blocks. If the processed block is older than 60 seconds, Geth will include the age of that block. We recommend tracking this, and if block times fall consistently behind check the health of the master. High block times can occur under normal circumstances due to the variable nature of the mining process, but consistently high block times is likely indicative of a problem. If you are seeing consistently high block times on a master that was in sync with the network, check network connectivity, peer counts, and if everything else looks okay, restart the master.
+* **Block Number** : Because block age metrics are only available when blocks are greater than 60 seconds old, we also recommend monitoring how frequently new blocks are reported. If no new blocks have been received in 120 seconds, follow the same process you would if you were seeing high block ages reported.
+
+Replicas
+--------
+
+* **Disk Utilization** : Both masters and replicas will increase in disk utilization over time, and will eventually need to be increased. We recommend alarms at 95% disk utilization, which should be a couple days warning based on typical growth patterns. As the Master and all Replicas use disk at effectively the same rate, all generally need to be updated at the same time.
+* **Memory** : Replica RAM utilization depends primarily on the volume of RPC traffic the replica is serving. A replica that is serving only a handful of requests will use less than 1 GB of RAM. A replica under very heavy load will trend up with the load. We recommend setting an alarm at 80% RAM utilization, and scaling out your cluster of replicas to help share the RPC traffic.
+* **CPU** : Replica CPU utilization depends primarily on the volume of RPC traffic the replica is serving. A replica that is serving only a handful of requests will have a nearly idle CPU. A replica under heavy load will trend up with the load. We recommend setting an alarm at 75% CPU utilization and scaling out your cluster of replicas to help share the RPC traffic.
+* **Block Number** : Every 30 seconds, the replica will log a message with several pieces of information, including the latest block number. If this number does not increase regularly, there is likely a problem with either the master, or communication between the master and replica.
+* **Block Age** : Every 30 seconds, the replica will log a message with several pieces of information, including the latest block age. If the block age exceeds `--replica.block.age` the replica will shutdown, so you may want to monitor and be alerted before that happens.
+* **Block Lag** : Block lag is a computed metric found by comparing
+
+   .. math:: master.blockNumber - replica.blockNumber
+
+  If this number is higher than 2, that might indicate that the replica is not receiving information from the master. If it stays high or increases steadily, check that Kafka is functioning properly, and try restarting the replica.
+* **Replica Offset Age**: Every 30 seconds, the replica will log a message with several pieces of information, including how long it has been since it last got a message from the master. If this number exceeds --replica.offset.age the replica will shutdown, so you may want to monitor and be alerted before that happens. Generally this happens if either the master has crashed or Kafka has become unavailable.
+
+Kafka
+-----
+
+* **Disk Utilization**: A single Ether Cattle topic with snappy compression enabled and a default 7 day retention period will use about 40 GB of RAM on an ongoing basis. If you are running multiple Ether Cattle clusters on the same Kafka cluster, this will scale accordingly. We recommend leaving plenty of buffer between your expected usage and your disk limits, and monitoring closely to ensure you don’t run out of disk.
+* **Memory**: Kafka memory utilization is dependent on the volume of data in Kafka topics and the number of active subscribers. With two Ether Cattle clusters, each with two subscribers, we see around 1.5 GB of RAM utilization. We recommend setting an alarm on memory utilization around 85%, and if that threshold is exceeded for an extended period, increase the RAM for your Kafka servers.
+* **CPU**: The CPU utilization for Kafka in an Ether Cattle cluster is exceptionally low. We recommend tracking it and scaling appropriately if it is consistently high, but this is unlikely to be a bottleneck for your cluster.

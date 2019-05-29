@@ -1,0 +1,165 @@
+Under The Hood
+==============
+
+The CloudFormation templates for an Ether Cattle Cluster have a lot of moving
+parts. This section of the document is intended to give you a good understanding
+of what is involved in an operating cluster.
+
+The Master
+----------
+
+The Ether Cattle master is mostly a conventional Geth node, but uses Kafka to
+keep a log of everything it writes to its underlying database. That Kafka log
+will be used by replicas to be able to serve the same information as the master.
+
+The master is run through an autoscaling group, though that auto-scaling group
+will only ever run one master at a time. In the event that a master fails, it
+can be terminated, and the autoscaler will replace the instance automatically.
+The master's chaindata folder will start from the Snapshot ID provided in the
+CloudFormation template.
+
+On startup, the master first attempts to sync from the Kafka topic it will
+eventually write to. This ensures that it is starting from the same place its
+replicas are starting before connecting to peers. On the first startup for a
+cluster there will be nothing available from Kafka, but on subsequent runs it
+may take a few minutes for the master to sync from Kafka before it starts
+syncing with peers.
+
+If you terminate an existing master and it must resume from a snapshot that is
+24 hours old, it typically takes about 45 minutes to sync with Kafka and then
+catch up from peers on the network. By comparison, a traditional Geth node would
+take around 3.5 hours to catch up with network syncing only from peers.
+
+The Ether Cattle CloudFormation template has an optimization to improve startup
+time. When starting a new EC2 instance with a volume derived from a snapshot,
+there is a period of high read latency for the snapshotted volume. Without this
+optimization, it would take several hours before the EC2 volume's read latency
+was low enough to keep up with the Ethereum blockchain. When a new instance
+starts up, it is created with a Provisioned IOPS disk, giving it much better
+read performance. After the master finishes syncing from Kafka, that volume is
+modified from a Provisioned IOPS disk to a standard SSD volume (gp2). The
+provisioned IOPS cost a little bit extra to get the master up quickly, but once
+the volume modification is complete we see no issues with the master keeping up
+with the blockchain.
+
+The main master process runs with geth's `--gcmode=archive` flag enabled. By
+default, Geth keeps much of the state trie in memory, flushing it to disk every
+few minutes. Since only information written to disk gets sent to replicas, we
+must have Geth write to disk on a continuous basis to make sure replicas have
+current information. This means that the disk utilization will grow at a faster
+pace than might be the case on a standard Geth node (around 25 GB per week of
+growth).
+
+Replicas
+--------
+
+Replicas run a variant of the standard Geth node that does not rely on
+peer-to-peer communication, and serves everything directly from disk. They pull
+the master’s write log from Kafka, and write that information to their local
+database. Once in sync with the blockchain, replicas will start serving RPC
+requests on port 8545.
+
+Like masters, replicas are also started from an autoscaling group, and also
+start from the snapshot id provided to the CloudFormation template. At the time
+of this writing, the autoscaler will run the number of replicas indicated by the
+“Replica Target Capacity” parameter of the template, but this could be
+configured to autoscale based on a variety of metrics.
+
+In the CloudFormation configuration, replicas will only start serving RPC
+requests when the following conditions are met:
+
+* The replica must be in sync with Kafka
+* The most recent block received from the master must be less than 45 seconds old
+
+Additionally, if either of the following conditions are met, the replica will shutdown:
+
+* The replica has not received a message from the master in over 62 seconds (the master has a 30 second heartbeat, so this means it missed at least 2 heartbeats).
+* The latest block from the master is over 4 minutes old.
+
+In those situations, systemd will restart the replica, and it will resume
+serving RPC requests once in sync with Kafka and having a block less than 45
+seconds old.
+
+Regular Snapshots
+-----------------
+
+A critical piece of running an Ether Cattle cluster is having frequent snapshots
+for starting new instances. This allows you to scale up the number of replicas
+to increase capacity, and replace failed masters and replicas. The Kafka server,
+by default, has a 7 day retention period for write logs. When starting a new
+master or replica, it is critical that the chaindata snapshot comes from within
+that 7 day retention period, or it will not be possible for the server to sync
+up with Kafka. Thus, we need to make sure that we have snapshots more recent
+than Kafka’s retention period. The CloudFormation template includes a
+snapshotting process that runs once daily to ensure snapshots are available.
+
+* A CloudWatch Event Rule is scheduled to execute a lambda function once daily. Its first run will be 24 hours after you deploy the CloudFormation stack.
+* The lambda function will launch a t3.micro EC2 instance with a chaindata volume derived from the CloudFormation stack’s latest snapshot.
+* The EC2 instance will pull the latest data from Kafka, then the replica process terminates.
+* The EC2 instance creates a snapshot from the volume it just synced with Kafka. This snapshot will have a “clusterid” tag that corresponds to the Kafka topic you indicated in the CloudFormation stack, and a “name” tag of “$clusterid-chaindata-$timestamp”.
+* Once the snapshot is 100% complete, the EC2 instance will update the CloudFormation template parameter with the new snapshot. This means any new masters or replicas started by their respective autoscalers will launch with this version of the snapshot.
+* The EC2 instance terminates.
+
+This process can take a couple of hours, but runs behind the scenes. As an
+administrator, you generally don’t need to worry about the process, so much as
+making sure that the snapshots are created and the CloudFormation stack is
+updated on a regular basis.
+
+In addition to the daily process that takes snapshots, every hour a Lambda
+function executes to clean up older snapshots. By default, it will keep the four
+most recent completed snapshots, and delete anything older.
+
+.. _monitoring:
+
+Monitoring
+----------
+
+The CloudFormation stack sets up several CloudWatch metrics, as well as the
+necessary infrastructure to populate those metrics. General system metrics are
+collected by the AWS CloudWatch agent, which is installed on each machine.
+Application-specific metrics are logged by the application, sent to CloudWatch
+logs via the journald-cloudwatch-logs daemon, sent to a Lambda function using a
+CloudWatch subscription filter, and the Lambda function parses the log messages
+to create CloudWatch Metrics.
+
+Several of these metrics have alarms associated with them. Each alarm is sent to two or three SNS topic:
+
+* **Aggregated Notifications**: An SNS topic that receives all alarm notifications. If you provided a Notification Email address parameter, it will be subscribed to this channel. You can create additional subscriptions to this channel.
+* **Alarm SNS Topic**: If you provided an Alarm SNS Topic parameter, all alarm triggers will be sent to that channel.
+* **Alarm-Specific Topics**: Each alarm has a corresponding SNS topic, with no subscribers. These are created for your convenience, and you can add your own subscriptions to them, but as of now they are unused.
+
+The metrics collected by the CloudFormation stack are:
+
+
+Master
+......
+
+* **Disk Utilization**: Monitoring disk utilization on the master is essential. Both masters and replicas will increase in disk utilization over time, and will eventually need to be increased. We have alarms at 95% disk utilization, which should be a couple days warning based on typical growth patterns. As the Master and all Replicas use disk at effectively the same rate, all generally need to be updated at the same time.
+* **Memory**: Memory usage on the master should be fairly constant. If you have 8 GB of RAM and the configuration described above, the master should stay consistently below 75% RAM utilization. We have alarms set at this threshold, and if it stays in an alarming state for an extended period, we recommend rebooting your master server.
+* **CPU**: CPU utilization on the master will be a bit spikey - when new blocks come in it will ramp up to validate the block, then settle back down. With two modern CPUs, the CPU utilization will be around 60% averaged out over time. We have an alarm set at 85%, and recommend rebooting the master if it stays above 85% for an extended period.
+* **Peer Count**: A critical metric for master health is its number of peers. If a master has no peers, it will not receive new block information. By default, a master will establish connections with 25 peers. We have an alarm configured to trigger if the master is below 10 peers. If a master drops to zero peers and stops syncing blocks, we recommend restarting the master.
+* **Block Age**: Every time it processes a block (or group of block, during the initial sync) geth logs a message about the processed blocks. If the processed block is older than 60 seconds, Geth will include the age of that block. We track the block age as a metric.
+* **Block Number**: Because block age metrics are only available when blocks are greater than 60 seconds old, we also track how frequently new blocks are reported. If no new blocks have been received in 120 seconds, follow the same process you would if you were seeing high block ages reported. An alarm is set to report if this metric is missing.
+
+Replicas
+........
+
+* **Disk Utilization**: Both masters and replicas will increase in disk utilization over time, and will eventually need to be increased. We have alarms at 95% disk utilization, which should be a couple days warning based on typical growth patterns. As the Master and all Replicas use disk at effectively the same rate, all generally need to be updated at the same time.
+* **Memory**: Replica RAM utilization depends primarily on the volume of RPC traffic the replica is serving. A replica that is serving only a handful of requests will use less than 1 GB of RAM. A replica under very heavy load will trend up with the load. We have alarms at 80% RAM utilization, and recommend scaling out your cluster of replicas to help share the RPC traffic (at the time of this writing, we do not have autoscaling triggers from this alarm).
+* **CPU**: Replica CPU utilization depends primarily on the volume of RPC traffic the replica is serving. A replica that is serving only a handful of requests will have a nearly idle CPU. A replica under heavy load will trend up with the load. We have an alarm at 75% CPU utilization and recommend scaling out your cluster of replicas to help share the RPC traffic (at the time of this writing, we do not have autoscaling triggers from this alarm).
+* **Block Number**: Every 30 seconds, the replica will log a message with several pieces of information, including the latest block number. If this number does not increase regularly, there is likely a problem with either the master, or communication between the master and replica.
+* **Block Age**: Every 30 seconds, the replica will log a message with several pieces of information, including the latest block age. If the block age exceeds --replica.block.age the replica will shutdown, so you may want to monitor and be alerted before that happens.
+* **Block Lag**: Block lag is a computed metric found by comparing
+
+  .. math:: master.blockNumber - replica.blockNumber
+
+  If this number is higher than 2, that might indicate that the replica is not receiving information from the master. If it stays high or increases steadily, check that Kafka is functioning properly, and try restarting the replica.
+
+* **Replica Offset Age**: Every 30 seconds, the replica will log a message with several pieces of information, including how long it has been since it last got a message from the master. If this number exceeds --replica.offset.age the replica will shutdown, so you may want to monitor and be alerted before that happens. Generally this happens if either the master has crashed or Kafka has become unavailable.
+
+Kafka
+.....
+
+* **Disk Utilization**: A single Ether Cattle topic with snappy compression enabled and a default 7 day retention period will use about 40 GB of RAM on an ongoing basis. If you are running multiple Ether Cattle clusters on the same Kafka cluster, this will scale accordingly. We recommend leaving plenty of buffer between your expected usage and your disk limits, and monitoring closely to ensure you don’t run out of disk.
+* **Memory**: Kafka memory utilization is dependent on the volume of data in Kafka topics and the number of active subscribers. With two Ether Cattle clusters, each with two subscribers, we see around 1.5 GB of RAM utilization. We have an alarm on memory utilization around 85%, and if that threshold is exceeded for an extended period, increase the RAM for your Kafka servers.
+* **CPU**: The CPU utilization for Kafka in an Ether Cattle cluster is exceptionally low. We recommend tracking it and scaling to larger instances if it is consistently high, but this is unlikely to be a bottleneck for your cluster.

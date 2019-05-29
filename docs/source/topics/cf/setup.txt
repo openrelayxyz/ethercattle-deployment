@@ -1,0 +1,222 @@
+Setup
+=====
+
+Prerequisites
+-------------
+
+Before you get started, you must have:
+
+* An AWS Account
+* A pre-created VPC where the resources can be deployed
+
+  * The VPC must have the "DNS Resolution" & "DNS Hostnames" options enabled
+
+* A pre-created subnet for deploying VMs
+* An IAM user with administrative privileges to deploy the CloudFormation stack
+* Check out the Git repository of CloudFormation templates from: https://github.com/openrelayxyz/ethercattle-deployment
+
+
+Generating Your First Chaindata Snapshot
+----------------------------------------
+
+Before you can stand up a cluster, you need a snapshot of the Ethereum
+blockchain data. Your masters and replicas will both be created from the same
+initial snapshot. Creating this initial snapshot takes 36-48 hours at the time
+of this writing, and that is likely to increase as the blockchain continues to
+grow.
+
+The snapshot_generator.yaml CloudFormation template will generate this initial
+snapshot with minimal effort on your part.
+
+#. Navigate to the CloudFormation Dashboard
+#. Click "Create Stack"
+#. Select "Template is Ready" and "Upload a Template File"
+#. Pick "Choose File" and choose "snapshot_generator.yaml" from your Git checkout
+#. Click Next
+#. Enter a stack name. We recommend "ethercattle-snapshot"
+#. Fill in the following parameters:
+
+   * `Instance Type`: The type of EC2 instance to use to sync your Ethereum node. The least expensive node we have found that will successfully sync mainnet is the default, m5a.large. If you are syncing a testnet, you may be able to use a smaller instance. If you want the syncing process to go faster, an instance type with more CPUs may help.
+   * `Disk Size`: If you are syncing the Ethereum Mainnet, you will need at least 250 GB. If you are syncing a testnet, such as Goerli, you can lower this.
+   * `SSH Key Pair`: This is the name of an SSH Key Pair you can use to SSH into the instances created by this stack. If you need help setting up an SSH key pair, see: https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-key-pairs.html
+   * `S3GethBucketName`: The S3 bucket containing the necessary Geth binaries and Lambda Functions for this stack. The default is a publicly shared bucket managed by the OpenRelay team, but if you wish to host your own you may point to it here.
+   * `Chaindata Snapshot ID`: If you already have a chaindata snapshot and wish to bring it up to date, you can enter the snapshot id here. In most cases, this field will be left blank, and the snapshot will sync from an empty disk.
+   * `Geth Flags`: These are command-line flags for the geth service that will create your snapshot. If you are creating a mainnet snapshot, nothing is needed in this field. If you want to create a snapshot for a testnet, you can add the appropriate flags here.
+   * `VPC ID`: The VPC ID of the VPC you want to deploy to.
+   * `VPC Base IP`: The first two octets of your VPC’s IP range. For example, if the subnet you indicated earlier has an IP range of 10.42.19.0, this field would be "10.42"
+   * `Subnet`: The subnet ID for a valid subnet on your VPC. This should be a public subnet that assigns public IPs to instances (necessary for connecting to peers).
+   * `Notification Email`: If you wish to be notified when the snapshot is complete, provide an email address here and the stack will subscribe you to an SNS topic to receive notifications when the snapshot is complete. If you do not provide an email address, no notifications will be sent. If you do provide an email address, you will receive a verification email, which you must confirm before you will receive notifications.
+
+#. Once the above form fields are completed, click "Next"
+#. On the Stack Options page, you can add tags, stack policies, or notifications. If you don’t know what this means, you can just click "Next"
+#. The Stack Review page will show you the options you just filled out. At the bottom of this page is a "Capabilities" section. You will need to check the box that says "**I acknowledge that AWS CloudFormation might create IAM resources.**" (The IAM resources will enable an EC2 instance created by the stack to take a snapshot).
+#. Click "Create Stack"
+#. This will launch an EC2 instance, which will connect to peers and download the blockchain. It will take several days to get in sync with the blockchain - this is simply a reality of running a full node, and not specific to Ether Cattle. When it is complete, it will create a snapshot of its disk and shutdown. To monitor progress, you can SSH to the EC2 instance and run:
+
+    .. code::
+
+    	tail -f /var/log/cloud-init-output.log
+
+   Which will show geth’s progress.
+#. When it is complete, the EC2 > Volumes > Snapshots dashboard will have the snapshot created by this instance. It will have a tag "clusterid = snapshotter" and the name "Snapshotter-chaindata-$timestamp", where $timestamp indicates when the snapshot completed. You will use the Snapshot ID for this snapshot in later steps.
+#. You may now delete the CloudFormation Stack you created. It will leave the snapshot intact, and the other resources are no longer needed.
+
+Deploying Cluster Infrastructure
+--------------------------------
+
+Ether Cattle uses Kafka for communicating between master and replica nodes, and
+uses an Application Load Balancer to pool replica nodes together. If you intend
+to run multiple Ether Cattle clusters for high availability, you can use the
+same Kafka cluster and load balancer for multiple Ether Cattle clusters. To
+simplify this we have separated out an Infrastructure Stack, which provides
+Kafka and a Load Balancer, and a Replica Cluster stack, which provides the
+master and replica nodes.
+
+.. warning::
+
+    While the Infrastructure Stack’s Kafka cluster is redundant and spans three
+    availability zones, it is not especially well structured for maintenance and
+    updates. If you have true high-availability requirements for your cluster,
+    we recommend either developing in-house expertise in running Kafka, or
+    outsourcing to a managed Kafka provider such as AWS MSK, Confluent, or
+    Eventador.
+
+
+To deploy the infrastructure stack:
+
+#. Navigate to the CloudFormation Dashboard
+#. Click "Create Stack"
+#. Select "Template is Ready" and "Upload a Template File"
+#. Pick "Choose File" and choose "infrastructure.yaml" from your Git checkout
+#. Click Next
+#. Enter a stack name. We recommend "ethercattle-infra"
+#. Fill in the following parameters
+
+   * `Cluster ID`: An identifier for this infrastructure cluster. If you deploy multiple infrastructure stacks, this must be unique to avoid resource naming conflicts.
+   * `SSH Key Pair`: This is the name of an SSH Key Pair you can use to SSH into the instances created by this stack. If you need help setting up an SSH key pair, see: https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-key-pairs.html
+   * `Kafka Instance Type`: The type of EC2 instance to run the Kafka nodes on. The Ether Cattle use case is not especially taxing on Kafka, and t3.small instances are suitable for a small number of clusters.
+   * `Kafka Count`: The number of Kafka servers to run. This will generally be 3.
+   * `Kafka Disk Size`: The amount of disk to provision for use in Kafka. We recommend 500 GB.
+   * `Kafka Disk Type`: The type of EBS volume to use for Kafka. We recommend st1, which is high-throughput HDD volumes. Note that because Kafka is optimized for sequential reads and writes, there is little to gain from using SSDs in Kafka.
+   * `VPC ID`: The VPC ID of the subnet you wish to deploy to. Note that the CloudFormation stack will deploy a public subnet in each availability zone, and set up routing tables between them.
+   * `Internet Gateway ID`: The ID of an internet gateway on the VPC you specified.
+   * `VPC Base IP`: The first two octets of your VPC’s IP range. For example, if the VPC  you indicated earlier has an IP range of 10.42.0.0, this field would be "10.42"
+   * `Unused IP Octet (3)`: The CloudFormation template will deploy three public subnets on your VPC (in three different availability zones). If you specified a VPC Base IP of "10.42", and "160" for an IP octet, you would get a subnet covering "10.42.160.0/24". You need to provide three octets available for creating /24 subnets on the specified VPC.
+
+#. Once the above form fields are completed, click "Next"
+#. On the Stack Options page, you can add tags, stack policies, or notifications. If you don’t know what this means, you can just click "Next"
+#. The Stack Review page will show you the options you just filled out. At the bottom of this page is a "Capabilities" section. You will need to check the box that says "**I acknowledge that AWS CloudFormation might create IAM resources.**" (The IAM resources will enable nodes to log to CloudWatch, and interact with the Elastic Container Service).
+#. Click "Create Stack"
+#. This will launch EC2 instances, join them to an ECS cluster, and deploy both Apache ZooKeeper and Kafka to the cluster. It will also create an internal Application Load Balancer, which, initially, will have no instances connected to it.
+#. Once the status of your CloudFormation Stack shows as "Create Complete", you are ready to deploy a Replica Cluster against this stack.
+
+.. _deploying-cluster:
+
+Deploying A Cluster
+-------------------
+
+Now that you have the necessary infrastructure to support a cluster, and you have a chaindata snapshot to launch your master and replicas from, you are ready to launch your first replica cluster.
+
+To deploy the infrastructure stack:
+
+Navigate to the CloudFormation Dashboard
+
+#. Click "Create Stack"
+#. Select "Template is Ready" and "Upload a Template File"
+#. Pick "Choose File" and choose "replica_cluster.yaml" from your Git checkout
+#. Click Next
+#. Enter a stack name. We recommend "ethercattle-c1"
+#. Fill in the following parameters:
+
+   * `Infrastructure Cloudformation Stack`: The CloudFormation stack name you specified in step 6 of the previous section (we suggested "ethercattle-infra"). This will determine the subnets instances get deployed to, the Kafka brokers to connect to, the load balancer to register with, etc.
+   * `External Target Group`: If you want replicas to be available under a different load balancer than the one from the infrastructure stack you deployed  in the previous section, you can specify the ARN of a target group you want replicas to join here. Otherwise, leave this blank.
+   * `Use Standard Target Group`: If you specified a value in the External Target Group field, you may not want replicas in this cluster to connect to the standard target group associated with the infrastructure stack. For example, if you wanted to run a Goerli cluster on the same Kafka brokers as a mainnet cluster, you could specify an alternative load balancer above, and set this to 0 to avoid having replicas from this stack join the mainnet loadbalancer.
+   * `SNS Topic For Alarms`: If you already have an SNS topic where you wish to be notified of issues, you can specify it here, and any alarms will be sent to that topic. If you do not provide an SNS topic, no notifications will be sent. You might, for example, use this to send alarm notifications to Slack or other chat providers (see https://medium.com/cohealo-engineering/how-set-up-a-slack-channel-to-be-an-aws-sns-subscriber-63b4d57ad3ea).
+   * `Notification Email Address`: If you wish to be notified of issues via email, provide an email address here and we will set up a subscription to the topic alarms are broadcast to. If you do not provide an email address, no notifications will be sent. If you do provide an email address, you will receive a verification email, which you must confirm before you will receive notifications.
+   * `SSH Key Pair`: This is the name of an SSH Key Pair you can use to SSH into the instances created by this stack. If you need help setting up an SSH key pair, see: https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-key-pairs.html
+   * `Unique Kafka Topic Name`: A name for the Kafka topic for this cluster. This must be unique across the clusters running on the same infrastructure stack, and should be unique globally.
+   * `Unique Network ID`: An identifier for the network this cluster represents. You can choose this identifier, but should use the same identifier for all clusters connecting to the same network.
+   * `S3 Geth Bucket`: The S3 bucket containing the necessary Geth binaries and Lambda Functions for this stack. The default is a publicly shared bucket managed by the OpenRelay team, but if you wish to host your own you may point to it here.
+   * `Chaindata Snapshot ID`: The snapshot id of the snapshot created by the first stack. If you have run other clusters, you could use a recent snapshot id generated by another cluster.
+   * `Master Instance Type`: The EC2 instance type the master will run on. The least expensive instance type we have found that will run a master reliably is an m5a.large instance, so this is the default.
+   * `Master Extra Geth Flags`: If you want to add extra flags to the master’s Geth process, add them here. Most commonly, this would be used if you wanted to run on a network other than mainnet. In most cases, this should be left blank.
+   * `Disk Size`: The amount of disk to provision for the chaindata folder on replica and master nodes. This must be greater than or equal to the size of the chaindata snapshot. For mainnet, this must be at least 250 GB, but for testnets or private chains it may be smaller.
+   * `Replica Extra Geth Flags`: If you want to add extra flags to the replicar’s Geth process, add them here. Most commonly, this would be used if you wanted to run on a network other than mainnet. In most cases, this should be left blank.
+   * `Replica Disk Type`: The type of disk to be used on replica servers. By default this is st1. If you anticipate that your replica will be under heavy load, you may want to change this to gp2.
+   * `Replica Target Capacity`: The number of replica instances to run.
+   * `Replica On Demand Percentage`: The percentage of replica instances that should be On Demand instances, as opposed to Spot Instances. This can be anywhere from 100 (for all on-demand instances) to 0 (for all spot instances). Spot instances are likely to be terminated abruptly, but are much cheaper. Because replicas can be replaced fairly quickly, it is fairly safe to use spot instances for this use case.
+
+#. Once the above form fields are completed, click "Next"
+#. On the Stack Options page, you can add tags, stack policies, or notifications. If you don’t know what this means, you can just click "Next"
+#. The Stack Review page will show you the options you just filled out. At the bottom of this page is a "Capabilities" section. You will need to check the box that says "**I acknowledge that AWS CloudFormation might create IAM resources.**" (The IAM resources will enable a wide range of tasks, from launching instances to creating and cleaning up snapshots.).
+#. Click "Create Stack"
+#. This will launch master and replica servers in autoscaling groups, add a variety of metrics collection and alarms, set up daily tasks to take snapshots for replica servers, as well as recurring tasks to clean up those snapshots. The full depth of this stack will be discussed in Section 2.
+#. Once the CloudFormation stack shows a status of "Create Complete", you should have a master server and replicas running. The replicas will not join the load balancer until the master is caught up with the Ethereum network - how long that takes will depend on the age of the snapshot you launched from.
+
+
+Deleting a Cluster
+------------------
+
+If you are done with a cluster, you can delete it. This will remove all
+resources created by the CloudFormation stack, including autoscaling groups (and
+corresponding instances and attached volumes), security groups, IAM roles &
+policies, lambda functions, log groups, alarms, and dashboards. It **will not**
+remove any EBS Snapshots, as these are not tracked by the CloudFormation stack.
+You will want to delete those manually. Additionally, CloudWatch metrics will
+continue to be available according to their retention period.
+
+Additionally, because of dependencies between your infrastructure stack and
+cluster stacks, you need to delete all clusters based on an infrastructure stack
+before you will be able to delete the infrastructure stack itself.
+
+Upgrade Process
+---------------
+
+We recommend against upgrading individual clusters. Software updates may change
+the on-disk format or the log message format, and having inconsistencies between
+the master and replicas could cause serious problems.
+
+Instead, we recommend standing up a new cluster when you wish to upgrade.
+
+#. Note the snapshot id from your existing cluster.
+#. Go through the steps of :ref:`deploying-cluster` using the snapshot id from the cluster you are replacing.
+#. Wait for the new replicas to be in sync with the network and connected to the load balancer.
+#. Delete the old cluster’s CloudFormation stack as described in Deleting a Cluster.
+
+This will ensure zero-downtime upgrades, without any issues synchronizing
+updates between the master, replicas, and the snapshotting process.
+
+Expected Monthly Costs
+----------------------
+
+The table below shows expected monthly costs for a single Ether Cattle Cluster
+deployed on an infrastructure stack. Items with check marks in the "Scale"
+column can be expected to increase roughly linearly with each Ether Cattle
+Cluster you add, while other items should be able to support multiple clusters
+on the cost indicated below.
+
+================   ========   =======================  ======= ======================================= ==================
+Item               Qty        Cost Per Unit (monthly)  Total   Note                                    Scale
+================   ========   =======================  ======= ======================================= ==================
+t3.small           3          $15                       $45     Kafka Hosts
+m5a.large          1          $62                       $62     Master Server                          :math:`\checkmark`
+t3.micro           0.125      $7.50                     $1      Snapshot Servers (about 3 hours daily) :math:`\checkmark`
+Misc. Spot         2          $15                       $30     Replica Hosts                          :math:`\checkmark`
+st1 disks          1500 GB    $.045                     $67.50  Kafka Storage
+gp2 disks          900 GB     $.10                      $90     Host root volumes, chaindata storage   :math:`\checkmark`
+snapshots          1 TB       $.05                      $50     Snapshots of chaindata volumes         :math:`\checkmark`
+CloudWatch Logs    15 GB      $.50                      $7.50                                          :math:`\checkmark`
+CW Metrics         60         $.30                      $18                                            :math:`\checkmark`
+CW Alarms          5          $0.10                     $.50                                           :math:`\checkmark`
+CW Dashboards      2          $3                        $6      1 Infrastructure, 1 cluster            :math:`\checkmark`
+Load Balancer      1          $33                       $33
+Intranet Traffic   2.5 TB     $.01                      $25     Inter-AZ Communication                 :math:`\checkmark`
+Internet Traffic   125 GB     $.09                      $11.25  Master syncing with network            :math:`\checkmark`
+================   ========   =======================  ======= ======================================= ==================
+
+The total cost for this configuration is around $450 per month. Note that you
+could get savings by making instance reservations for 1 m5a.large and 3 t3.small
+servers, which will be running on a regular basis. Note that your first month
+may be slightly higher, due to the costs of making an initial snapshot. These
+costs assume fairly minimal traffic to replicas - costs for load balancers,
+regional data transfer, and logging will increase for high volume clusters.

@@ -2,7 +2,7 @@ Implementation
 ==============
 
 In `go-ethereum/internal/ethapi/backend.go`, a Backend interface is specified.
-Objects filling this interface can be passed to ethapi.GetAPIS() to return
+Objects filling this interface can be passed to `ethapi.GetAPIs()` to return
 `[]rpc.API`, which can be used to serve the Ethereum RPC APIs. Presently there
 are two implementations of the Backend interface, one for full Ethereum nodes
 and one for Light Ethereum nodes that depend on the LES protocol.

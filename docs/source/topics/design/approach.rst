@@ -26,6 +26,8 @@ and a Batch interface which must support the following operations:
 
 * Put
 * Write
+* Delete
+* Reset
 * ValueSize
 
 We have created a simple CDC wrapper, which proxies operations to the standard
@@ -37,7 +39,7 @@ The performance impact to the Go Ethereum server is minimal. The CDC wrapper is
 light weight, proxying requests to the underlying database with minimal
 overhead. Writing to the Kafka topic is handled asynchronously, so write
 operations are unlikely to be delayed substantially due to logging. Read
-operations be virtually unaffected by the wrapper.
+operations will be virtually unaffected by the wrapper.
 
 While we have currently implemented a Kafka logger, we have defined an abstract
 interface that could theoretically support a wide variety of messaging systems.
@@ -64,7 +66,7 @@ service. When a new block comes in it is written to the database, but the hash
 of the latest block is kept in memory. Without the peer-to-peer service running
 the service believes that the "latest" block has not updated since the process
 initialized and read the block out of the database. If RPC functions are called
-speciying the target block, instead of implicitly asking for the latest block,
+specifying the target block, instead of implicitly asking for the latest block,
 it will look for that information in the database and serve it correctly.
 
 Despite preliminary successes, there are several potential problems with the

@@ -1,0 +1,88 @@
+Troubleshooting
+===============
+
+This section explores the variety of different problem scenarios you may encounter.
+
+Getting an Initial Snapshot is Taking Forever
+---------------------------------------------
+
+Slow initial syncs are an unfortunate fact of life with Geth. See `this discussion <https://github.com/ethereum/go-ethereum/issues/15001#issuecomment-426918953>`_ for more details.
+
+In general, it will get there eventually, but it takes a long time. If you think
+it may not be running, SSH to the snapshot instance and :code:`tail -f
+/var/log/cloud-init-output.log` to see what is happening.
+
+
+An Alarm is Going Off
+---------------------
+
+When you configured your cluster, you should have set up notifications, either
+via E-Mail or a pre-defined SNS topic so that the alarms will be brought to your
+attention. In these cases, we recommend that you refer to the :ref:`monitoring`
+section for the specific metric that is alarming, to find recommendations for
+how to handle that alarm.
+
+The Disk Is Full
+----------------
+
+As noted previously, after creating an initial snapshot, you can expect your
+cluster's disk utilization to increase by about 25 GB per week. Eventually, you
+will run out of provisioned disk. In this case, you have a few options:
+
+* Deploy a new cluster. In the Disk Size parameter, put in a bigger number. This will stand up a new cluster with bigger disks. Once the new cluster's replicas have joined the load balancer, you can delete the old cluster and you have more disk available.
+* If you want to avoid deploying a new cluster, you can modify your existing cluster. First, update the CloudFormation stack providing a larger number for the disk size. This will modify your autoscaling groups so that new instances will have disks that size, but it will not replace the ones that are already deployed. In the EC2 Dashboard in the Volumes tab, you can identify the volumes associated with a stack by their Name Tags; they will be tagged as KafkaTopic-Master and KafkaTopicReplica, given the value of KafkaTopic that you used for this stack. Find the volumes for your cluster, click “Actions > Modify Volume” and increase the volume size. At this point, you will need to SSH into each instance and run :code:`resize2fs /dev/nvme1n1` to resize the filesystem to match the volume.
+
+Eventually though, the size of these disks may seem like it's getting out of
+hand. The snapshot volumes that started out around 250 GB will be 1 TB after
+about 7 months. When they exceed your threshold for acceptable volume sizes, we
+recommend starting back at the "Generating your first Chaindata Snapshot"
+process, and deploying a new cluster from the generated snapshot.
+
+Responses are Slow
+------------------
+
+First, check CPU and RAM. If your instances are at the limits of CPU and RAM,
+the best answer is probably to add more instances. You can do this by updating
+your CloudFormation stack and increasing the ReplicaTargetCapacity parameter. If
+the CPU is mostly idle and RAM usage is not heavy, read on.
+
+Replicas serve responses out of their on-disk LevelDB database. This makes them sensitive to the performance of the underlying disks. If your are encountering performance issues, you might try:
+
+* Switching from st1 volumes to gp2 volumes
+* If you are already on gp2 volumes, make them bigger. Bigger volumes on AWS have higher throughput, even if you don't need the storage space.
+* Switch to using instance types with more RAM. The Linux Kernel will cache as much of the database as it can in RAM, giving better general performance.
+
+Replicas Are Behind the Network
+-------------------------------
+
+In general, your replicas should reflect the state of your master within a few
+dozen milliseconds. If your master is not able to keep up with the network,
+update your replica cluster stack updating the **MasterInstanceType** parameter
+to a bigger instance type. This will update the autoscaling group for the
+master, but will not replace the master instance. You can force it to update the
+instance by terminating the master instance.
+
+The Load Balancer is Serving 502 Responses
+------------------------------------------
+
+If your replicas lag too far behind the network, they will eventually shut down
+and wait for the master to catch up. If your master is not running properly,
+terminate the instance and let the autoscaler replace it. We have seen that
+periodically masters will lose many of their peers simultaneously - this seems
+to be a part of operating on a peer-to-peer network. You can help mitigate this
+by adding :code:`--maxpeers=50` to the **Master Extra Flags** parameter in your
+CloudFormation stack, but handling extra peers may also require you increase the
+size of your master.
+
+We also recommend running at least two replica clusters if you have high
+availability requirements. The replicas from both clusters will join the same
+load balancer, so if one master loses peers and cannot keep up with the network,
+requests will be routed to replicas from the other load balancer. This also
+helps mitigate risks relating to infrastructure issues within AWS.
+
+My Question Isn't Answered Here
+-------------------------------
+
+We're sorry! We've tried to head off the issues we're aware of, but if you've
+run into something not covered here, please visit us on `Gitter <https://gitter.im/ethercattle-initiative/community>`_
+and we will try to help get you situated.

@@ -3,18 +3,16 @@
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-Welcome to ethercattle's documentation!
-=======================================
+Welcome to Ether Cattle's documentation!
+========================================
 
 .. toctree::
    :maxdepth: 2
    :caption: Contents:
 
-   topics/intro.rst
-   topics/goals.rst
-   topics/approach.rst
-   topics/implementation.rst
-
+   topics/design/index.rst
+   topics/cf/index.rst
+   topics/metal/index.rst
 
 ..
 .. Indices and tables
