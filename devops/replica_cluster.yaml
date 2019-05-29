@@ -143,6 +143,11 @@ Parameters:
   AlarmSNSTopic:
     Type: String
     Description: An optional SNS topic to receive notifications from alarms
+  SnapshotValidationThreshold:
+    Type: Number
+    Default: 10000
+    Description: The number of state trie nodes to validate when taking a snapshot.
+
 
 Metadata:
   AWS::CloudFormation::Interface:
@@ -176,6 +181,7 @@ Metadata:
           - ReplicaDiskType
           - ReplicaTargetCapacity
           - ReplicaOnDemandPercentage
+          - SnapshotValidationThreshold
     ParameterLabels:
       MasterInstanceType:
         default: Instance Type
@@ -211,6 +217,8 @@ Metadata:
         default: Notification Email Address
       AlarmSNSTopic:
         default: SNS Topic for Alarms
+      SnapshotValidationThreshold:
+        default: Snapshot Validation Threshold
 
 Mappings:
   RegionMap:
@@ -1067,6 +1075,18 @@ Resources:
                 yum install -y jq
 
                 sudo -u geth /usr/bin/geth replica ${ReplicaExtraFlags} --kafka.broker=${KafkaHostname} --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown
+                if ! sudo -u geth /usr/bin/geth verifystatetrie --datadir=/var/lib/ethereum ${SnapshotValidationThreshold}
+                then
+                  if [ "${AggregatedNotifications}" != "" ]
+                  then
+                    aws sns publish --topic-arn=${AggregatedNotifications} --subject="${AWS::StackName} - Bad State Trie" --message="State trie verification failed while taking snapshot for cluster '${KafkaTopic}'. No snapshot will be taken. This is probably unrecoverable, and you will need to deploy a new cluster from your last good snapshot (probably '${SnapshotId}')"
+                  fi
+                  if [ "${AlarmSNSTopic}" != "" ]
+                  then
+                    aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - Bad State Trie" --message="State trie verification failed while taking snapshot for cluster '${KafkaTopic}'. No snapshot will be taken. This is probably unrecoverable, and you will need to deploy a new cluster from your last good snapshot (probably '${SnapshotId}')"
+                  fi
+                  exit 1
+                fi
 
                 export AWS_DEFAULT_REGION=${AWS::Region}
                 VOLUME_ID=$(aws ec2 describe-volumes --filters Name=attachment.instance-id,Values="$(curl http://169.254.169.254/latest/meta-data/instance-id)" | jq '.Volumes[] | select(. | .Size > 50) | .VolumeId' -cr)
@@ -1142,6 +1162,12 @@ Resources:
               - !Sub "${MasterNodeRole.Arn}"
               - !Sub "${SnapshotterLambdaRole.Arn}"
               - !Sub "${SnapshotterNodeRole.Arn}"
+            Effect: Allow
+          - Action:
+              - sns:Publish
+            Resource:
+              - !Ref AggregatedNotifications
+              - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
             Effect: Allow
           - Action:
               - autoscaling:EnableMetricsCollection

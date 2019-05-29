@@ -121,6 +121,13 @@ Parameters:
     MinValue: 0
     Description: An unused IP block on this VPC
     Default: 162
+  NotificationEmail:
+    Type: String
+    Description: An optional e-mail address to receive notifications from alarms
+  AlarmSNSTopic:
+    Type: String
+    Description: An optional SNS topic to receive notifications from alarms
+
 
 Metadata:
   AWS::CloudFormation::Interface:
@@ -147,6 +154,11 @@ Metadata:
           - SubnetAOctet
           - SubnetBOctet
           - SubnetCOctet
+      - Label:
+          default: Notifications
+        Parameters:
+          - NotificationEmail
+          - AlarmSNSTopic
     ParameterLabels:
       KafkaCount:
         default: Node Count
@@ -225,6 +237,8 @@ Conditions:
   HasKeyName: !Not [!Equals [!Ref KeyName, '']]
   HasKafkaNodes: !Not [!Equals [!Ref KafkaCount, 0]]
   IsProd: !Equals [!Ref ClusterId, "prod"]
+  HasNotificationEmail: !Not [!Equals [ !Ref NotificationEmail, "" ]]
+  HasSNSTopic: !Not [!Equals [ !Ref AlarmSNSTopic, "" ]]
 
 Resources:
   # TODO: Sooner or later we should probably put some of this on private subnets
@@ -958,6 +972,53 @@ Resources:
       Port: 8545
       Protocol: HTTP
       VpcId: !Ref VpcId
+
+
+  AggregatedNotifications:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: Aggregated Notifications
+  AggregatedNotificationsSubscription:
+    Type: AWS::SNS::Subscription
+    Condition: HasNotificationEmail
+    Properties:
+      Endpoint: !Ref NotificationEmail
+      Protocol: email
+      TopicArn: !Ref AggregatedNotifications
+
+  UnhealthyHostsSNS:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: Unhealthy Hosts
+  UnhealthyHostsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmActions:
+        - !Ref UnhealthyHostsSNS
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+      AlarmDescription: "Unhealthy Hosts > 1"
+      ComparisonOperator: "GreaterThanThreshold"
+      Dimensions:
+        - Name: Target­Group
+          Value : !Ref RPCALBGroup
+        - Name: LoadBalancer
+          Value : !Ref RPCALB
+      InsufficientDataActions:
+        - !Ref UnhealthyHostsSNS
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+      EvaluationPeriods: 5
+      MetricName: "UnHealthyHostCount"
+      Namespace: AWS/Application­ELB
+      OKActions:
+        - !Ref UnhealthyHostsSNS
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+      Period: 60
+      Statistic: Average
+      Threshold: 1
+      TreatMissingData: missing
 
   CloudwatchDashboard:
     Type: AWS::CloudWatch::Dashboard
