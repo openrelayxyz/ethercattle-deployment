@@ -41,7 +41,16 @@ class IPCBackend(object):
             "params": params,
             "id": id
         }).encode("utf8"))
-        res = json.loads(self.s.recv(16192))
+        response = ""
+        while True:
+            response += self.s.recv(16192)
+            try:
+                res = json.loads(response)
+            except ValueError:
+                logger.warning("Unexpected JSON payload: '%s'", response)
+                pass
+            else:
+                break
         if res["id"] != id:
             raise Exception("Got unexpected ID")
         return res
@@ -140,3 +149,4 @@ if __name__ == "__main__":
         if not p2.is_alive():
             p1.terminate()
             break
+        time.sleep(0.1)
