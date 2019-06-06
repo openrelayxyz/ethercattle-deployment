@@ -36,4 +36,6 @@ straightforward.
 
 > Do you plan to merge your changes back into Geth?
 
-We're definitely open to the idea, 
+We're definitely open to the idea. The changes we've made are bigger than a
+typical Geth pull request, so we'd need to work closely with the Geth team to
+work out a plan.
