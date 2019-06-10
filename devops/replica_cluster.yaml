@@ -98,6 +98,10 @@ Parameters:
     Default: ethercattle-binaries
     Type: String
     Description: The bucket containing EtherCattle Geth Binaries
+  ECGethVersion:
+    Default: v1.8.27.0
+    Type: String
+    Description: The Ether Cattle Geth Version to deploys
   InfrastructureStack:
     Type: String
     Description: The infrastructure stack this cluster connects to
@@ -167,6 +171,7 @@ Metadata:
           - KafkaTopic
           - NetworkId
           - S3GethBucketName
+          - ECGethVersion
           - SnapshotId
       - Label:
           default: Master
@@ -191,6 +196,8 @@ Metadata:
         default: Disk Type
       S3GethBucketName:
         default: S3 Geth Bucket
+      ECGethVersion:
+        default: Ether Cattle Geth Version Number
       InfrastructureStack:
         default: Infrastructure CloudFormation Stack
       KeyName:
@@ -429,7 +436,7 @@ Resources:
                 fi
                 GETH_BIN="geth-linux-$ARCH"
                 LOGS_BIN="journald-cloudwatch-logs-$ARCH"
-                aws s3 cp s3://${S3GethBucketName}/$GETH_BIN /usr/bin/geth
+                aws s3 cp s3://${S3GethBucketName}/${ECGethVersion}/$GETH_BIN /usr/bin/geth
                 aws s3 cp s3://${S3GethBucketName}/$LOGS_BIN /usr/local/bin/journald-cloudwatch-logs
                 aws s3 cp s3://${S3GethBucketName}/peerManager.py /usr/local/bin/peerManager.py
                 chmod +x /usr/bin/geth
@@ -907,7 +914,7 @@ Resources:
                 fi
                 GETH_BIN="geth-linux-$ARCH"
                 LOGS_BIN="journald-cloudwatch-logs-$ARCH"
-                aws s3 cp s3://${S3GethBucketName}/$GETH_BIN /usr/bin/geth
+                aws s3 cp s3://${S3GethBucketName}/${ECGethVersion}/$GETH_BIN /usr/bin/geth
                 aws s3 cp s3://${S3GethBucketName}/$LOGS_BIN /usr/local/bin/journald-cloudwatch-logs
                 chmod +x /usr/bin/geth
                 chmod +x /usr/local/bin/journald-cloudwatch-logs
@@ -1064,7 +1071,7 @@ Resources:
                   ARCH="arm64"
                 fi
                 GETH_BIN="geth-linux-$ARCH"
-                aws s3 cp s3://${S3GethBucketName}/$GETH_BIN /usr/bin/geth
+                aws s3 cp s3://${S3GethBucketName}/${ECGethVersion}/$GETH_BIN /usr/bin/geth
                 chmod +x /usr/bin/geth
                 mkdir -p /var/lib/ethereum
                 mount /dev/nvme1n1 /var/lib/ethereum

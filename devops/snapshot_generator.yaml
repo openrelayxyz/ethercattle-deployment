@@ -108,6 +108,10 @@ Parameters:
     Default: ethercattle-binaries
     Type: String
     Description: The bucket containing EtherCattle Geth Binaries
+  ECGethVersion:
+    Default: v1.8.27.0
+    Type: String
+    Description: The Ether Cattle Geth Version to deploys
   NotificationEmail:
     Type: String
     Description: An optional e-mail address to receive notifications when the snapshot completes
@@ -332,7 +336,7 @@ Resources:
                   ARCH="arm64"
                 fi
                 GETH_BIN="geth-linux-$ARCH"
-                aws s3 cp s3://${S3GethBucketName}/$GETH_BIN /usr/bin/geth
+                aws s3 cp s3://${S3GethBucketName}/${ECGethVersion}/$GETH_BIN /usr/bin/geth
                 chmod +x /usr/bin/geth
                 mkdir -p /var/lib/ethereum
                 if [ "${SnapshotId}" == "" ]
