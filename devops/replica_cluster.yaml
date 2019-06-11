@@ -1081,6 +1081,8 @@ Resources:
 
                 yum install -y jq
 
+                export AWS_DEFAULT_REGION=${AWS::Region}
+
                 sudo -u geth /usr/bin/geth replica ${ReplicaExtraFlags} --kafka.broker=${KafkaHostname} --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown
                 if ! sudo -u geth /usr/bin/geth verifystatetrie --datadir=/var/lib/ethereum ${SnapshotValidationThreshold}
                 then
@@ -1092,10 +1094,8 @@ Resources:
                   then
                     aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - Bad State Trie" --message="State trie verification failed while taking snapshot for cluster '${KafkaTopic}'. No snapshot will be taken. This is probably unrecoverable, and you will need to deploy a new cluster from your last good snapshot (probably '${SnapshotId}')"
                   fi
-                  exit 1
+                  exit poweroff
                 fi
-
-                export AWS_DEFAULT_REGION=${AWS::Region}
                 VOLUME_ID=$(aws ec2 describe-volumes --filters Name=attachment.instance-id,Values="$(curl http://169.254.169.254/latest/meta-data/instance-id)" | jq '.Volumes[] | select(. | .Size > 50) | .VolumeId' -cr)
 
                 SNAPSHOT_ID=`aws ec2 create-snapshot --volume-id $VOLUME_ID --tag-specification="ResourceType=snapshot,Tags=[{Key=cluster,Value=${KafkaTopic}},{Key=Name,Value=${KafkaTopic}-chaindata-$(date -Isecond -u)}]" | jq '.SnapshotId' -cr`
