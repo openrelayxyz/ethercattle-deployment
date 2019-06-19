@@ -186,6 +186,10 @@ Metadata:
         default: Unused IP Octet
       SubnetCOctet:
         default: Unused IP Octet
+      NotificationEmail:
+        default: Notification Email Address
+      AlarmSNSTopic:
+        default: SNS Topic for Alarms
 
 Mappings:
   RegionMap:
