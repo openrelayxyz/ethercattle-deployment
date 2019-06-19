@@ -1,0 +1,386 @@
+Description: Ether Cattle infrastructure (Internal Load Balancers, Kafka external)
+
+Parameters:
+  KafkaBrokerEndpoint:
+    Description: MSK Endpoint for Kafka
+    Type: String
+  ClusterId:
+    Type: String
+    Description: An identifier for this ethercattle cluster.
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: The VPC to deploy this stack into
+  VpcBaseIp:
+    Type: String
+    Description: First two octets of the VPC's ipv4 CIDR (eg. "10.129")
+  InternetGatewayId:
+    Type: String
+    Description: The resource ID of the Internet gateway for the specified VPC
+  SubnetAOctet:
+    Type: Number
+    MaxValue: 255
+    MinValue: 0
+    Description: An unused IP block on this VPC
+    Default: 160
+  SubnetBOctet:
+    Type: Number
+    MaxValue: 255
+    MinValue: 0
+    Description: An unused IP block on this VPC
+    Default: 161
+  SubnetCOctet:
+    Type: Number
+    MaxValue: 255
+    MinValue: 0
+    Description: An unused IP block on this VPC
+    Default: 162
+  PrivateAOctet:
+    Type: Number
+    MaxValue: 255
+    MinValue: 0
+    Description: An unused IP block on this VPC
+    Default: 163
+  PrivateBOctet:
+    Type: Number
+    MaxValue: 255
+    MinValue: 0
+    Description: An unused IP block on this VPC
+    Default: 164
+  PrivateCOctet:
+    Type: Number
+    MaxValue: 255
+    MinValue: 0
+    Description: An unused IP block on this VPC
+    Default: 165
+  NotificationEmail:
+    Type: String
+    Description: An optional e-mail address to receive notifications from alarms
+  AlarmSNSTopic:
+    Type: String
+    Description: An optional SNS topic to receive notifications from alarms
+
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: Cluster
+        Parameters:
+          - ClusterId
+      - Label:
+          default: Kafka
+        Parameters:
+          - KafkaBrokerEndpoint
+      - Label:
+          default: Network
+        Parameters:
+          - VpcId
+          - InternetGatewayId
+          - VpcBaseIp
+          - SubnetAOctet
+          - SubnetBOctet
+          - SubnetCOctet
+          - PrivateAOctet
+          - PrivateBOctet
+          - PrivateCOctet
+      - Label:
+          default: Notifications
+        Parameters:
+          - NotificationEmail
+          - AlarmSNSTopic
+    ParameterLabels:
+      KafkaBrokerEndpoint:
+        default: Kafka Broker Endpoint
+      ClusterId:
+        default: Cluster ID
+      ClusterAmi:
+        default: ECS-optmized AMI
+      VpcId:
+        default: VPC ID
+      VpcBaseIp:
+        default: VPC Base IP
+      InternetGatewayId:
+        default: Internet Gateway
+      SubnetAOctet:
+        default: Unused IP Octet
+      SubnetBOctet:
+        default: Unused IP Octet
+      SubnetCOctet:
+        default: Unused IP Octet
+      PrivateAOctet:
+        default: Unused IP Octet
+      PrivateBOctet:
+        default: Unused IP Octet
+      PrivateCOctet:
+        default: Unused IP Octet
+      NotificationEmail:
+        default: Notification Email Address
+      AlarmSNSTopic:
+        default: SNS Topic for Alarms
+
+Mappings:
+  RegionMap:
+    us-east-2:
+      ECSAMI: ami-0f7f8edb4fe82cf70
+    us-east-1:
+      ECSAMI: ami-0be9e1908fe51a590
+    us-west-1:
+      ECSAMI: ami-0860832102c806acb
+    us-west-2:
+      ECSAMI: ami-01a82c3fce2c3ba58
+    ap-east-1:
+      ECSAMI: ami-06f9b7c717914a382
+    ap-northeast-1:
+      ECSAMI: ami-047281402e27cf0c5
+    ap-northeast-2:
+      ECSAMI: ami-07ef5505ecca20315
+    ap-south-1:
+      ECSAMI: ami-0cf953afde70921a2
+    ap-southeast-1:
+      ECSAMI: ami-04e47a1e7ce1d448a
+    ap-southeast-2:
+      ECSAMI: ami-0f0ba4af21d1e1766
+    ca-central-1:
+      ECSAMI: ami-0e73429acd3865bd2
+    cn-north-1:
+      ECSAMI: ami-0da0590b87d9022f2
+    cn-northwest-1:
+      ECSAMI: ami-0262c8e755ee0b0cf
+    eu-central-1:
+      ECSAMI: ami-02c40c6d994943b85
+    eu-north-1:
+      ECSAMI: ami-0719a9312994ac2cb
+    eu-west-1:
+      ECSAMI: ami-0f85d8192f90863dc
+    eu-west-2:
+      ECSAMI: ami-0bf096cb3ddbdffe0
+    eu-west-3:
+      ECSAMI: ami-0a6720df6a8239525
+    sa-east-1:
+      ECSAMI: ami-0656fd0f926c55fc6
+    us-gov-east-1:
+      ECSAMI: ami-0c6b0b15e70eb6f3e
+    us-gov-west-1:
+      ECSAMI: ami-22d3a443
+
+
+Conditions:
+  IsProd: !Equals [!Ref ClusterId, "prod"]
+  HasNotificationEmail: !Not [!Equals [ !Ref NotificationEmail, "" ]]
+  HasSNSTopic: !Not [!Equals [ !Ref AlarmSNSTopic, "" ]]
+  HasKafkaBrokerEndpoint: !Not [!Equals [ !Ref KafkaBrokerEndpoint, "" ]]
+
+Resources:
+  # TODO: Sooner or later we should probably put some of this on private subnets
+  PublicA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VpcId
+      CidrBlock: !Join ["", [!Ref VpcBaseIp, ".", !Ref SubnetAOctet, ".0/24"]]
+      AvailabilityZone: !Join ["", [!Ref 'AWS::Region', "a"]]
+      MapPublicIpOnLaunch: true
+  PublicB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VpcId
+      CidrBlock: !Join ["", [!Ref VpcBaseIp, ".", !Ref SubnetBOctet, ".0/24"]]
+      AvailabilityZone: !Join ["", [!Ref 'AWS::Region', "b"]]
+      MapPublicIpOnLaunch: true
+  PublicC:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VpcId
+      CidrBlock: !Join ["", [!Ref VpcBaseIp, ".", !Ref SubnetCOctet, ".0/24"]]
+      AvailabilityZone: !Join ["", [!Ref 'AWS::Region', "c"]]
+      MapPublicIpOnLaunch: true
+  PrivateA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VpcId
+      CidrBlock: !Join ["", [!Ref VpcBaseIp, ".", !Ref PrivateAOctet, ".0/24"]]
+      AvailabilityZone: !Join ["", [!Ref 'AWS::Region', "a"]]
+      MapPublicIpOnLaunch: false
+  PrivateB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VpcId
+      CidrBlock: !Join ["", [!Ref VpcBaseIp, ".", !Ref PrivateBOctet, ".0/24"]]
+      AvailabilityZone: !Join ["", [!Ref 'AWS::Region', "b"]]
+      MapPublicIpOnLaunch: false
+  PrivateC:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VpcId
+      CidrBlock: !Join ["", [!Ref VpcBaseIp, ".", !Ref PrivateCOctet, ".0/24"]]
+      AvailabilityZone: !Join ["", [!Ref 'AWS::Region', "c"]]
+      MapPublicIpOnLaunch: false
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VpcId
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VpcId
+  PublicInternetGatewayRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: '0.0.0.0/0'
+      GatewayId: !Ref InternetGatewayId
+  PublicARouteTableAssociation:
+    Type: "AWS::EC2::SubnetRouteTableAssociation"
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicA
+  PublicBRouteTableAssociation:
+    Type: "AWS::EC2::SubnetRouteTableAssociation"
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicB
+  PublicCRouteTableAssociation:
+      Type: "AWS::EC2::SubnetRouteTableAssociation"
+      Properties:
+        RouteTableId: !Ref PublicRouteTable
+        SubnetId: !Ref PublicC
+  PrivateARouteTableAssociation:
+    Type: "AWS::EC2::SubnetRouteTableAssociation"
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      SubnetId: !Ref PrivateA
+  PrivateBRouteTableAssociation:
+    Type: "AWS::EC2::SubnetRouteTableAssociation"
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      SubnetId: !Ref PrivateB
+  PrivateCRouteTableAssociation:
+    Type: "AWS::EC2::SubnetRouteTableAssociation"
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      SubnetId: !Ref PrivateC
+
+
+  AlbSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow HTTPS Access
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: '80'
+        ToPort: '80'
+        CidrIp: "0.0.0.0/0"
+
+  RPCALB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Scheme: internal
+      Subnets:
+      - !Ref PublicA
+      - !Ref PublicB
+      - !Ref PublicC
+      LoadBalancerAttributes:
+      - Key: idle_timeout.timeout_seconds
+        Value: '10'
+      SecurityGroups:
+      - !Ref AlbSecurityGroup
+      Tags:
+      - Key: name
+        Value: !Sub "${AWS::StackName}-RPC-Alb"
+      # IpAddressType: dualstack
+  RPCALBListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+      - Type: "forward"
+        TargetGroupArn: !Ref RPCALBGroup
+      LoadBalancerArn: !Ref RPCALB
+      Port: '80'
+      Protocol: HTTP
+  RPCALBGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckIntervalSeconds: 30
+      UnhealthyThresholdCount: 4
+      HealthyThresholdCount: 4
+      Port: 8545
+      Protocol: HTTP
+      VpcId: !Ref VpcId
+
+  AggregatedNotifications:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: Aggregated Notifications
+  AggregatedNotificationsSubscription:
+    Type: AWS::SNS::Subscription
+    Condition: HasNotificationEmail
+    Properties:
+      Endpoint: !Ref NotificationEmail
+      Protocol: email
+      TopicArn: !Ref AggregatedNotifications
+
+Outputs:
+  ClusterId:
+    Description: The cluster ID
+    Value: !Ref ClusterId
+    Export:
+      Name: !Sub "${AWS::StackName}-ClusterId"
+  RPCALBGroup:
+    Description: The ARN of the alb target group for the RPC load balancer
+    Value: !Ref RPCALBGroup
+    Export:
+      Name: !Sub "${AWS::StackName}-RPCALBGroup"
+  RPCALBGroupName:
+    Description: The full name of the alb target group for the RPC load balancer
+    Value: !Sub ${RPCALBGroup.TargetGroupFullName}
+    Export:
+      Name: !Sub "${AWS::StackName}-RPCALBGroupName"
+  RPCALBName:
+    Description: The full name of the RPC load balancer
+    Value: !Sub ${RPCALB.LoadBalancerFullName}
+    Export:
+      Name: !Sub "${AWS::StackName}-RPCALBName"
+  VpcId:
+    Description: The VPC the stack is deployed to
+    Value: !Ref VpcId
+    Export:
+      Name: !Sub "${AWS::StackName}-VpcId"
+  VpcBaseIp:
+    Description: The VpcBaseIp the stack is deployed to
+    Value: !Ref VpcBaseIp
+    Export:
+      Name: !Sub "${AWS::StackName}-VpcBaseIp"
+  Kafka2HostnameA:
+    Description: The Kafka hostname for AZ 'a'
+    Value: !If [ HasKafkaBrokerEndpoint, !Select [0, !Split [',', !Ref KafkaBrokerEndpoint]], "placeholder" ]
+    Export:
+      Name: !Sub "${AWS::StackName}-Kafka2HostnameA"
+  Kafka2HostnameB:
+    Description: The Kafka hostname for AZ 'b'
+    Value: !If [ HasKafkaBrokerEndpoint, !Select [1, !Split [',', !Ref KafkaBrokerEndpoint]], "placeholder" ]
+    Export:
+      Name: !Sub "${AWS::StackName}-Kafka2HostnameB"
+  Kafka2HostnameC:
+    Description: The Kafka hostname for AZ 'c'
+    Value: !If [ HasKafkaBrokerEndpoint, !Select [2, !Split [',', !Ref KafkaBrokerEndpoint]], "placeholder" ]
+    Export:
+      Name: !Sub "${AWS::StackName}-Kafka2HostnameC"
+  PublicA:
+    Description: The Subnet in availability zone 'a'
+    Value: !Ref PublicA
+    Export:
+      Name: !Sub "${AWS::StackName}-PublicA"
+  PublicB:
+    Description: The Subnet in availability zone 'b'
+    Value: !Ref PublicB
+    Export:
+      Name: !Sub "${AWS::StackName}-PublicB"
+  PublicC:
+    Description: The Subnet in availability zone 'c'
+    Value: !Ref PublicC
+    Export:
+      Name: !Sub "${AWS::StackName}-PublicC"
+      Description: The DNS address of the Replica ALB
+      Value: !Sub ${RPCALB.DNSName}
+      Export:
+        Name: !Sub "${AWS::StackName}-RPCALBGroup"
