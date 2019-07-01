@@ -120,7 +120,7 @@ Parameters:
     Type: String
     Description: The bucket containing EtherCattle Geth Binaries
   ECGethVersion:
-    Default: v1.8.27-create-topics
+    Default: v1.8.27-create-topics-3
     Type: String
     Description: The Ether Cattle Geth Version to deploys
   NotificationEmail:
