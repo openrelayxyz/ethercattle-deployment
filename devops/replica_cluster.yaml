@@ -970,7 +970,8 @@ Resources:
 
                 systemctl daemon-reload
                 systemctl enable geth.service
-                sleep 2 #TODO- workaround for a deadlock on topic creation
+                sleep 5 #TODO- workaround for a deadlock on topic creation
+                rm /var/lib/ethereum/geth.ipc || true
                 systemctl start geth.service
                 systemctl enable amazon-cloudwatch-agent.service
                 systemctl start amazon-cloudwatch-agent.service
