@@ -259,7 +259,6 @@ Resources:
       RouteTableId: !Ref PrivateRouteTable
       SubnetId: !Ref PrivateC
 
-
   AlbSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
