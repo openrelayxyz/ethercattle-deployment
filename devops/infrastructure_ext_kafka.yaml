@@ -379,7 +379,18 @@ Outputs:
     Value: !Ref PublicC
     Export:
       Name: !Sub "${AWS::StackName}-PublicC"
-      Description: The DNS address of the Replica ALB
-      Value: !Sub ${RPCALB.DNSName}
-      Export:
-        Name: !Sub "${AWS::StackName}-RPCALBGroup"
+  PrivateA:
+    Description: The Subnet in availability zone 'a'
+    Value: !Ref PrivateA
+    Export:
+      Name: !Sub "${AWS::StackName}-PrivateA"
+  PrivateB:
+    Description: The Subnet in availability zone 'b'
+    Value: !Ref PrivateB
+    Export:
+      Name: !Sub "${AWS::StackName}-PrivateB"
+  PrivateC:
+    Description: The Subnet in availability zone 'c'
+    Value: !Ref PrivateC
+    Export:
+      Name: !Sub "${AWS::StackName}-PrivateC"

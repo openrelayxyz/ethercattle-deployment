@@ -1186,7 +1186,8 @@ Outputs:
     Value: !Ref PublicC
     Export:
       Name: !Sub "${AWS::StackName}-PublicC"
-      Description: The DNS address of the Replica ALB
-      Value: !Sub ${RPCALB.DNSName}
-      Export:
-        Name: !Sub "${AWS::StackName}-RPCALBGroup"
+  ServiceNamespace:
+    Description: The service discovery namespace for this cluster
+    Value: !Ref ServiceNamespace
+    Export:
+      Name: !Sub "${AWS::StackName}-ServiceNamespace"
