@@ -1064,7 +1064,7 @@ Resources:
     Type: AWS::EC2::LaunchTemplate
     Properties:
       LaunchTemplateData:
-        ImageId: !If [HasSnapshotImageAMI, !Ref ReplicaImageAMI, !FindInMap [RegionMap, !Ref "AWS::Region", AL2AMI]]
+        ImageId: !If [HasSnapshotImageAMI, !Ref SnapshotImageAMI, !FindInMap [RegionMap, !Ref "AWS::Region", AL2AMI]]
         InstanceType: t3.micro
         TagSpecifications:
           - ResourceType: instance
