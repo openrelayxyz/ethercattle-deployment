@@ -962,11 +962,33 @@ Resources:
 
                 printf "KafkaHostname=${KafkaHostname}\nKafkaTopic=${KafkaTopic}\nNetworkId=${NetworkId}\ninfraName=${InfrastructureStack}\n" > /etc/systemd/system/ethcattle-vars
 
-                printf "[Unit]\nDescription=Ethereum go client replica\nAfter=syslog.target network.target\n[Service]\nUser=geth\nGroup=geth\nEnvironmentHOME=/var/lib/ethereum\nEnvironmentFile=/etc/systemd/system/ethcattle-vars\nType=simple\nExecStart=/usr/bin/bash -c '/usr/bin/geth replica ${ReplicaExtraFlags} --kafka.broker=\$KafkaHostname --datadir=/var/lib/ethereum --kafka.topic=\$KafkaTopic --kafka.tx.topic=\$NetworkId-tx --replica.startup.age=45 --replica.offset.age 62 --replica.block.age 240 ${ReplicaHTTPFlag}'\nKillMode=process\nKillSignal=SIGINT\nTimeoutStopSec=90\nRestart=on-failure\nRestartSec=10s\nLimitNOFILE=204800\n[Install]\nWantedBy=multi-user.target\n" > /etc/systemd/system/geth.service
+                printf "[Unit]\nDescription=Ethereum go client replica\nAfter=syslog.target network.target\n[Service]\nUser=geth\nGroup=geth\nEnvironmentHOME=/var/lib/ethereum\nEnvironmentFile=/etc/systemd/system/ethcattle-vars\nType=simple\nLimitNOFILE=655360\nExecStart=/usr/bin/bash -c '/usr/bin/geth replica ${ReplicaExtraFlags} --kafka.broker=\$KafkaHostname --datadir=/var/lib/ethereum --kafka.topic=\$KafkaTopic --kafka.tx.topic=\$NetworkId-tx --replica.startup.age=45 --replica.offset.age 62 --replica.block.age 240 ${ReplicaHTTPFlag}'\nKillMode=process\nKillSignal=SIGINT\nTimeoutStopSec=90\nRestart=on-failure\nRestartSec=10s\nLimitNOFILE=204800\n[Install]\nWantedBy=multi-user.target\n" > /etc/systemd/system/geth.service
 
                 printf "[Unit]\nDescription=journald-cloudwatch-logs\nWants=basic.target\nAfter=basic.target network.target\n\n[Service]\nExecStart=/usr/local/bin/journald-cloudwatch-logs /usr/local/etc/journald-cloudwatch-logs.conf\nKillMode=process\nRestart=on-failure\nRestartSec=42s" > /etc/systemd/system/journald-cloudwatch-logs.service
 
                 printf "log_group = \"${ReplicaLG}\"\nstate_file = \"/var/lib/journald-cloudwatch-logs/state\"" > /usr/local/etc/journald-cloudwatch-logs.conf
+
+                echo "geth        hard nofile 500000" >> /etc/security/limits.conf
+                echo "geth        soft nofile 500000" >> /etc/security/limits.conf
+                sysctl -w fs.file-max=12000500
+                sysctl -w fs.nr_open=20000500
+                # Set the maximum number of open file descriptors
+                ulimit -n 20000000
+
+                # Set the memory size for TCP with minimum, default and maximum thresholds
+                sysctl -w net.ipv4.tcp_mem='10000000 10000000 10000000'
+
+                # Set the receive buffer for each TCP connection with minumum, default and maximum thresholds
+                sysctl -w net.ipv4.tcp_rmem='1024 4096 16384'
+
+                # Set the TCP send buffer space with minumum, default and maximum thresholds
+                sysctl -w net.ipv4.tcp_wmem='1024 4096 16384'
+
+                # The maximum socket receive buffer sizemem_max=16384
+                sysctl -w net.core.rmem_max=16384
+
+                # The maximum socket send buffer size
+                sysctl -w net.core.wmem_max=16384
 
                 systemctl daemon-reload
                 systemctl enable geth.service
