@@ -340,6 +340,16 @@ Outputs:
     Value: !Sub ${RPCALB.LoadBalancerFullName}
     Export:
       Name: !Sub "${AWS::StackName}-RPCALBName"
+  RPCALBDNS:
+    Description: The DNS of the RPC load balancer
+    Value: !Sub ${RPCALB.DNSName}
+    Export:
+      Name: !Sub "${AWS::StackName}-RPCALBDNS"
+  RPCALBListener:
+    Description: The ARN of the RPC load balancer's listener
+    Value: !Ref RPCALBListener
+    Export:
+      Name: !Sub "${AWS::StackName}-RPCALBListener"
   VpcId:
     Description: The VPC the stack is deployed to
     Value: !Ref VpcId

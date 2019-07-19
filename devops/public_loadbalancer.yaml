@@ -1,0 +1,206 @@
+Description: A middleware stack that replaces an Ether Cattle Infrastructure Stack's load balancer with a public one.
+
+Parameters:
+  InfrastructureStack:
+    Type: String
+    Description: The infrastructure stack this target group extends
+  CertificateArn:
+    Type: String
+    Description: The certificate ARN for the public load balancer
+  HostedZone:
+    Type: String
+    Description: Route53 hosted zone for DNS
+  ServiceName:
+    Type: String
+    Description: The name for this service (DNS will be ServiceName.HostedZone)
+
+
+Resources:
+  AlbSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow HTTP(S) Access
+      VpcId:
+        "Fn::ImportValue":
+            !Sub "${InfrastructureStack}-VpcId"
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: '80'
+        ToPort: '80'
+        CidrIp: "0.0.0.0/0"
+      - IpProtocol: tcp
+        FromPort: '443'
+        ToPort: '443'
+        CidrIp: "0.0.0.0/0"
+  RPCALB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Scheme: internet-facing
+      Subnets:
+      - "Fn::ImportValue":
+          !Sub "${InfrastructureStack}-PublicA"
+      - "Fn::ImportValue":
+          !Sub "${InfrastructureStack}-PublicB"
+      - "Fn::ImportValue":
+          !Sub "${InfrastructureStack}-PublicC"
+      LoadBalancerAttributes:
+      - Key: idle_timeout.timeout_seconds
+        Value: '10'
+      SecurityGroups:
+      - !Ref AlbSecurityGroup
+      Tags:
+      - Key: name
+        Value: !Sub "${AWS::StackName}-RPC-Alb"
+      # IpAddressType: dualstack
+  RPCALBListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+      - Type: "forward"
+        TargetGroupArn: !Ref RPCALBGroup
+      LoadBalancerArn: !Ref RPCALB
+      Certificates:
+        - CertificateArn: !Ref CertificateArn
+      Port: '443'
+      Protocol: HTTPS
+  RPCALBHTTPListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+      - Type: "redirect"
+        RedirectConfig:
+          Host: "#{host}"
+          Path: "/#{path}"
+          Port: 443
+          Protocol: "HTTPS"
+          Query: "#{query}"
+          StatusCode: HTTP_301
+      LoadBalancerArn: !Ref RPCALB
+      Port: '80'
+      Protocol: HTTP
+  RPCALBGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckIntervalSeconds: 30
+      UnhealthyThresholdCount: 2
+      HealthyThresholdCount: 5
+      Port: 8545
+      Protocol: HTTP
+      VpcId:
+        "Fn::ImportValue":
+            !Sub "${InfrastructureStack}-VpcId"
+  RPCALBDNS:
+    Type: "AWS::Route53::RecordSet"
+    Properties:
+      AliasTarget:
+        DNSName: !GetAtt RPCALB.DNSName
+        EvaluateTargetHealth: False
+        HostedZoneId: !GetAtt RPCALB.CanonicalHostedZoneID
+      HostedZoneName: !Sub "${HostedZone}."
+      Name: !Sub "${ServiceName}.${HostedZone}"
+      Type: A
+
+
+Outputs:
+  ClusterId:
+    Description: The cluster ID
+    Value:
+      "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
+    Export:
+      Name: !Sub "${AWS::StackName}-ClusterId"
+  RPCALBGroup:
+    Description: The ARN of the alb target group for the RPC load balancer
+    Value: !Ref RPCALBGroup
+    Export:
+      Name: !Sub "${AWS::StackName}-RPCALBGroup"
+  RPCALBGroupName:
+    Description: The full name of the alb target group for the RPC load balancer
+    Value: !Sub ${RPCALBGroup.TargetGroupFullName}
+    Export:
+      Name: !Sub "${AWS::StackName}-RPCALBGroupName"
+  RPCALBName:
+    Description: The full name of the RPC load balancer
+    Value: !Sub ${RPCALB.LoadBalancerFullName}
+    Export:
+      Name: !Sub "${AWS::StackName}-RPCALBName"
+  RPCALBDNS:
+    Description: The DNS of the RPC load balancer
+    Value: !Sub ${RPCALB.DNSName}
+    Export:
+      Name: !Sub "${AWS::StackName}-RPCALBDNS"
+  RPCALBListener:
+    Description: The ARN of the RPC load balancer's listener
+    Value: !Ref RPCALBListener
+    Export:
+      Name: !Sub "${AWS::StackName}-RPCALBListener"
+  RPCALBCanonicalHostedZoneId:
+    Description: The ALB's Canonical hosted zone
+    Value: !Sub ${RPCALB.CanonicalHostedZoneID}
+    Export:
+      Name: !Sub "${AWS::StackName}-RPCALBCanonicalHostedZoneId"
+  VpcId:
+    Description: The VPC the stack is deployed to
+    Value:
+      "Fn::ImportValue": !Sub "${InfrastructureStack}-VpcId"
+    Export:
+      Name: !Sub "${AWS::StackName}-VpcId"
+  VpcBaseIp:
+    Description: The VpcBaseIp the stack is deployed to
+    Value:
+      "Fn::ImportValue": !Sub "${InfrastructureStack}-VpcBaseIp"
+    Export:
+      Name: !Sub "${AWS::StackName}-VpcBaseIp"
+  Kafka2HostnameA:
+    Description: The Kafka hostname for AZ 'a'
+    Value:
+      "Fn::ImportValue": !Sub "${InfrastructureStack}-Kafka2HostnameA"
+    Export:
+      Name: !Sub "${AWS::StackName}-Kafka2HostnameA"
+  Kafka2HostnameB:
+    Description: The Kafka hostname for AZ 'b'
+    Value:
+      "Fn::ImportValue": !Sub "${InfrastructureStack}-Kafka2HostnameB"
+    Export:
+      Name: !Sub "${AWS::StackName}-Kafka2HostnameB"
+  Kafka2HostnameC:
+    Description: The Kafka hostname for AZ 'c'
+    Value:
+      "Fn::ImportValue": !Sub "${InfrastructureStack}-Kafka2HostnameC"
+    Export:
+      Name: !Sub "${AWS::StackName}-Kafka2HostnameC"
+  PublicA:
+    Description: The Subnet in availability zone 'a'
+    Value:
+      "Fn::ImportValue": !Sub "${InfrastructureStack}-PublicA"
+    Export:
+      Name: !Sub "${AWS::StackName}-PublicA"
+  PublicB:
+    Description: The Subnet in availability zone 'b'
+    Value:
+      "Fn::ImportValue": !Sub "${InfrastructureStack}-PublicB"
+    Export:
+      Name: !Sub "${AWS::StackName}-PublicB"
+  PublicC:
+    Description: The Subnet in availability zone 'c'
+    Value:
+      "Fn::ImportValue": !Sub "${InfrastructureStack}-PublicC"
+    Export:
+      Name: !Sub "${AWS::StackName}-PublicC"
+  PrivateA:
+    Description: The Subnet in availability zone 'a'
+    Value:
+      "Fn::ImportValue": !Sub "${InfrastructureStack}-PrivateA"
+    Export:
+      Name: !Sub "${AWS::StackName}-PrivateA"
+  PrivateB:
+    Description: The Subnet in availability zone 'b'
+    Value:
+      "Fn::ImportValue": !Sub "${InfrastructureStack}-PrivateB"
+    Export:
+      Name: !Sub "${AWS::StackName}-PrivateB"
+  PrivateC:
+    Description: The Subnet in availability zone 'c'
+    Value:
+      "Fn::ImportValue": !Sub "${InfrastructureStack}-PrivateC"
+    Export:
+      Name: !Sub "${AWS::StackName}-PrivateC"
