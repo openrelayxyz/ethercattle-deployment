@@ -114,7 +114,7 @@ Parameters:
     Type: String
     Description: The bucket containing EtherCattle Geth Binaries
   ECGethVersion:
-    Default: v1.8.27-create-topics-3
+    Default: v1.9.0.0
     Type: String
     Description: The Ether Cattle Geth Version to deploys
   InfrastructureStack:
@@ -1004,7 +1004,7 @@ Resources:
                 ClusterId:
                   "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
                 ReplicaHTTPFlag:
-                    !If [HasReplicaHTTP, "--rpc --rpcaddr 0.0.0.0", ""]
+                    !If [HasReplicaHTTP, "--rpc --rpcaddr 0.0.0.0 --rpcport 8545", ""]
 
   ReplicaAutoScalingGroup:
     Type: AWS::AutoScaling::AutoScalingGroup
