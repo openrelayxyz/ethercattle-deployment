@@ -367,7 +367,6 @@ Resources:
                 chown -R geth /var/lib/ethereum
 
                 yum install -y jq nmap-ncat || true
-                printf "KafkaHostname=${KafkaHostname}\nKafkaTopic=${KafkaTopic}\nNetworkId=${NetworkId}\ninfraName=${InfrastructureStack}\n" > /etc/systemd/system/ethcattle-vars
 
                 SUCCESS=0
 
