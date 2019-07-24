@@ -89,10 +89,6 @@ Parameters:
     Default: ""
     Description: Custom AMI to use for the replica servers, empty string for default AWS AMI image
     Type: String
-  SnapshotImageAMI:
-    Default: ""
-    Description: Custom AMI to use for the snapshot servers, empty string for default AWS AMI image
-    Type: String
   ReplicaDiskType:
     AllowedValues:
     - standard
@@ -198,7 +194,6 @@ Metadata:
           default: Replica
         Parameters:
           - ReplicaImageAMI
-          - SnapshotImageAMI
           - ReplicaServeHTTP
           - ReplicaExtraFlags
           - ReplicaDiskType
@@ -212,8 +207,6 @@ Metadata:
         default: Disk Size
       ReplicaImageAMI:
         default: Replica AMI Image
-      SnapshotImageAMI:
-        default: Snapshot AMI Image
       ReplicaServeHTTP:
         default: Enable Replica RPC HTTP server
       ReplicaDiskType:
@@ -316,7 +309,6 @@ Conditions:
     - !Ref ReplicaServeHTTP
     - 'true'
   HasReplicaImageAMI: !Not [!Equals [ !Ref ReplicaImageAMI, "" ]]
-  HasSnapshotImageAMI: !Not [!Equals [ !Ref SnapshotImageAMI, "" ]]
 
 Resources:
   MasterLG:
@@ -1086,7 +1078,7 @@ Resources:
     Type: AWS::EC2::LaunchTemplate
     Properties:
       LaunchTemplateData:
-        ImageId: !If [HasSnapshotImageAMI, !Ref SnapshotImageAMI, !FindInMap [RegionMap, !Ref "AWS::Region", AL2AMI]]
+        ImageId: !If [HasReplicaImageAMI, !Ref ReplicaImageAMI, !FindInMap [RegionMap, !Ref "AWS::Region", AL2AMI]]
         InstanceType: t3.micro
         TagSpecifications:
           - ResourceType: instance
@@ -1140,6 +1132,11 @@ Resources:
 
                 export AWS_DEFAULT_REGION=${AWS::Region}
                 printf "KafkaHostname=${KafkaHostname}\nKafkaTopic=${KafkaTopic}\nNetworkId=${NetworkId}\ninfraName=${InfrastructureStack}\n" > /etc/systemd/system/ethcattle-vars
+
+                if [ -f /usr/bin/replca-hook ]
+                then
+                  /usr/bin/replica-snapshot-hook
+                fi
 
                 sudo -u geth /usr/bin/geth replica ${ReplicaExtraFlags} --kafka.broker=${KafkaHostname} --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown
                 if ! sudo -u geth /usr/bin/geth verifystatetrie --datadir=/var/lib/ethereum ${SnapshotValidationThreshold}
