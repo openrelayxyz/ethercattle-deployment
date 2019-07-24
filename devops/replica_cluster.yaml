@@ -132,6 +132,10 @@ Parameters:
   SnapshotId:
     Type: String
     Description: A snapshot of the Ethereum folder with a synced blockchain
+  MasterCount:
+    Type: Number
+    Description: The number of Geth masters to run with the cluster. More masters means higher availability and that replicas are likely to be updated faster, but higher replica startup times and more disk usage.
+    Default: 1
   MasterExtraFlags:
     Type: String
     Description: Extra flags for the Geth master (mainly for running other than mainnet)
@@ -191,6 +195,7 @@ Metadata:
       - Label:
           default: Master
         Parameters:
+          - MasterCount
           - MasterInstanceType
           - MasterExtraFlags
           - DiskSize
@@ -232,6 +237,8 @@ Metadata:
         default: Unique Network ID
       SnapshotId:
         default: Chaindata Snapshot ID
+      MasterCount:
+        default: Master Count
       MasterExtraFlags:
         default: Extra Geth Flags
       ReplicaExtraFlags:
@@ -302,6 +309,7 @@ Conditions:
   HasETG: !Not [!Equals [!Ref ExternalTargetGroup, '']]
   ReplicaHDD: !Or [!Equals [ !Ref ReplicaDiskType, "st1"], !Equals [ !Ref ReplicaDiskType, "sc1"]]
   SmallDisk: !Or [
+      !Equals [ !Ref DiskSize, "75" ],
       !Equals [ !Ref DiskSize, "200" ],
       !Equals [ !Ref DiskSize, "250" ],
       !Equals [ !Ref DiskSize, "300" ],
@@ -309,7 +317,6 @@ Conditions:
       !Equals [ !Ref DiskSize, "400" ],
       !Equals [ !Ref DiskSize, "450" ],
     ]
-  OverrideSize: !And [!Condition SmallDisk, !Condition ReplicaHDD]
   HasNotificationEmail: !Not [!Equals [ !Ref NotificationEmail, "" ]]
   HasSNSTopic: !Not [!Equals [ !Ref AlarmSNSTopic, "" ]]
   HasReplicaHTTP: !Equals
@@ -319,6 +326,60 @@ Conditions:
   HasSnapshotImageAMI: !Not [!Equals [ !Ref SnapshotImageAMI, "" ]]
 
 Resources:
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal: {Service: [lambda.amazonaws.com]}
+          Action: ['sts:AssumeRole']
+      Path: "/"
+      ManagedPolicyArns:
+      - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+  MulMin:
+    Type: AWS::Lambda::Function
+    Properties:
+      Handler: index.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Code:
+        ZipFile: !Sub |
+          var response = require('cfn-response');
+          exports.handler = function(event, context) {
+            var result = parseInt(event.ResourceProperties.Op1) * parseInt(event.ResourceProperties.Op2);
+            if(event.ResourceProperties.Max) {
+              result = Math.min(result, parseInt(event.ResourceProperties.Max));
+            }
+            response.send(event, context, response.SUCCESS, {Value: result});
+          };
+      Runtime: nodejs8.10
+  Max:
+    Type: AWS::Lambda::Function
+    Properties:
+      Handler: index.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Code:
+        ZipFile: !Sub |
+          var response = require('cfn-response');
+          exports.handler = function(event, context) {
+            var result = Math.max(parseInt(event.ResourceProperties.Op1), parseInt(event.ResourceProperties.Op2));
+            response.send(event, context, response.SUCCESS, {Value: result});
+          };
+      Runtime: nodejs8.10
+  HDDSize:
+    Type: Custom::Max
+    Properties:
+      ServiceToken: !GetAtt Max.Arn
+      Op1: !Ref DiskSize
+      Op2: 500
+  VolumeIOPS:
+    Type: Custom::MulMin
+    Properties:
+      ServiceToken: !GetAtt MulMin.Arn
+      Op1: !Ref DiskSize
+      Op2: 50
+      Max: 5000
   MasterLG:
     Type: AWS::Logs::LogGroup
     Properties:
@@ -449,7 +510,7 @@ Resources:
           Ebs:
             VolumeSize: !Ref DiskSize
             VolumeType: io1
-            Iops: 5000
+            Iops: !GetAtt VolumeIOPS.Value
             SnapshotId: !Ref SnapshotId
         UserData:
           "Fn::Base64":
@@ -535,7 +596,7 @@ Resources:
         Version: !Sub ${MasterLaunchTemplate.LatestVersionNumber}
       MinSize: 1
       MaxSize: 7
-      DesiredCapacity: 1
+      DesiredCapacity: !Ref MasterCount
       HealthCheckType: EC2
       MetricsCollection:
       - Granularity: 1Minute
@@ -926,7 +987,7 @@ Resources:
             VolumeType: gp2
         - DeviceName: "/dev/sdf"
           Ebs:
-            VolumeSize: !If [OverrideSize, 500, !Ref DiskSize]
+            VolumeSize: !If [ReplicaHDD, !GetAtt HDDSize.Value, !Ref DiskSize]
             VolumeType: !Ref ReplicaDiskType
             SnapshotId: !Ref SnapshotId
         UserData:
@@ -1113,7 +1174,8 @@ Resources:
         - DeviceName: "/dev/sdf"
           Ebs:
             VolumeSize: !Ref DiskSize
-            VolumeType: gp2
+            VolumeType: io1
+            Iops: !GetAtt VolumeIOPS.Value
             SnapshotId: !Ref SnapshotId
         UserData:
           "Fn::Base64":
