@@ -1140,7 +1140,7 @@ Resources:
     Properties:
       LaunchTemplateData:
         ImageId: !If [HasReplicaImageAMI, !Ref ReplicaImageAMI, !FindInMap [RegionMap, !Ref "AWS::Region", AL2AMI]]
-        InstanceType: t3.micro
+        InstanceType: m5a.large
         TagSpecifications:
           - ResourceType: instance
             Tags:
@@ -1155,8 +1155,8 @@ Resources:
         IamInstanceProfile:
           Name: !Ref SnapshotterNodeInstanceProfile
         KeyName: !If [HasKeyName, !Ref KeyName, !Ref 'AWS::NoValue']
-        CreditSpecification:
-          CpuCredits: standard
+        # CreditSpecification:
+        #   CpuCredits: standard
         InstanceInitiatedShutdownBehavior: terminate
         BlockDeviceMappings:
         - DeviceName: "/dev/xvda"
