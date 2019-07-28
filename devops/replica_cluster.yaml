@@ -95,8 +95,8 @@ Parameters:
     - gp2
     - st1
     - sc1
-    Default: st1
-    Description: Master ephemeral storage volume type
+    Default: gp2
+    Description: Replica storage volume type
     Type: String
   ReplicaServeHTTP:
     Description: Enable replica to serve RPC over HTTP
@@ -110,7 +110,7 @@ Parameters:
     Type: String
     Description: The bucket containing EtherCattle Geth Binaries
   ECGethVersion:
-    Default: v1.9.0-1
+    Default: v1.9.0-1-diagnostic-3
     Type: String
     Description: The Ether Cattle Geth Version to deploys
   InfrastructureStack:
@@ -526,7 +526,7 @@ Resources:
                 chmod +x /usr/local/bin/peerManager.py
                 mkdir -p /var/lib/journald-cloudwatch-logs/
                 mkdir -p /var/lib/ethereum
-                mount /dev/nvme1n1 /var/lib/ethereum
+                mount -o barrier=0,data=writeback /dev/nvme1n1 /var/lib/ethereum
                 resize2fs /dev/nvme1n1
                 useradd -r geth
                 chown -R geth /var/lib/ethereum
@@ -957,7 +957,7 @@ Resources:
     Properties:
       LaunchTemplateData:
         ImageId: !If [HasReplicaImageAMI, !Ref ReplicaImageAMI, !FindInMap [RegionMap, !Ref "AWS::Region", AL2AMI]]
-        InstanceType: c5.large
+        InstanceType: c5d.large
         TagSpecifications:
           - ResourceType: instance
             Tags:
@@ -1002,12 +1002,20 @@ Resources:
                 chmod +x /usr/local/bin/journald-cloudwatch-logs
                 mkdir -p /var/lib/journald-cloudwatch-logs/
                 mkdir -p /var/lib/ethereum
-                mount /dev/nvme1n1 /var/lib/ethereum
+                mount -o barrier=0,data=writeback /dev/nvme1n1 /var/lib/ethereum
+                mkdir -p /var/lib/ethereum/overlay
                 resize2fs /dev/nvme1n1
                 useradd -r geth
                 chown -R geth /var/lib/ethereum
 
-                echo "/dev/nvme1n1  /var/lib/ethereum    ext4   defaults,noatime  1   1" >> /etc/fstab
+                echo "/dev/nvme1n1  /var/lib/ethereum    ext4   barrier=0,data=writeback,noatime  1   1" >> /etc/fstab
+
+                if [ -f /dev/nvme2n1 ]
+                then
+                  mkfs.ext4 /dev/nvme2n1
+                  mount -o barrier=0,data=writeback /dev/nvme2n1 /var/lib/ethereum/overlay
+                  echo "/dev/nvme2n1  /var/lib/ethereum/overlay    ext4   barrier=0,data=writeback,noatime  1   1" >> /etc/fstab
+                fi
 
                 yum install -y https://s3.amazonaws.com/amazoncloudwatch-agent/amazon_linux/$ARCH/latest/amazon-cloudwatch-agent.rpm || true
 
@@ -1042,6 +1050,8 @@ Resources:
 
                 # The maximum socket send buffer size
                 sysctl -w net.core.wmem_max=16384
+
+                sysctl -w vm.swappiness=0
 
                 systemctl daemon-reload
                 systemctl enable geth.service
@@ -1078,16 +1088,16 @@ Resources:
             LaunchTemplateId: !Ref ReplicaLaunchTemplate
             Version: !Sub ${ReplicaLaunchTemplate.LatestVersionNumber}
           Overrides:
-            - InstanceType: m5a.large
+            # - InstanceType: m5a.large
             - InstanceType: m5ad.large
-            - InstanceType: m5.large
+            # - InstanceType: m5.large
             - InstanceType: m5d.large
-            - InstanceType: c5.large
-            - InstanceType: c5n.large
+            # - InstanceType: c5.large
+            # - InstanceType: c5n.large
             - InstanceType: c5d.large
-            - InstanceType: r5.large
+            # - InstanceType: r5.large
             - InstanceType: r5d.large
-            - InstanceType: r5a.large
+            # - InstanceType: r5a.large
             - InstanceType: r5ad.large
       MinSize: 1
       MaxSize: !Ref ReplicaTargetCapacity
@@ -1185,7 +1195,7 @@ Resources:
                 aws s3 cp s3://${S3GethBucketName}/${ECGethVersion}/$GETH_BIN /usr/bin/geth
                 chmod +x /usr/bin/geth
                 mkdir -p /var/lib/ethereum
-                mount /dev/nvme1n1 /var/lib/ethereum
+                mount -o barrier=0,data=writeback /dev/nvme1n1 /var/lib/ethereum
                 resize2fs /dev/nvme1n1
                 useradd -r geth
                 chown -R geth /var/lib/ethereum
@@ -1336,6 +1346,7 @@ Resources:
               - autoscaling:DescribeScalingActivities
               - ec2:DescribeVolumes
               - ec2:CreateSnapshot
+              - ec2:DeleteSnapshot
               - events:DescribeRule
               - ec2:DescribeKeyPairs
             Resource: "*"
