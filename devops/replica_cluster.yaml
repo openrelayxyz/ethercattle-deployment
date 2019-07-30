@@ -1006,16 +1006,16 @@ Resources:
                 mkdir -p /var/lib/ethereum/overlay
                 resize2fs /dev/nvme1n1
                 useradd -r geth
-                chown -R geth /var/lib/ethereum
 
                 echo "/dev/nvme1n1  /var/lib/ethereum    ext4   barrier=0,data=writeback,noatime  1   1" >> /etc/fstab
 
-                if [ -f /dev/nvme2n1 ]
+                if [ -e /dev/nvme2n1 ]
                 then
                   mkfs.ext4 /dev/nvme2n1
                   mount -o barrier=0,data=writeback /dev/nvme2n1 /var/lib/ethereum/overlay
                   echo "/dev/nvme2n1  /var/lib/ethereum/overlay    ext4   barrier=0,data=writeback,noatime  1   1" >> /etc/fstab
                 fi
+                chown -R geth /var/lib/ethereum
 
                 yum install -y https://s3.amazonaws.com/amazoncloudwatch-agent/amazon_linux/$ARCH/latest/amazon-cloudwatch-agent.rpm || true
 
