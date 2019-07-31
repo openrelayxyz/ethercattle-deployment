@@ -85,21 +85,32 @@ Parameters:
     MaxValue: '1024'
     MinValue: '8'
     Type: Number
+  ReplicaImageAMI:
+    Default: ""
+    Description: Custom AMI to use for the replica servers, empty string for default AWS AMI image
+    Type: String
   ReplicaDiskType:
     AllowedValues:
     - standard
     - gp2
     - st1
     - sc1
-    Default: st1
-    Description: Master ephemeral storage volume type
+    Default: gp2
+    Description: Replica storage volume type
     Type: String
+  ReplicaServeHTTP:
+    Description: Enable replica to serve RPC over HTTP
+    Type: String
+    Default: 'true'
+    AllowedValues:
+    - 'true'
+    - 'false'
   S3GethBucketName:
     Default: ethercattle-binaries
     Type: String
     Description: The bucket containing EtherCattle Geth Binaries
   ECGethVersion:
-    Default: v1.8.27.2
+    Default: v1.9.0-2
     Type: String
     Description: The Ether Cattle Geth Version to deploys
   InfrastructureStack:
@@ -117,6 +128,10 @@ Parameters:
   SnapshotId:
     Type: String
     Description: A snapshot of the Ethereum folder with a synced blockchain
+  MasterCount:
+    Type: Number
+    Description: The number of Geth masters to run with the cluster. More masters means higher availability and that replicas are likely to be updated faster, but higher replica startup times and more disk usage.
+    Default: 1
   MasterExtraFlags:
     Type: String
     Description: Extra flags for the Geth master (mainly for running other than mainnet)
@@ -176,12 +191,15 @@ Metadata:
       - Label:
           default: Master
         Parameters:
+          - MasterCount
           - MasterInstanceType
           - MasterExtraFlags
           - DiskSize
       - Label:
           default: Replica
         Parameters:
+          - ReplicaImageAMI
+          - ReplicaServeHTTP
           - ReplicaExtraFlags
           - ReplicaDiskType
           - ReplicaTargetCapacity
@@ -192,6 +210,10 @@ Metadata:
         default: Instance Type
       DiskSize:
         default: Disk Size
+      ReplicaImageAMI:
+        default: Replica AMI Image
+      ReplicaServeHTTP:
+        default: Enable Replica RPC HTTP server
       ReplicaDiskType:
         default: Disk Type
       S3GethBucketName:
@@ -208,6 +230,8 @@ Metadata:
         default: Unique Network ID
       SnapshotId:
         default: Chaindata Snapshot ID
+      MasterCount:
+        default: Master Count
       MasterExtraFlags:
         default: Extra Geth Flags
       ReplicaExtraFlags:
@@ -230,47 +254,47 @@ Metadata:
 Mappings:
   RegionMap:
     us-west-1:
-      AL2AMI: ami-0019ef04ac50be30f
+      AL2AMI: ami-056ee704806822732
     eu-central-1:
-      AL2AMI: ami-09def150731bdbcc2
+      AL2AMI: ami-0cc293023f983ed53
     cn-north-1:
       AL2AMI: ami-0cad3dea07a7c36f9
     us-east-1:
-      AL2AMI: ami-0de53d8956e8dcf80
+      AL2AMI: ami-0b898040803850657
     ap-northeast-2:
-      AL2AMI: ami-047f7b46bd6dd5d84
+      AL2AMI: ami-095ca789e0549777d
     us-gov-west1:
       AL2AMI:  ami-6b157f0a
     sa-east-1:
-      AL2AMI: ami-0669a96e355eac82f
+      AL2AMI: ami-058943e7d9b9cabfb
     ap-northeast-3:
       AL2AMI: ami-088d713d672ed235e
     ap-northeast-1:
-      AL2AMI: ami-0f9ae750e8274075b
+      AL2AMI: ami-0c3fd0f5d33134a76
     ap-southeast-1:
-      AL2AMI: ami-0b419c3a4b01d1859
+      AL2AMI: ami-01f7527546b557442
     us-east-2:
-      AL2AMI: ami-02bcbb802e03574ba
+      AL2AMI: ami-0d8f6eb4f641ef691
     ap-southeast-2:
-      AL2AMI: ami-04481c741a0311bbb
+      AL2AMI: ami-0dc96254d5535925f
     cn-northwest-1:
       AL2AMI: ami-094b7433620966eb5
     eu-west-1:
-      AL2AMI: ami-07683a44e80cd32c5
+      AL2AMI: ami-0bbc25e23a7640b9b
     eu-north-1:
       AL2AMI: ami-d16fe6af
     us-gov-east1:
       AL2AMI: ami-1208ee63
     ap-south-1:
-      AL2AMI: ami-0889b8a448de4fc44
+      AL2AMI: ami-0d2692b6acea72ee6
     eu-west-3:
-      AL2AMI: ami-0451ae4fd8dd178f7
+      AL2AMI: ami-0adcddd3324248c4c
     eu-west-2:
-      AL2AMI: ami-09ead922c1dad67e4
+      AL2AMI: ami-0d8e27447ec2c8410
     ca-central-1:
-      AL2AMI: ami-03338e1f67dae0168
+      AL2AMI: ami-0d4ae09ec9361d8ac
     us-west-2:
-      AL2AMI: ami-061392db613a6357b
+      AL2AMI: ami-082b5a644766e0e6f
 
 Conditions:
   HasKeyName: !Not [!Equals [!Ref KeyName, '']]
@@ -278,6 +302,7 @@ Conditions:
   HasETG: !Not [!Equals [!Ref ExternalTargetGroup, '']]
   ReplicaHDD: !Or [!Equals [ !Ref ReplicaDiskType, "st1"], !Equals [ !Ref ReplicaDiskType, "sc1"]]
   SmallDisk: !Or [
+      !Equals [ !Ref DiskSize, "75" ],
       !Equals [ !Ref DiskSize, "200" ],
       !Equals [ !Ref DiskSize, "250" ],
       !Equals [ !Ref DiskSize, "300" ],
@@ -285,11 +310,68 @@ Conditions:
       !Equals [ !Ref DiskSize, "400" ],
       !Equals [ !Ref DiskSize, "450" ],
     ]
-  OverrideSize: !And [!Condition SmallDisk, !Condition ReplicaHDD]
   HasNotificationEmail: !Not [!Equals [ !Ref NotificationEmail, "" ]]
   HasSNSTopic: !Not [!Equals [ !Ref AlarmSNSTopic, "" ]]
+  HasReplicaHTTP: !Equals
+    - !Ref ReplicaServeHTTP
+    - 'true'
+  HasReplicaImageAMI: !Not [!Equals [ !Ref ReplicaImageAMI, "" ]]
 
 Resources:
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal: {Service: [lambda.amazonaws.com]}
+          Action: ['sts:AssumeRole']
+      Path: "/"
+      ManagedPolicyArns:
+      - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+  MulMin:
+    Type: AWS::Lambda::Function
+    Properties:
+      Handler: index.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Code:
+        ZipFile: !Sub |
+          var response = require('cfn-response');
+          exports.handler = function(event, context) {
+            var result = parseInt(event.ResourceProperties.Op1) * parseInt(event.ResourceProperties.Op2);
+            if(event.ResourceProperties.Max) {
+              result = Math.min(result, parseInt(event.ResourceProperties.Max));
+            }
+            response.send(event, context, response.SUCCESS, {Value: result});
+          };
+      Runtime: nodejs8.10
+  Max:
+    Type: AWS::Lambda::Function
+    Properties:
+      Handler: index.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Code:
+        ZipFile: !Sub |
+          var response = require('cfn-response');
+          exports.handler = function(event, context) {
+            var result = Math.max(parseInt(event.ResourceProperties.Op1), parseInt(event.ResourceProperties.Op2));
+            response.send(event, context, response.SUCCESS, {Value: result});
+          };
+      Runtime: nodejs8.10
+  HDDSize:
+    Type: Custom::Max
+    Properties:
+      ServiceToken: !GetAtt Max.Arn
+      Op1: !Ref DiskSize
+      Op2: 500
+  VolumeIOPS:
+    Type: Custom::MulMin
+    Properties:
+      ServiceToken: !GetAtt MulMin.Arn
+      Op1: !Ref DiskSize
+      Op2: 50
+      Max: 5000
   MasterLG:
     Type: AWS::Logs::LogGroup
     Properties:
@@ -420,7 +502,7 @@ Resources:
           Ebs:
             VolumeSize: !Ref DiskSize
             VolumeType: io1
-            Iops: 5000
+            Iops: !GetAtt VolumeIOPS.Value
             SnapshotId: !Ref SnapshotId
         UserData:
           "Fn::Base64":
@@ -444,7 +526,7 @@ Resources:
                 chmod +x /usr/local/bin/peerManager.py
                 mkdir -p /var/lib/journald-cloudwatch-logs/
                 mkdir -p /var/lib/ethereum
-                mount /dev/nvme1n1 /var/lib/ethereum
+                mount -o barrier=0,data=writeback /dev/nvme1n1 /var/lib/ethereum
                 resize2fs /dev/nvme1n1
                 useradd -r geth
                 chown -R geth /var/lib/ethereum
@@ -506,7 +588,7 @@ Resources:
         Version: !Sub ${MasterLaunchTemplate.LatestVersionNumber}
       MinSize: 1
       MaxSize: 7
-      DesiredCapacity: 1
+      DesiredCapacity: !Ref MasterCount
       HealthCheckType: EC2
       MetricsCollection:
       - Granularity: 1Minute
@@ -874,8 +956,8 @@ Resources:
     Type: AWS::EC2::LaunchTemplate
     Properties:
       LaunchTemplateData:
-        ImageId: !FindInMap [RegionMap, !Ref "AWS::Region", AL2AMI]
-        InstanceType: c5.large
+        ImageId: !If [HasReplicaImageAMI, !Ref ReplicaImageAMI, !FindInMap [RegionMap, !Ref "AWS::Region", AL2AMI]]
+        InstanceType: m5ad.large
         TagSpecifications:
           - ResourceType: instance
             Tags:
@@ -897,7 +979,7 @@ Resources:
             VolumeType: gp2
         - DeviceName: "/dev/sdf"
           Ebs:
-            VolumeSize: !If [OverrideSize, 500, !Ref DiskSize]
+            VolumeSize: !If [ReplicaHDD, !GetAtt HDDSize.Value, !Ref DiskSize]
             VolumeType: !Ref ReplicaDiskType
             SnapshotId: !Ref SnapshotId
         UserData:
@@ -920,25 +1002,62 @@ Resources:
                 chmod +x /usr/local/bin/journald-cloudwatch-logs
                 mkdir -p /var/lib/journald-cloudwatch-logs/
                 mkdir -p /var/lib/ethereum
-                mount /dev/nvme1n1 /var/lib/ethereum
+                mount -o barrier=0,data=writeback /dev/nvme1n1 /var/lib/ethereum
+                mkdir -p /var/lib/ethereum/overlay
                 resize2fs /dev/nvme1n1
                 useradd -r geth
+
+                echo "/dev/nvme1n1  /var/lib/ethereum    ext4   barrier=0,data=writeback,noatime  1   1" >> /etc/fstab
+
+                if [ -e /dev/nvme2n1 ]
+                then
+                  mkfs.ext4 /dev/nvme2n1
+                  mount -o barrier=0,data=writeback /dev/nvme2n1 /var/lib/ethereum/overlay
+                  echo "/dev/nvme2n1  /var/lib/ethereum/overlay    ext4   barrier=0,data=writeback,noatime  1   1" >> /etc/fstab
+                  OVERLAY_FLAG="--datadir.overlay=/var/lib/ethereum/overlay"
+                fi
                 chown -R geth /var/lib/ethereum
 
-                echo "/dev/nvme1n1  /var/lib/ethereum    ext4   defaults,noatime  1   1" >> /etc/fstab
-
-                yum install -y https://s3.amazonaws.com/amazoncloudwatch-agent/amazon_linux/$ARCH/latest/amazon-cloudwatch-agent.rpm
+                yum install -y https://s3.amazonaws.com/amazoncloudwatch-agent/amazon_linux/$ARCH/latest/amazon-cloudwatch-agent.rpm || true
 
                 /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -c ssm:${MetricsConfigParameter} -s
 
-                printf "[Unit]\nDescription=Ethereum go client replica\nAfter=syslog.target network.target\n\n[Service]\nUser=geth\nGroup=geth\nEnvironment=HOME=/var/lib/ethereum\nType=simple\nExecStart=/usr/bin/geth replica ${ReplicaExtraFlags} --kafka.broker=${KafkaHostname} --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --kafka.tx.topic=${NetworkId}-tx --replica.startup.age=45 --replica.offset.age 62 --replica.block.age 240 --rpc --rpcaddr 0.0.0.0 --rpcport=8545\nKillMode=process\nKillSignal=SIGINT\nTimeoutStopSec=90\nRestart=on-failure\nRestartSec=10s\nLimitNOFILE=204800\n\n[Install]\nWantedBy=multi-user.target\n" > /etc/systemd/system/geth.service
+                printf "KafkaHostname=${KafkaHostname}\nKafkaTopic=${KafkaTopic}\nNetworkId=${NetworkId}\ninfraName=${InfrastructureStack}\n" > /etc/systemd/system/ethcattle-vars
+
+                printf "[Unit]\nDescription=Ethereum go client replica\nAfter=syslog.target network.target\n[Service]\nUser=geth\nGroup=geth\nEnvironmentHOME=/var/lib/ethereum\nEnvironmentFile=/etc/systemd/system/ethcattle-vars\nType=simple\nLimitNOFILE=655360\nExecStart=/usr/bin/bash -c '/usr/bin/geth replica ${ReplicaExtraFlags} $OVERLAY_FLAG --kafka.broker=\$KafkaHostname --datadir=/var/lib/ethereum --kafka.topic=\$KafkaTopic --kafka.tx.topic=\$NetworkId-tx --replica.startup.age=45 --replica.offset.age 62 --replica.block.age 240 ${ReplicaHTTPFlag}'\nKillMode=process\nKillSignal=SIGINT\nTimeoutStopSec=90\nRestart=on-failure\nRestartSec=10s\n[Install]\nWantedBy=multi-user.target\n" > /etc/systemd/system/geth.service
 
                 printf "[Unit]\nDescription=journald-cloudwatch-logs\nWants=basic.target\nAfter=basic.target network.target\n\n[Service]\nExecStart=/usr/local/bin/journald-cloudwatch-logs /usr/local/etc/journald-cloudwatch-logs.conf\nKillMode=process\nRestart=on-failure\nRestartSec=42s" > /etc/systemd/system/journald-cloudwatch-logs.service
 
                 printf "log_group = \"${ReplicaLG}\"\nstate_file = \"/var/lib/journald-cloudwatch-logs/state\"" > /usr/local/etc/journald-cloudwatch-logs.conf
 
+                echo "geth        hard nofile 500000" >> /etc/security/limits.conf
+                echo "geth        soft nofile 500000" >> /etc/security/limits.conf
+                sysctl -w fs.file-max=12000500
+                sysctl -w fs.nr_open=20000500
+                # Set the maximum number of open file descriptors
+                ulimit -n 20000000
+
+                # Set the memory size for TCP with minimum, default and maximum thresholds
+                sysctl -w net.ipv4.tcp_mem='10000000 10000000 10000000'
+
+                # Set the receive buffer for each TCP connection with minumum, default and maximum thresholds
+                sysctl -w net.ipv4.tcp_rmem='1024 4096 16384'
+
+                # Set the TCP send buffer space with minumum, default and maximum thresholds
+                sysctl -w net.ipv4.tcp_wmem='1024 4096 16384'
+
+                # The maximum socket receive buffer sizemem_max=16384
+                sysctl -w net.core.rmem_max=16384
+
+                # The maximum socket send buffer size
+                sysctl -w net.core.wmem_max=16384
+
+                sysctl -w vm.swappiness=0
+
                 systemctl daemon-reload
                 systemctl enable geth.service
+                sleep 5 #TODO- workaround for a deadlock on topic creation
+                rm /var/lib/ethereum/geth.ipc || true
                 systemctl start geth.service
                 systemctl enable amazon-cloudwatch-agent.service
                 systemctl start amazon-cloudwatch-agent.service
@@ -948,6 +1067,8 @@ Resources:
                   "Fn::ImportValue": !Sub "${InfrastructureStack}-Kafka2HostnameA"
                 ClusterId:
                   "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
+                ReplicaHTTPFlag:
+                    !If [HasReplicaHTTP, "--rpc --rpcaddr 0.0.0.0 --rpcport 8545", ""]
 
   ReplicaAutoScalingGroup:
     Type: AWS::AutoScaling::AutoScalingGroup
@@ -968,16 +1089,16 @@ Resources:
             LaunchTemplateId: !Ref ReplicaLaunchTemplate
             Version: !Sub ${ReplicaLaunchTemplate.LatestVersionNumber}
           Overrides:
-            - InstanceType: m5a.large
+            # - InstanceType: m5a.large
             - InstanceType: m5ad.large
-            - InstanceType: m5.large
+            # - InstanceType: m5.large
             - InstanceType: m5d.large
-            - InstanceType: c5.large
-            - InstanceType: c5n.large
-            - InstanceType: c5d.large
-            - InstanceType: r5.large
+            # - InstanceType: c5.large
+            # - InstanceType: c5n.large
+            # - InstanceType: c5d.large
+            # - InstanceType: r5.large
             - InstanceType: r5d.large
-            - InstanceType: r5a.large
+            # - InstanceType: r5a.large
             - InstanceType: r5ad.large
       MinSize: 1
       MaxSize: !Ref ReplicaTargetCapacity
@@ -1029,8 +1150,8 @@ Resources:
     Type: AWS::EC2::LaunchTemplate
     Properties:
       LaunchTemplateData:
-        ImageId: !FindInMap [RegionMap, !Ref "AWS::Region", AL2AMI]
-        InstanceType: t3.micro
+        ImageId: !If [HasReplicaImageAMI, !Ref ReplicaImageAMI, !FindInMap [RegionMap, !Ref "AWS::Region", AL2AMI]]
+        InstanceType: m5a.large
         TagSpecifications:
           - ResourceType: instance
             Tags:
@@ -1045,8 +1166,8 @@ Resources:
         IamInstanceProfile:
           Name: !Ref SnapshotterNodeInstanceProfile
         KeyName: !If [HasKeyName, !Ref KeyName, !Ref 'AWS::NoValue']
-        CreditSpecification:
-          CpuCredits: standard
+        # CreditSpecification:
+        #   CpuCredits: standard
         InstanceInitiatedShutdownBehavior: terminate
         BlockDeviceMappings:
         - DeviceName: "/dev/xvda"
@@ -1056,7 +1177,8 @@ Resources:
         - DeviceName: "/dev/sdf"
           Ebs:
             VolumeSize: !Ref DiskSize
-            VolumeType: gp2
+            VolumeType: io1
+            Iops: !GetAtt VolumeIOPS.Value
             SnapshotId: !Ref SnapshotId
         UserData:
           "Fn::Base64":
@@ -1074,7 +1196,7 @@ Resources:
                 aws s3 cp s3://${S3GethBucketName}/${ECGethVersion}/$GETH_BIN /usr/bin/geth
                 chmod +x /usr/bin/geth
                 mkdir -p /var/lib/ethereum
-                mount /dev/nvme1n1 /var/lib/ethereum
+                mount -o barrier=0,data=writeback /dev/nvme1n1 /var/lib/ethereum
                 resize2fs /dev/nvme1n1
                 useradd -r geth
                 chown -R geth /var/lib/ethereum
@@ -1082,6 +1204,12 @@ Resources:
                 yum install -y jq
 
                 export AWS_DEFAULT_REGION=${AWS::Region}
+                printf "KafkaHostname=${KafkaHostname}\nKafkaTopic=${KafkaTopic}\nNetworkId=${NetworkId}\ninfraName=${InfrastructureStack}\n" > /etc/systemd/system/ethcattle-vars
+
+                if [ -f /usr/bin/replca-hook ]
+                then
+                  /usr/bin/replica-snapshot-hook
+                fi
 
                 sudo -u geth /usr/bin/geth replica ${ReplicaExtraFlags} --kafka.broker=${KafkaHostname} --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown
                 if ! sudo -u geth /usr/bin/geth verifystatetrie --datadir=/var/lib/ethereum ${SnapshotValidationThreshold}
@@ -1111,6 +1239,25 @@ Resources:
                 PARAMETERS=$(aws cloudformation describe-stacks --stack-name ${AWS::StackName} | jq '.Stacks[0].Parameters | map(if .ParameterKey == "SnapshotId" then .ParameterValue="'$SNAPSHOT_ID'" else . end)' -c)
                 aws cloudformation update-stack --stack-name ${AWS::StackName} --use-previous-template --capabilities CAPABILITY_IAM --parameters="$PARAMETERS"
 
+                # IF Day of week is Sunday, compact DB and re-update everything, after taking a new snapshot.
+                if [ $(date +%u) = 7 ]; then
+                  geth compactdb --datadir=/var/lib/ethereum
+                  NEW_SNAPSHOT_ID=`aws ec2 create-snapshot --volume-id $VOLUME_ID --tag-specification="ResourceType=snapshot,Tags=[{Key=cluster,Value=${KafkaTopic}},{Key=Name,Value=${KafkaTopic}-chaindata-$(date -Isecond -u)}]" | jq '.SnapshotId' -cr`
+                  echo "Waiting for snapshot to complete"
+                  while [ `aws ec2 describe-snapshots --filters=Name=snapshot-id,Values=$NEW_SNAPSHOT_ID | jq '.Snapshots[0].State' -cr` != "completed" ];
+                  do
+                      sleep 10
+                  done
+
+                  # CFN will set any parameters we don't provide back to their default values,
+                  # so get all of the parameters, update SnapshotID, and update the stack with
+                  # the new parameters.
+                  PARAMETERS=$(aws cloudformation describe-stacks --stack-name ${AWS::StackName} | jq '.Stacks[0].Parameters | map(if .ParameterKey == "SnapshotId" then .ParameterValue="'$NEW_SNAPSHOT_ID'" else . end)' -c)
+                  aws cloudformation update-stack --stack-name ${AWS::StackName} --use-previous-template --capabilities CAPABILITY_IAM --parameters="$PARAMETERS"
+
+                  #DELETE OLD SNAPSHOT ONCE EVERYTHING UPDATED
+                  aws ec2 delete-snapshot --snapshot-id $SNAPSHOT_ID
+                fi
                 poweroff
               - KafkaHostname:
                   "Fn::ImportValue": !Sub "${InfrastructureStack}-Kafka2HostnameA"
@@ -1200,6 +1347,7 @@ Resources:
               - autoscaling:DescribeScalingActivities
               - ec2:DescribeVolumes
               - ec2:CreateSnapshot
+              - ec2:DeleteSnapshot
               - events:DescribeRule
               - ec2:DescribeKeyPairs
             Resource: "*"

@@ -5,25 +5,25 @@ The CloudFormation templates for an Ether Cattle Cluster have a lot of moving
 parts. This section of the document is intended to give you a good understanding
 of what is involved in an operating cluster.
 
-The Master
-----------
+The Masters
+-----------
 
-The Ether Cattle master is mostly a conventional Geth node, but uses Kafka to
+An Ether Cattle master is mostly a conventional Geth node, but uses Kafka to
 keep a log of everything it writes to its underlying database. That Kafka log
 will be used by replicas to be able to serve the same information as the master.
 
-The master is run through an autoscaling group, though that auto-scaling group
-will only ever run one master at a time. In the event that a master fails, it
-can be terminated, and the autoscaler will replace the instance automatically.
-The master's chaindata folder will start from the Snapshot ID provided in the
-CloudFormation template.
+The masters are run through an autoscaling group. In the event that a master
+fails, it can be terminated, and the autoscaler will replace the instance
+automatically. The master's chaindata folder will start from the Snapshot ID
+provided in the CloudFormation template.
 
 On startup, the master first attempts to sync from the Kafka topic it will
 eventually write to. This ensures that it is starting from the same place its
 replicas are starting before connecting to peers. On the first startup for a
 cluster there will be nothing available from Kafka, but on subsequent runs it
 may take a few minutes for the master to sync from Kafka before it starts
-syncing with peers.
+syncing with peers. If you run multiple masters, they will peer with each other,
+so that on restart they should connect quickly.
 
 If you terminate an existing master and it must resume from a snapshot that is
 24 hours old, it typically takes about 45 minutes to sync with Kafka and then
@@ -62,7 +62,7 @@ requests on port 8545.
 Like masters, replicas are also started from an autoscaling group, and also
 start from the snapshot id provided to the CloudFormation template. At the time
 of this writing, the autoscaler will run the number of replicas indicated by the
-“Replica Target Capacity” parameter of the template, but this could be
+"Replica Target Capacity" parameter of the template, but this could be
 configured to autoscale based on a variety of metrics.
 
 In the CloudFormation configuration, replicas will only start serving RPC
@@ -94,10 +94,11 @@ than Kafka’s retention period. The CloudFormation template includes a
 snapshotting process that runs once daily to ensure snapshots are available.
 
 * A CloudWatch Event Rule is scheduled to execute a lambda function once daily. Its first run will be 24 hours after you deploy the CloudFormation stack.
-* The lambda function will launch a t3.micro EC2 instance with a chaindata volume derived from the CloudFormation stack’s latest snapshot.
+* The lambda function will launch an m5a.large EC2 instance with a chaindata volume derived from the CloudFormation stack’s latest snapshot.
 * The EC2 instance will pull the latest data from Kafka, then the replica process terminates.
 * The EC2 instance creates a snapshot from the volume it just synced with Kafka. This snapshot will have a “clusterid” tag that corresponds to the Kafka topic you indicated in the CloudFormation stack, and a “name” tag of “$clusterid-chaindata-$timestamp”.
 * Once the snapshot is 100% complete, the EC2 instance will update the CloudFormation template parameter with the new snapshot. This means any new masters or replicas started by their respective autoscalers will launch with this version of the snapshot.
+* Only on Sundays after the CloudFormation stack is updated, the snapshotter will run a full compaction of leveldb. After the compactio ncompletes, it will take another snapshot, update CloudFormation again, and then delete the snapshot taken earlier in the day.
 * The EC2 instance terminates.
 
 This process can take a couple of hours, but runs behind the scenes. As an

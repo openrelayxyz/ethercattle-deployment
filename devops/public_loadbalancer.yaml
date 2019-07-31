@@ -89,6 +89,9 @@ Resources:
       VpcId:
         "Fn::ImportValue":
             !Sub "${InfrastructureStack}-VpcId"
+      Tags:
+        - Key: Service
+          Value: !Sub "${ServiceName}.${HostedZone}"
   RPCALBDNS:
     Type: "AWS::Route53::RecordSet"
     Properties:
