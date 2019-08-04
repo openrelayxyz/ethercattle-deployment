@@ -146,6 +146,10 @@ Parameters:
     Type: Number
     Default: 0
     Description: The percentage (0 - 100) of replica that should be on-demand instead of spot instances.
+  MasterOnDemandPercentage:
+    Type: Number
+    Default: 50
+    Description: The percentage (0 - 100) of masters that should be on-demand instead of spot instances.
   ExternalTargetGroup:
     Type: String
     Description: Optional external target group to register replicas on
@@ -193,6 +197,7 @@ Metadata:
         Parameters:
           - MasterCount
           - MasterInstanceType
+          - MasterOnDemandPercentage
           - MasterExtraFlags
           - DiskSize
       - Label:
@@ -372,6 +377,12 @@ Resources:
       Op1: !Ref DiskSize
       Op2: 50
       Max: 5000
+  MaxReplicas:
+    Type: Custom::MulMin
+    Properties:
+      ServiceToken: !GetAtt MulMin.Arn
+      Op1: !Ref ReplicaTargetCapacity
+      Op2: 2
   MasterLG:
     Type: AWS::Logs::LogGroup
     Properties:
@@ -583,13 +594,30 @@ Resources:
             !Sub "${InfrastructureStack}-PublicB"
         - "Fn::ImportValue":
             !Sub "${InfrastructureStack}-PublicC"
-      LaunchTemplate:
-        LaunchTemplateId: !Ref MasterLaunchTemplate
-        Version: !Sub ${MasterLaunchTemplate.LatestVersionNumber}
+      # LaunchTemplate:
+      #   LaunchTemplateId: !Ref MasterLaunchTemplate
+      #   Version: !Sub ${MasterLaunchTemplate.LatestVersionNumber}
       MinSize: 1
       MaxSize: 7
       DesiredCapacity: !Ref MasterCount
       HealthCheckType: EC2
+      MixedInstancesPolicy:
+        InstancesDistribution:
+          OnDemandPercentageAboveBaseCapacity: !Ref MasterOnDemandPercentage
+          SpotInstancePools: 11
+        LaunchTemplate:
+          LaunchTemplateSpecification:
+            LaunchTemplateId: !Ref MasterLaunchTemplate
+            Version: !Sub ${MasterLaunchTemplate.LatestVersionNumber}
+          Overrides:
+            - InstanceType: m5a.large
+            - InstanceType: m5ad.large
+            - InstanceType: m5.large
+            - InstanceType: m5d.large
+            - InstanceType: r5.large
+            - InstanceType: r5d.large
+            - InstanceType: r5a.large
+            - InstanceType: r5ad.large
       MetricsCollection:
       - Granularity: 1Minute
         Metrics:
@@ -1128,7 +1156,7 @@ Resources:
             # - InstanceType: r5a.large
             - InstanceType: r5ad.large
       MinSize: 1
-      MaxSize: !Ref ReplicaTargetCapacity
+      MaxSize: !GetAtt MaxReplicas.Value
       DesiredCapacity: !Ref ReplicaTargetCapacity
       HealthCheckType: EC2
       TargetGroupARNs:
