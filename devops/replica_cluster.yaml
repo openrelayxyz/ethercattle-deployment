@@ -642,6 +642,43 @@ Resources:
       Endpoint: !Ref NotificationEmail
       Protocol: email
       TopicArn: !Ref AggregatedNotifications
+  ReplicaOverlayDiskSNS:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: Replica Overlay Disk
+  ReplicaDiskOverlayAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmActions:
+        - !Ref ReplicaOverlayDiskSNS
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+      AlarmDescription: "Alarms when the overlay data directory > 95% full"
+      ComparisonOperator: "GreaterThanThreshold"
+      Dimensions:
+        - Name: AutoScalingGroupName
+          Value : !Ref ReplicaAutoScalingGroup
+        - Name: device
+          Value : "nvme2n1"
+        - Name: fstype
+          Value : "ext4"
+        - Name: path
+          Value : "/var/lib/ethereum/overlay"
+      InsufficientDataActions:
+        - !Ref ReplicaOverlayDiskSNS
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+      EvaluationPeriods: 5
+      MetricName: "disk_used_percent"
+      Namespace: CWAgent
+      OKActions:
+        - !Ref ReplicaOverlayDiskSNS
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+      Period: 60
+      Statistic: Maximum
+      Threshold: 95
+      TreatMissingData: missing
   MasterDiskSNS:
     Type: AWS::SNS::Topic
     Properties:
