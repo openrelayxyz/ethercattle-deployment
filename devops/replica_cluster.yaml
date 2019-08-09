@@ -741,7 +741,34 @@ Resources:
     Type: AWS::SNS::Topic
     Properties:
       DisplayName: Master RAM
-  MasterCPUAlarm:
+  MasterCPUAlarmLong:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmActions:
+        - !Ref MasterCPUSNS
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+      AlarmDescription: "Alarms when the master CPU > 80%"
+      ComparisonOperator: "GreaterThanThreshold"
+      Dimensions:
+        - Name: AutoScalingGroupName
+          Value : !Ref MasterAutoScalingGroup
+      InsufficientDataActions:
+        - !Ref MasterCPUSNS
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+      EvaluationPeriods: 30
+      MetricName: "CPUUtilization"
+      Namespace: AWS/EC2
+      OKActions:
+        - !Ref MasterCPUSNS
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+      Period: 60
+      Statistic: Maximum
+      Threshold: 80
+      TreatMissingData: missing
+  MasterCPUAlarmHigh:
     Type: AWS::CloudWatch::Alarm
     Properties:
       AlarmActions:
@@ -758,15 +785,15 @@ Resources:
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
       EvaluationPeriods: 5
-      MetricName: "mem_used_percent"
-      Namespace: CWAgent
+      MetricName: "CPUUtilization"
+      Namespace: AWS/EC2
       OKActions:
         - !Ref MasterCPUSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
       Period: 60
       Statistic: Maximum
-      Threshold: 80
+      Threshold: 95
       TreatMissingData: missing
   MasterPeerCountSNS:
     Type: AWS::SNS::Topic
