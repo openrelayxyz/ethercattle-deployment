@@ -1149,6 +1149,11 @@ Resources:
 
                 printf "KafkaHostname=${KafkaHostname}\nKafkaTopic=${KafkaTopic}\nNetworkId=${NetworkId}\ninfraName=${InfrastructureStack}\n" > /etc/systemd/system/ethcattle-vars
 
+                if [ -f /usr/bin/replica-hook ]
+                then
+                  /usr/bin/replica-hook
+                fi
+
                 printf "[Unit]\nDescription=Ethereum go client replica\nAfter=syslog.target network.target\n[Service]\nUser=geth\nGroup=geth\nEnvironmentHOME=/var/lib/ethereum\nEnvironmentFile=/etc/systemd/system/ethcattle-vars\nType=simple\nLimitNOFILE=655360\nExecStart=/usr/bin/bash -c '/usr/bin/geth replica ${ReplicaExtraFlags} $OVERLAY_FLAG --kafka.broker=\$KafkaHostname --datadir=/var/lib/ethereum --kafka.topic=\$KafkaTopic --kafka.tx.topic=\$NetworkId-tx --replica.startup.age=45 --replica.offset.age 62 --replica.block.age 240 ${ReplicaHTTPFlag}'\nKillMode=process\nKillSignal=SIGINT\nTimeoutStopSec=90\nRestart=on-failure\nRestartSec=10s\n[Install]\nWantedBy=multi-user.target\n" > /etc/systemd/system/geth.service
 
                 printf "[Unit]\nDescription=journald-cloudwatch-logs\nWants=basic.target\nAfter=basic.target network.target\n\n[Service]\nExecStart=/usr/local/bin/journald-cloudwatch-logs /usr/local/etc/journald-cloudwatch-logs.conf\nKillMode=process\nRestart=on-failure\nRestartSec=42s" > /etc/systemd/system/journald-cloudwatch-logs.service
@@ -1331,7 +1336,7 @@ Resources:
                 export AWS_DEFAULT_REGION=${AWS::Region}
                 printf "KafkaHostname=${KafkaHostname}\nKafkaTopic=${KafkaTopic}\nNetworkId=${NetworkId}\ninfraName=${InfrastructureStack}\n" > /etc/systemd/system/ethcattle-vars
 
-                if [ -f /usr/bin/replca-hook ]
+                if [ -f /usr/bin/replica-snapshot-hook ]
                 then
                   /usr/bin/replica-snapshot-hook
                 fi
