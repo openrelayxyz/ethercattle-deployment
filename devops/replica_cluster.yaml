@@ -737,6 +737,7 @@ Resources:
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
       EvaluationPeriods: 30
+      DatapointsToAlarm: 28
       MetricName: "mem_used_percent"
       Namespace: CWAgent
       OKActions:
@@ -795,6 +796,7 @@ Resources:
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
       EvaluationPeriods: 30
+      DatapointsToAlarm: 28
       MetricName: "CPUUtilization"
       Namespace: AWS/EC2
       OKActions:
