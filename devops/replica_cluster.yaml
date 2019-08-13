@@ -551,7 +551,7 @@ Resources:
 
                 /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -c ssm:${MetricsConfigParameter} -s
 
-                crontab -l >  newcrontab
+                crontab -l >  newcrontab || true
                 echo "5,20,35,50 * * * * sh -c 'for x in \$(ls /dev/sd*) ; do echo resizing \$(readlink -f \$x) if needed; resize2fs \$(readlink -f \$x) ; done'" >> newcrontab
                 crontab newcrontab
 
