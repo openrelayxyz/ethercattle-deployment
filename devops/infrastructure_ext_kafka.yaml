@@ -404,3 +404,8 @@ Outputs:
     Value: !Ref PrivateC
     Export:
       Name: !Sub "${AWS::StackName}-PrivateC"
+  BaseInfrastructure:
+    Description: The base infrastructure stack identifier
+    Value: !Sub ${AWS::StackName}
+    Export:
+      Name: !Sub "${AWS::StackName}-BaseInfrastructure"

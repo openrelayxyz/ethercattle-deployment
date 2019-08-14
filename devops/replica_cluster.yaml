@@ -1147,7 +1147,7 @@ Resources:
 
                 /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -c ssm:${MetricsConfigParameter} -s
 
-                printf "KafkaHostname=${KafkaHostname}\nKafkaTopic=${KafkaTopic}\nNetworkId=${NetworkId}\ninfraName=${InfrastructureStack}\n" > /etc/systemd/system/ethcattle-vars
+                printf "KafkaHostname=${KafkaHostname}\nKafkaTopic=${KafkaTopic}\nNetworkId=${NetworkId}\ninfraName=${InfrastructureStack}\nbaseInfraName=${BaseInfrastructure}\n" > /etc/systemd/system/ethcattle-vars
 
                 printf "[Unit]\nDescription=Ethereum go client replica\nAfter=syslog.target network.target\n[Service]\nUser=geth\nGroup=geth\nEnvironmentHOME=/var/lib/ethereum\nEnvironmentFile=/etc/systemd/system/ethcattle-vars\nType=simple\nLimitNOFILE=655360\nExecStart=/usr/bin/bash -c '/usr/bin/geth replica ${ReplicaExtraFlags} $OVERLAY_FLAG --kafka.broker=\$KafkaHostname --datadir=/var/lib/ethereum --kafka.topic=\$KafkaTopic --kafka.tx.topic=\$NetworkId-tx --replica.startup.age=45 --replica.offset.age 62 --replica.block.age 240 ${ReplicaHTTPFlag}'\nKillMode=process\nKillSignal=SIGINT\nTimeoutStopSec=90\nRestart=on-failure\nRestartSec=10s\n[Install]\nWantedBy=multi-user.target\n" > /etc/systemd/system/geth.service
 
@@ -1199,6 +1199,8 @@ Resources:
                   "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
                 ReplicaHTTPFlag:
                     !If [HasReplicaHTTP, "--rpc --rpcaddr 0.0.0.0 --rpcport 8545", ""]
+                BaseInfrastructure:
+                  "Fn::ImportValue": !Sub "${InfrastructureStack}-BaseInfrastructure"
 
   ReplicaAutoScalingGroup:
     Type: AWS::AutoScaling::AutoScalingGroup

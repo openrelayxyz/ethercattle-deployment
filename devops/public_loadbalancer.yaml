@@ -207,3 +207,9 @@ Outputs:
       "Fn::ImportValue": !Sub "${InfrastructureStack}-PrivateC"
     Export:
       Name: !Sub "${AWS::StackName}-PrivateC"
+  BaseInfrastructure:
+    Description: The base infrastructure stack identifier
+    Value:
+      "Fn::ImportValue": !Sub "${InfrastructureStack}-BaseInfrastructure"
+    Export:
+      Name: !Sub "${AWS::StackName}-BaseInfrastructure"

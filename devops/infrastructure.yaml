@@ -194,7 +194,7 @@ Metadata:
 Mappings:
   RegionMap:
     us-east-2:
-      ECSAMI: ami-0f7f8edb4fe82cf70	
+      ECSAMI: ami-0f7f8edb4fe82cf70
     us-east-1:
       ECSAMI: ami-0be9e1908fe51a590
     us-west-1:
@@ -1191,3 +1191,8 @@ Outputs:
     Value: !Ref ServiceNamespace
     Export:
       Name: !Sub "${AWS::StackName}-ServiceNamespace"
+  BaseInfrastructure:
+    Description: The base infrastructure stack identifier
+    Value: !Sub ${AWS::StackName}
+    Export:
+      Name: !Sub "${AWS::StackName}-BaseInfrastructure"
