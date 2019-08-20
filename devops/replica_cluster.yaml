@@ -389,7 +389,7 @@ Resources:
       RetentionInDays: 7
       LogGroupName:
         "Fn::Sub":
-          - "/${ClusterId}/${KafkaTopic}/master"
+          - "/${ClusterId}/${AWS::StackName}/master"
           - ClusterId:
               "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
   MasterNodeSecurityGroup:
@@ -552,10 +552,10 @@ Resources:
                 /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -c ssm:${MetricsConfigParameter} -s
 
                 crontab -l >  newcrontab || true
-                echo "5,20,35,50 * * * * sh -c 'for x in \$(ls /dev/sd*) ; do echo resizing \$(readlink -f \$x) if needed; resize2fs \$(readlink -f \$x) ; done'" >> newcrontab
+                echo "5,20,35,50 * * * * /usr/bin/sh -c 'for x in \$(ls /dev/sd*) ; do echo resizing \$(readlink -f \$x) if needed; /usr/sbin/resize2fs \$(readlink -f \$x) ; done'" >> newcrontab
                 crontab newcrontab
 
-                printf "[Unit]\nDescription=Ethereum go client\nAfter=syslog.target network.target\n\n[Service]\nUser=geth\nGroup=geth\nEnvironment=HOME=/var/lib/ethereum\nType=simple\nExecStartPre=/usr/bin/geth replica --kafka.broker=${KafkaHostname} --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown\nExecStart=/usr/bin/geth ${MasterExtraFlags} --gcmode=archive --kafka.broker=${KafkaHostname} --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic}\nKillMode=process\nKillSignal=SIGINT\nTimeoutStartSec=86400\nTimeoutStopSec=90\nOnFailure=poweroff.target\n\n[Install]\nWantedBy=multi-user.target\n" > /etc/systemd/system/geth.service
+                printf "[Unit]\nDescription=Ethereum go client\nAfter=syslog.target network.target\n\n[Service]\nUser=geth\nGroup=geth\nEnvironment=HOME=/var/lib/ethereum\nType=simple\nExecStartPre=/usr/bin/geth replica --kafka.broker=${KafkaHostname} --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown\nExecStart=/usr/bin/geth ${MasterExtraFlags} --light.maxpeers 0 --maxpeers 25 --gcmode=archive --kafka.broker=${KafkaHostname} --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic}\nKillMode=process\nKillSignal=SIGINT\nTimeoutStartSec=86400\nTimeoutStopSec=90\nOnFailure=poweroff.target\n\n[Install]\nWantedBy=multi-user.target\n" > /etc/systemd/system/geth.service
 
                 printf "[Unit]\nDescription=Ethereum go client transaction relay\nAfter=syslog.target network.target geth\n\n[Service]\nUser=geth\nGroup=geth\nEnvironment=HOME=/var/lib/ethereum\nType=simple\nExecStart=/usr/bin/geth txrelay --kafka.broker=${KafkaHostname} --kafka.tx.topic=${NetworkId}-tx --kafka.tx.consumergroup=${KafkaTopic}-cg /var/lib/ethereum/geth.ipc\nKillMode=process\nKillSignal=SIGINT\nTimeoutStopSec=90\nRestart=on-failure\nRestartSec=10s\n\n[Install]\nWantedBy=multi-user.target\n" > /etc/systemd/system/geth-tx.service
 
@@ -893,7 +893,7 @@ Resources:
     Properties:
       Roles:
         - !Ref LogMetricsRole
-      PolicyName: !Sub "MasterLogMetrics${KafkaTopic}"
+      PolicyName: !Sub "MasterLogMetrics${AWS::StackName}"
       PolicyDocument:
         Version: 2012-10-17
         Statement:
@@ -1000,7 +1000,7 @@ Resources:
       RetentionInDays: 7
       LogGroupName:
         "Fn::Sub":
-          - "/${ClusterId}/${KafkaTopic}/replica"
+          - "/${ClusterId}/${AWS::StackName}/replica"
           - ClusterId:
               "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
   ReplicaNodeSecurityGroup:
@@ -1036,7 +1036,7 @@ Resources:
     Properties:
       Roles:
         - !Ref ReplicaNodeRole
-      PolicyName: !Sub "ReplicaNode${KafkaTopic}"
+      PolicyName: !Sub "ReplicaNode${AWS::StackName}"
       PolicyDocument:
         Version: 2012-10-17
         Statement:
@@ -1146,6 +1146,10 @@ Resources:
                 yum install -y https://s3.amazonaws.com/amazoncloudwatch-agent/amazon_linux/$ARCH/latest/amazon-cloudwatch-agent.rpm || true
 
                 /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -c ssm:${MetricsConfigParameter} -s
+
+                crontab -l >  newcrontab || true
+                echo "5,20,35,50 * * * * /usr/bin/sh -c 'for x in \$(ls /dev/sd*) ; do echo resizing \$(readlink -f \$x) if needed; /usr/sbin/resize2fs \$(readlink -f \$x) ; done'" >> newcrontab
+                crontab newcrontab
 
                 printf "KafkaHostname=${KafkaHostname}\nKafkaTopic=${KafkaTopic}\nNetworkId=${NetworkId}\ninfraName=${InfrastructureStack}\nbaseInfraName=${BaseInfrastructure}\n" > /etc/systemd/system/ethcattle-vars
 
@@ -1414,7 +1418,7 @@ Resources:
     Properties:
       Roles:
         - !Ref SnapshotterNodeRole
-      PolicyName: !Sub "SnapshotterNode${KafkaTopic}"
+      PolicyName: !Sub "SnapshotterNode${AWS::StackName}"
       PolicyDocument:
         Version: 2012-10-17
         Statement:
@@ -1508,7 +1512,7 @@ Resources:
     Properties:
       Roles:
         - !Ref SnapshotterLambdaRole
-      PolicyName: !Sub "SnapshotterLambdaPolicy${KafkaTopic}"
+      PolicyName: !Sub "SnapshotterLambdaPolicy${AWS::StackName}"
       PolicyDocument:
         Version: 2012-10-17
         Statement:
@@ -1589,7 +1593,7 @@ Resources:
     Properties:
       Roles:
         - !Ref SnapshotGCLambdaRole
-      PolicyName: !Sub "SnapshotGCLambdaPolicy${KafkaTopic}"
+      PolicyName: !Sub "SnapshotGCLambdaPolicy${AWS::StackName}"
       PolicyDocument:
         Version: 2012-10-17
         Statement:
