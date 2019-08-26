@@ -72,8 +72,9 @@ def masterHandler(event, context):
     for item in eventData["logEvents"]:
         metricData = []
         try:
-            appendMetric(item, metricData, "number",
-                         numberFromRe(item["message"], BLOCK_NUM_RE))
+            if "Imported new chain segment" in item["message"]:
+                appendMetric(item, metricData, "number",
+                             numberFromRe(item["message"], BLOCK_NUM_RE))
         except ValueError:
             pass
         try:

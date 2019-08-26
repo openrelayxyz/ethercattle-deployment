@@ -1,84 +1,6 @@
 Description: A master and pool of replicas for Ether Cattle
 
 Parameters:
-  MasterInstanceType:
-    AllowedValues:
-      - t2.micro
-      - t3.micro
-      - t2.small
-      - t3.small
-      - t2.medium
-      - t3.medium
-      - t2.large
-      - t3.large
-      - t2.xlarge
-      - t3.xlarge
-      - t2.2xlarge
-      - t3.2xlarge
-      - m4.large
-      - m4.xlarge
-      - m4.2xlarge
-      - m4.4xlarge
-      - m4.10xlarge
-      - m5.large
-      - m5.xlarge
-      - m5.2xlarge
-      - m5.4xlarge
-      - m5.10xlarge
-      - m5a.large
-      - m5a.xlarge
-      - m5a.2xlarge
-      - m5a.4xlarge
-      - m5a.10xlarge
-      - m3.medium
-      - m3.large
-      - m3.xlarge
-      - m3.2xlarge
-      - c5.large
-      - c5.xlarge
-      - c5.2xlarge
-      - c5.4xlarge
-      - c5.8xlarge
-      - c5d.large
-      - c5d.xlarge
-      - c5d.2xlarge
-      - c5d.4xlarge
-      - c5d.8xlarge
-      - c4.large
-      - c4.xlarge
-      - c4.2xlarge
-      - c4.4xlarge
-      - c4.8xlarge
-      - c3.large
-      - c3.xlarge
-      - c3.2xlarge
-      - c3.4xlarge
-      - c3.8xlarge
-      - r3.large
-      - r3.xlarge
-      - r3.2xlarge
-      - r3.4xlarge
-      - r3.8xlarge
-      - r4.large
-      - r4.xlarge
-      - r4.2xlarge
-      - r4.4xlarge
-      - r4.8xlarge
-      - r4.16xlarge
-      - i2.xlarge
-      - i2.2xlarge
-      - i2.4xlarge
-      - i2.8xlarge
-      - i3.large
-      - i3.xlarge
-      - i3.2xlarge
-      - i3.4xlarge
-      - i3.8xlarge
-      - i3.16xlarge
-    ConstraintDescription: Must be a valid EC2 HVM instance type.
-    Default: m5a.large
-    Description: EC2 HVM instance type (t2.micro, m3.medium, etc).
-    Type: String
   DiskSize:
     Default: '250'
     Description: Size of each node's chaindata storage volume in GiB
@@ -128,6 +50,13 @@ Parameters:
   SnapshotId:
     Type: String
     Description: A snapshot of the Ethereum folder with a synced blockchain
+  MasterSize:
+    Type: String
+    Description: Whether to use full size masters or smaller ones. "full" will use a pool of large instances from the m5(ad) and r5(ad) families. "small" will use a pool of medium instances from the t3 and t3a families. For mainnet this must be full - for testnets and private networks it will depend on the network volume.
+    AllowedValues:
+      - full
+      - small
+    Default: full
   MasterCount:
     Type: Number
     Description: The number of Geth masters to run with the cluster. More masters means higher availability and that replicas are likely to be updated faster, but higher replica startup times and more disk usage.
@@ -146,6 +75,13 @@ Parameters:
     Type: Number
     Default: 0
     Description: The percentage (0 - 100) of replica that should be on-demand instead of spot instances.
+  ReplicaSize:
+    Type: String
+    Description: Whether to use full size replicas or smaller ones. "full" will use a pool of large instances from the m5d, m5ad, r5d, and r5ad families. "small" will use a pool of medium instances from the t3 and t3a families. Use "small" if you expect a small request volume.
+    AllowedValues:
+      - full
+      - small
+    Default: full
   MasterOnDemandPercentage:
     Type: Number
     Default: 50
@@ -170,6 +106,9 @@ Parameters:
     Type: Number
     Default: 10000
     Description: The number of state trie nodes to validate when taking a snapshot.
+  RemoteRPCURL:
+    Type: String
+    Description: A remote RPC URL to check against local block numbers. If provided, an alarm will go off if this cluster falls significantly behind the specified RPC endpoint. If not specified, an alarm will go off if no blocks are processed in a one minute period.
 
 
 Metadata:
@@ -184,6 +123,7 @@ Metadata:
           - AlarmSNSTopic
           - NotificationEmail
           - KeyName
+          - RemoteRPCURL
       - Label:
           default: Cluster
         Parameters:
@@ -195,14 +135,15 @@ Metadata:
       - Label:
           default: Master
         Parameters:
+          - MasterSize
           - MasterCount
-          - MasterInstanceType
           - MasterOnDemandPercentage
           - MasterExtraFlags
           - DiskSize
       - Label:
           default: Replica
         Parameters:
+          - ReplicaSize
           - ReplicaImageAMI
           - ReplicaServeHTTP
           - ReplicaExtraFlags
@@ -211,8 +152,8 @@ Metadata:
           - ReplicaOnDemandPercentage
           - SnapshotValidationThreshold
     ParameterLabels:
-      MasterInstanceType:
-        default: Instance Type
+      MasterSize:
+        default: Master Size
       DiskSize:
         default: Disk Size
       ReplicaImageAMI:
@@ -255,8 +196,37 @@ Metadata:
         default: SNS Topic for Alarms
       SnapshotValidationThreshold:
         default: Snapshot Validation Threshold
+      RemoteRPCURL:
+        default: Remote RPC URL
 
 Mappings:
+  InstanceSizes:
+    Master:
+      full:
+        - InstanceType: m5a.large
+        - InstanceType: m5ad.large
+        - InstanceType: m5.large
+        - InstanceType: m5d.large
+        - InstanceType: r5.large
+        - InstanceType: r5d.large
+        - InstanceType: r5a.large
+        - InstanceType: r5ad.large
+      small:
+        - InstanceType: t3.medium
+        - InstanceType: t3a.medium
+    Replica:
+      full:
+        - InstanceType: m5ad.large
+        - InstanceType: m5d.large
+        - InstanceType: r5d.large
+        - InstanceType: r5ad.large
+      small:
+        - InstanceType: t3.medium
+        - InstanceType: t3a.medium
+  PoolSize:
+    Size:
+      full: 11
+      small: 6
   RegionMap:
     us-west-1:
       AL2AMI: ami-056ee704806822732
@@ -321,6 +291,10 @@ Conditions:
     - !Ref ReplicaServeHTTP
     - 'true'
   HasReplicaImageAMI: !Not [!Equals [ !Ref ReplicaImageAMI, "" ]]
+  HasRemoteRPCURL: !Not [!Equals [!Ref RemoteRPCURL, ""]]
+  NoRemoteRPCURL: !Equals [ !Ref RemoteRPCURL, ""]
+  SmallMaster: !Equals [ !Ref MasterSize, "small"]
+  SmallReplica: !Equals [ !Ref ReplicaSize, "small"]
 
 Resources:
   LambdaExecutionRole:
@@ -489,7 +463,7 @@ Resources:
     Properties:
       LaunchTemplateData:
         ImageId: !FindInMap [RegionMap, !Ref "AWS::Region", AL2AMI]
-        InstanceType: !Ref MasterInstanceType
+        InstanceType: m5.large
         TagSpecifications:
           - ResourceType: instance
             Tags:
@@ -504,6 +478,7 @@ Resources:
         IamInstanceProfile:
           Name: !Ref MasterNodeInstanceProfile
         KeyName: !If [HasKeyName, !Ref KeyName, !Ref 'AWS::NoValue']
+        CreditSpecification: !If [SmallMaster, {CpuCredits: standard}, !Ref 'AWS::NoValue']
         BlockDeviceMappings:
         - DeviceName: "/dev/xvda"
           Ebs:
@@ -608,20 +583,12 @@ Resources:
       MixedInstancesPolicy:
         InstancesDistribution:
           OnDemandPercentageAboveBaseCapacity: !Ref MasterOnDemandPercentage
-          SpotInstancePools: 11
+          SpotInstancePools: !FindInMap [PoolSize, Size, !Ref MasterSize]
         LaunchTemplate:
           LaunchTemplateSpecification:
             LaunchTemplateId: !Ref MasterLaunchTemplate
             Version: !Sub ${MasterLaunchTemplate.LatestVersionNumber}
-          Overrides:
-            - InstanceType: m5a.large
-            - InstanceType: m5ad.large
-            - InstanceType: m5.large
-            - InstanceType: m5d.large
-            - InstanceType: r5.large
-            - InstanceType: r5d.large
-            - InstanceType: r5a.large
-            - InstanceType: r5ad.large
+          Overrides: !FindInMap [InstanceSizes, Master, !Ref MasterSize]
       MetricsCollection:
       - Granularity: 1Minute
         Metrics:
@@ -915,7 +882,7 @@ Resources:
     Properties:
       Code:
         S3Bucket: !Ref S3GethBucketName
-        S3Key: lambdaPackage-7.zip
+        S3Key: lambdaPackage-8.zip
       Description: "A lambda function to process Geth logs into metrics"
       Environment:
         Variables:
@@ -943,6 +910,7 @@ Resources:
     Properties:
       DisplayName: Block Age
   MasterBlockAgeAlarm:
+    Condition: NoRemoteRPCURL
     Type: AWS::CloudWatch::Alarm
     Properties:
       AlarmActions:
@@ -972,6 +940,7 @@ Resources:
       DisplayName: Block Number
   MasterBlockNumberAlarm:
     Type: AWS::CloudWatch::Alarm
+    Condition: NoRemoteRPCURL
     Properties:
       AlarmActions:
         - !Ref MasterBlockNumberSNS
@@ -991,6 +960,50 @@ Resources:
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
       Period: 30
       Statistic: SampleCount
+      Threshold: 1
+      TreatMissingData: breaching
+  MasterBlockNumberComparisonAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: HasRemoteRPCURL
+    Properties:
+      AlarmActions:
+        - !Ref MasterBlockNumberSNS
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+      AlarmDescription: "Alarms when the block number is missing"
+      ComparisonOperator: "GreaterThanThreshold"
+      EvaluationPeriods: 2
+      Metrics:
+        - Id: remote
+          MetricStat:
+            Metric:
+              MetricName: "RemoteBlockNumber"
+              Namespace: BlockData
+              Dimensions:
+                - Name: provider
+                  Value : !Ref RemoteRPCURL
+            Period: 60
+            Stat: Maximum
+          Label: Remote Block Number
+          ReturnData: false
+        - Id: cluster
+          MetricStat:
+            Metric:
+              MetricName: "number"
+              Namespace: BlockData
+              Dimensions:
+                - Name: clusterId
+                  Value : !Ref KafkaTopic
+            Period: 60
+            Stat: Maximum
+          Label: Cluster Block Number
+          ReturnData: false
+        - Id: delta
+          Expression: "(remote - cluster)"
+      OKActions:
+        - !Ref MasterBlockNumberSNS
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
       Threshold: 1
       TreatMissingData: breaching
 
@@ -1097,6 +1110,7 @@ Resources:
         IamInstanceProfile:
           Name: !Ref ReplicaNodeInstanceProfile
         KeyName: !If [HasKeyName, !Ref KeyName, !Ref 'AWS::NoValue']
+        CreditSpecification: !If [SmallReplica, {CpuCredits: standard}, !Ref 'AWS::NoValue']
         BlockDeviceMappings:
         - DeviceName: "/dev/xvda"
           Ebs:
@@ -1107,6 +1121,7 @@ Resources:
             VolumeSize: !If [ReplicaHDD, !GetAtt HDDSize.Value, !Ref DiskSize]
             VolumeType: !Ref ReplicaDiskType
             SnapshotId: !Ref SnapshotId
+        - !If [ SmallReplica, {DeviceName: "/dev/sdg", Ebs: {VolumeSize: 25, VolumeType: gp2}}, !Ref 'AWS::NoValue']
         UserData:
           "Fn::Base64":
             "Fn::Sub":
@@ -1153,7 +1168,7 @@ Resources:
 
                 printf "KafkaHostname=${KafkaHostname}\nKafkaTopic=${KafkaTopic}\nNetworkId=${NetworkId}\ninfraName=${InfrastructureStack}\nbaseInfraName=${BaseInfrastructure}\n" > /etc/systemd/system/ethcattle-vars
 
-                printf "[Unit]\nDescription=Ethereum go client replica\nAfter=syslog.target network.target\n[Service]\nUser=geth\nGroup=geth\nEnvironmentHOME=/var/lib/ethereum\nEnvironmentFile=/etc/systemd/system/ethcattle-vars\nType=simple\nLimitNOFILE=655360\nExecStart=/usr/bin/bash -c '/usr/bin/geth replica ${ReplicaExtraFlags} $OVERLAY_FLAG --kafka.broker=\$KafkaHostname --datadir=/var/lib/ethereum --kafka.topic=\$KafkaTopic --kafka.tx.topic=\$NetworkId-tx --replica.startup.age=45 --replica.offset.age 62 --replica.block.age 240 ${ReplicaHTTPFlag}'\nKillMode=process\nKillSignal=SIGINT\nTimeoutStopSec=90\nRestart=on-failure\nRestartSec=10s\n[Install]\nWantedBy=multi-user.target\n" > /etc/systemd/system/geth.service
+                printf "[Unit]\nDescription=Ethereum go client replica\nAfter=syslog.target network.target\n[Service]\nUser=geth\nGroup=geth\nEnvironmentHOME=/var/lib/ethereum\nEnvironmentFile=/etc/systemd/system/ethcattle-vars\nType=simple\nLimitNOFILE=655360\nExecStart=/usr/bin/bash -c '/usr/bin/geth replica ${ReplicaExtraFlags} $OVERLAY_FLAG --kafka.broker=\$KafkaHostname --datadir=/var/lib/ethereum --kafka.topic=\$KafkaTopic --kafka.tx.topic=\$NetworkId-tx --replica.startup.age=45 --replica.offset.age 62 ${ReplicaHTTPFlag}'\nKillMode=process\nKillSignal=SIGINT\nTimeoutStopSec=90\nRestart=on-failure\nRestartSec=10s\n[Install]\nWantedBy=multi-user.target\n" > /etc/systemd/system/geth.service
 
                 printf "[Unit]\nDescription=journald-cloudwatch-logs\nWants=basic.target\nAfter=basic.target network.target\n\n[Service]\nExecStart=/usr/local/bin/journald-cloudwatch-logs /usr/local/etc/journald-cloudwatch-logs.conf\nKillMode=process\nRestart=on-failure\nRestartSec=42s" > /etc/systemd/system/journald-cloudwatch-logs.service
 
@@ -1219,23 +1234,12 @@ Resources:
       MixedInstancesPolicy:
         InstancesDistribution:
           OnDemandPercentageAboveBaseCapacity: !Ref ReplicaOnDemandPercentage
-          SpotInstancePools: 11
+          SpotInstancePools: !FindInMap [PoolSize, Size, !Ref ReplicaSize]
         LaunchTemplate:
           LaunchTemplateSpecification:
             LaunchTemplateId: !Ref ReplicaLaunchTemplate
             Version: !Sub ${ReplicaLaunchTemplate.LatestVersionNumber}
-          Overrides:
-            # - InstanceType: m5a.large
-            - InstanceType: m5ad.large
-            # - InstanceType: m5.large
-            - InstanceType: m5d.large
-            # - InstanceType: c5.large
-            # - InstanceType: c5n.large
-            # - InstanceType: c5d.large
-            # - InstanceType: r5.large
-            - InstanceType: r5d.large
-            # - InstanceType: r5a.large
-            - InstanceType: r5ad.large
+          Overrides: !FindInMap [InstanceSizes, Replica, !Ref ReplicaSize]
       MinSize: 1
       MaxSize: !GetAtt MaxReplicas.Value
       DesiredCapacity: !Ref ReplicaTargetCapacity
@@ -1258,7 +1262,7 @@ Resources:
     Properties:
       Code:
         S3Bucket: !Ref S3GethBucketName
-        S3Key: lambdaPackage-7.zip
+        S3Key: lambdaPackage-8.zip
       Description: "A lambda function to process Geth logs into metrics"
       Environment:
         Variables:
@@ -1360,7 +1364,20 @@ Resources:
                   fi
                   exit poweroff
                 fi
-                VOLUME_ID=$(aws ec2 describe-volumes --filters Name=attachment.instance-id,Values="$(curl http://169.254.169.254/latest/meta-data/instance-id)" | jq '.Volumes[] | select(. | .Size > 50) | .VolumeId' -cr)
+                VOLUME_ID=$(aws ec2 describe-volumes --filters Name=attachment.instance-id,Values="$(curl http://169.254.169.254/latest/meta-data/instance-id)" | jq '.Volumes[] | select(. | .Attachments[0].Device == "/dev/sdf") | .VolumeId' -cr)
+
+                if [ "$VOLUME_ID" == "" ]
+                then
+                  if [ "${AggregatedNotifications}" != "" ]
+                  then
+                    aws sns publish --topic-arn=${AggregatedNotifications} --subject="${AWS::StackName} - Volume Identification Failed" --message="The snapshotting process for ${KafkaTopic} failed to identify the attached volume. Could not take a snapshot."
+                  fi
+                  if [ "${AlarmSNSTopic}" != "" ]
+                  then
+                    aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - Volume Identification Failed" --message="The snapshotting process for ${KafkaTopic} failed to identify the attached volume. Could not take a snapshot."
+                  fi
+                  exit poweroff
+                fi
 
                 SNAPSHOT_ID=`aws ec2 create-snapshot --volume-id $VOLUME_ID --tag-specification="ResourceType=snapshot,Tags=[{Key=cluster,Value=${KafkaTopic}},{Key=Name,Value=${KafkaTopic}-chaindata-$(date -Isecond -u)}]" | jq '.SnapshotId' -cr`
                 echo "Waiting for snapshot to complete"
@@ -1544,7 +1561,7 @@ Resources:
     Properties:
       Code:
         S3Bucket: !Ref S3GethBucketName
-        S3Key: lambdaPackage-7.zip
+        S3Key: lambdaPackage-8.zip
       Description: "Launch instances to snapshot chaindata"
       Environment:
         Variables:
@@ -1608,7 +1625,7 @@ Resources:
     Properties:
       Code:
         S3Bucket: !Ref S3GethBucketName
-        S3Key: lambdaPackage-7.zip
+        S3Key: lambdaPackage-8.zip
       Description: "Cleanup old chaindata snapshots"
       Environment:
         Variables:
@@ -1633,6 +1650,41 @@ Resources:
       Action: 'lambda:InvokeFunction'
       Principal: events.amazonaws.com
       SourceArn: !Sub ${SnapshotGCSchedulerRule.Arn}
+
+  RemoteMetricsLambdaFunction:
+    Condition: HasRemoteRPCURL
+    Type: "AWS::Lambda::Function"
+    Properties:
+      Code:
+        S3Bucket: !Ref S3GethBucketName
+        S3Key: lambdaPackage-8.zip
+      Description: "Collect metrics for remote RPC URLs"
+      Environment:
+        Variables:
+          CLUSTER_ID: !Ref KafkaTopic
+          RPC_URL: !Ref RemoteRPCURL
+      Handler: "remote_metrics.handler"
+      Role: !Sub ${LogMetricsRole.Arn}
+      Runtime: python3.7
+
+  RemoteMetricsSchedulerRule:
+    Condition: HasRemoteRPCURL
+    Type: AWS::Events::Rule
+    Properties:
+      Description: !Sub ""
+      ScheduleExpression: "rate(1 minute)"
+      Targets:
+        - Arn: !Sub ${RemoteMetricsLambdaFunction.Arn}
+          Id: !Sub "remote-metrics-${KafkaTopic}"
+
+  RemoteMetricsInvokePermission:
+    Condition: HasRemoteRPCURL
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Sub ${RemoteMetricsLambdaFunction.Arn}
+      Action: 'lambda:InvokeFunction'
+      Principal: events.amazonaws.com
+      SourceArn: !Sub ${RemoteMetricsSchedulerRule.Arn}
 
 
   CloudwatchDashboard:
