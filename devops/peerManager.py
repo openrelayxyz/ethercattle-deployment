@@ -91,6 +91,8 @@ def externalPeerManager(path):
     backend = IPCBackend(path)
     peers = {}
     while True:
+        block_number = backend.get("eth_blockNumber")["result"]
+        logger.info("blockNumber: %s" % int(block_number, 16))
         peer_list = backend.get("admin_peers")["result"]
         logger.info("peerCount: %s" % len(peer_list))
         try:

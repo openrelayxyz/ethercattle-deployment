@@ -882,7 +882,7 @@ Resources:
     Properties:
       Code:
         S3Bucket: !Ref S3GethBucketName
-        S3Key: lambdaPackage-8.zip
+        S3Key: lambdaPackage-9.zip
       Description: "A lambda function to process Geth logs into metrics"
       Environment:
         Variables:
@@ -1262,7 +1262,7 @@ Resources:
     Properties:
       Code:
         S3Bucket: !Ref S3GethBucketName
-        S3Key: lambdaPackage-8.zip
+        S3Key: lambdaPackage-9.zip
       Description: "A lambda function to process Geth logs into metrics"
       Environment:
         Variables:
@@ -1561,7 +1561,7 @@ Resources:
     Properties:
       Code:
         S3Bucket: !Ref S3GethBucketName
-        S3Key: lambdaPackage-8.zip
+        S3Key: lambdaPackage-9.zip
       Description: "Launch instances to snapshot chaindata"
       Environment:
         Variables:
@@ -1625,7 +1625,7 @@ Resources:
     Properties:
       Code:
         S3Bucket: !Ref S3GethBucketName
-        S3Key: lambdaPackage-8.zip
+        S3Key: lambdaPackage-9.zip
       Description: "Cleanup old chaindata snapshots"
       Environment:
         Variables:
@@ -1657,7 +1657,7 @@ Resources:
     Properties:
       Code:
         S3Bucket: !Ref S3GethBucketName
-        S3Key: lambdaPackage-8.zip
+        S3Key: lambdaPackage-9.zip
       Description: "Collect metrics for remote RPC URLs"
       Environment:
         Variables:
