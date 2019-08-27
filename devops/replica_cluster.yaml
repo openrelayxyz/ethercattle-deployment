@@ -27,6 +27,20 @@ Parameters:
     AllowedValues:
     - 'true'
     - 'false'
+  ReplicaServeGraphQL:
+    Description: Enable replica to serve GraphQL over HTTP
+    Type: String
+    Default: 'true'
+    AllowedValues:
+    - 'true'
+    - 'false'
+  ReplicaServeWebsockets:
+    Description: Enable replica to serve Websockets
+    Type: String
+    Default: 'true'
+    AllowedValues:
+    - 'true'
+    - 'false'
   S3GethBucketName:
     Default: ethercattle-binaries
     Type: String
@@ -146,6 +160,8 @@ Metadata:
           - ReplicaSize
           - ReplicaImageAMI
           - ReplicaServeHTTP
+          - ReplicaServeGraphQL
+          - ReplicaServeWebsockets
           - ReplicaExtraFlags
           - ReplicaDiskType
           - ReplicaTargetCapacity
@@ -160,6 +176,10 @@ Metadata:
         default: Replica AMI Image
       ReplicaServeHTTP:
         default: Enable Replica RPC HTTP server
+      ReplicaServeGraphQL:
+        default: Enable Replica GraphQL server
+      ReplicaServeWebsockets:
+        default: Enable Replica Websockets server
       ReplicaDiskType:
         default: Disk Type
       S3GethBucketName:
@@ -289,6 +309,12 @@ Conditions:
   HasSNSTopic: !Not [!Equals [ !Ref AlarmSNSTopic, "" ]]
   HasReplicaHTTP: !Equals
     - !Ref ReplicaServeHTTP
+    - 'true'
+  HasReplicaGraphQL: !Equals
+    - !Ref ReplicaServeGraphQL
+    - 'true'
+  HasReplicaWebsockets: !Equals
+    - !Ref ReplicaServeWebsockets
     - 'true'
   HasReplicaImageAMI: !Not [!Equals [ !Ref ReplicaImageAMI, "" ]]
   HasRemoteRPCURL: !Not [!Equals [!Ref RemoteRPCURL, ""]]
@@ -1031,6 +1057,14 @@ Resources:
         FromPort: '8545'
         ToPort: '8545'
         CidrIp: !Join ["", ["Fn::ImportValue": !Sub "${InfrastructureStack}-VpcBaseIp", ".0.0/16"]]
+      - IpProtocol: tcp
+        FromPort: '8546'
+        ToPort: '8546'
+        CidrIp: !Join ["", ["Fn::ImportValue": !Sub "${InfrastructureStack}-VpcBaseIp", ".0.0/16"]]
+      - IpProtocol: tcp
+        FromPort: '8547'
+        ToPort: '8547'
+        CidrIp: !Join ["", ["Fn::ImportValue": !Sub "${InfrastructureStack}-VpcBaseIp", ".0.0/16"]]
   ReplicaNodeRole:
     Type: "AWS::IAM::Role"
     Properties:
@@ -1168,7 +1202,7 @@ Resources:
 
                 printf "KafkaHostname=${KafkaHostname}\nKafkaTopic=${KafkaTopic}\nNetworkId=${NetworkId}\ninfraName=${InfrastructureStack}\nbaseInfraName=${BaseInfrastructure}\n" > /etc/systemd/system/ethcattle-vars
 
-                printf "[Unit]\nDescription=Ethereum go client replica\nAfter=syslog.target network.target\n[Service]\nUser=geth\nGroup=geth\nEnvironmentHOME=/var/lib/ethereum\nEnvironmentFile=/etc/systemd/system/ethcattle-vars\nType=simple\nLimitNOFILE=655360\nExecStart=/usr/bin/bash -c '/usr/bin/geth replica ${ReplicaExtraFlags} $OVERLAY_FLAG --kafka.broker=\$KafkaHostname --datadir=/var/lib/ethereum --kafka.topic=\$KafkaTopic --kafka.tx.topic=\$NetworkId-tx --replica.startup.age=45 --replica.offset.age 62 ${ReplicaHTTPFlag}'\nKillMode=process\nKillSignal=SIGINT\nTimeoutStopSec=90\nRestart=on-failure\nRestartSec=10s\n[Install]\nWantedBy=multi-user.target\n" > /etc/systemd/system/geth.service
+                printf "[Unit]\nDescription=Ethereum go client replica\nAfter=syslog.target network.target\n[Service]\nUser=geth\nGroup=geth\nEnvironmentHOME=/var/lib/ethereum\nEnvironmentFile=/etc/systemd/system/ethcattle-vars\nType=simple\nLimitNOFILE=655360\nExecStart=/usr/bin/bash -c '/usr/bin/geth replica ${ReplicaExtraFlags} $OVERLAY_FLAG --kafka.broker=\$KafkaHostname --datadir=/var/lib/ethereum --kafka.topic=\$KafkaTopic --kafka.tx.topic=\$NetworkId-tx --replica.startup.age=45 --replica.offset.age 62 ${ReplicaHTTPFlag} ${ReplicaGraphQLFlag} ${ReplicaWebsocketsFlag}'\nKillMode=process\nKillSignal=SIGINT\nTimeoutStopSec=90\nRestart=on-failure\nRestartSec=10s\n[Install]\nWantedBy=multi-user.target\n" > /etc/systemd/system/geth.service
 
                 printf "[Unit]\nDescription=journald-cloudwatch-logs\nWants=basic.target\nAfter=basic.target network.target\n\n[Service]\nExecStart=/usr/local/bin/journald-cloudwatch-logs /usr/local/etc/journald-cloudwatch-logs.conf\nKillMode=process\nRestart=on-failure\nRestartSec=42s" > /etc/systemd/system/journald-cloudwatch-logs.service
 
@@ -1218,6 +1252,10 @@ Resources:
                   "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
                 ReplicaHTTPFlag:
                     !If [HasReplicaHTTP, "--rpc --rpcaddr 0.0.0.0 --rpcport 8545", ""]
+                ReplicaGraphQLFlag:
+                    !If [HasReplicaGraphQL, "--graphql --graphql.addr 0.0.0.0 --graphql.port 8547 --graphql.vhosts '*'", ""]
+                ReplicaWebsocketsFlag:
+                    !If [HasReplicaWebsockets, "--ws --wsaddr 0.0.0.0 --wsport 8546", ""]
                 BaseInfrastructure:
                   "Fn::ImportValue": !Sub "${InfrastructureStack}-BaseInfrastructure"
 
