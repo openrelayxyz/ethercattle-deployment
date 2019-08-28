@@ -967,6 +967,24 @@ Resources:
       LoadBalancerArn: !Ref RPCALB
       Port: '80'
       Protocol: HTTP
+  GraphQLALBListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+      - Type: "forward"
+        TargetGroupArn: !Ref GraphQLALBGroup
+      LoadBalancerArn: !Ref RPCALB
+      Port: '81'
+      Protocol: HTTP
+  WebsocketsALBListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+      - Type: "forward"
+        TargetGroupArn: !Ref WebsocketsALBGroup
+      LoadBalancerArn: !Ref RPCALB
+      Port: '82'
+      Protocol: HTTP
   RPCALBGroup:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
     Properties:
@@ -974,6 +992,24 @@ Resources:
       UnhealthyThresholdCount: 4
       HealthyThresholdCount: 4
       Port: 8545
+      Protocol: HTTP
+      VpcId: !Ref VpcId
+  GraphQLALBGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckIntervalSeconds: 30
+      UnhealthyThresholdCount: 4
+      HealthyThresholdCount: 4
+      Port: 8547
+      Protocol: HTTP
+      VpcId: !Ref VpcId
+  WebsocketsALBGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckIntervalSeconds: 30
+      UnhealthyThresholdCount: 4
+      HealthyThresholdCount: 4
+      Port: 8546
       Protocol: HTTP
       VpcId: !Ref VpcId
 
@@ -1146,6 +1182,11 @@ Outputs:
     Value: !Sub ${RPCALB.LoadBalancerFullName}
     Export:
       Name: !Sub "${AWS::StackName}-RPCALBName"
+  ALBGroupList:
+    Description: A comma separated list of ALB Groups associated with this stack
+    Value: !Sub "${RPCALBGroup},${GraphQLALBGroup},${WebsocketsALBGroup}"
+    Export:
+      Name: !Sub "${AWS::StackName}-ALBGroupList"
   VpcId:
     Description: The VPC the stack is deployed to
     Value: !Ref VpcId

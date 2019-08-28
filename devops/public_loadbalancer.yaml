@@ -91,7 +91,7 @@ Resources:
             !Sub "${InfrastructureStack}-VpcId"
       Tags:
         - Key: Service
-          Value: !Sub "${ServiceName}.${HostedZone}"
+          Value: !Sub "${ServiceName}.rpc.${HostedZone}"
   RPCALBDNS:
     Type: "AWS::Route53::RecordSet"
     Properties:
@@ -100,11 +100,86 @@ Resources:
         EvaluateTargetHealth: False
         HostedZoneId: !GetAtt RPCALB.CanonicalHostedZoneID
       HostedZoneName: !Sub "${HostedZone}."
-      Name: !Sub "${ServiceName}.${HostedZone}"
+      Name: !Sub "${ServiceName}.rpc.${HostedZone}"
       Type: A
       Weight: 1
       SetIdentifier: !Sub "${AWS::StackName}"
-
+  GraphQLALBGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckIntervalSeconds: 30
+      UnhealthyThresholdCount: 2
+      HealthyThresholdCount: 5
+      Port: 8547
+      Protocol: HTTP
+      VpcId:
+        "Fn::ImportValue":
+            !Sub "${InfrastructureStack}-VpcId"
+      Tags:
+        - Key: Service
+          Value: !Sub "${ServiceName}.graphql.${HostedZone}"
+  GraphQLALBDNS:
+    Type: "AWS::Route53::RecordSet"
+    Properties:
+      AliasTarget:
+        DNSName: !GetAtt RPCALB.DNSName
+        EvaluateTargetHealth: False
+        HostedZoneId: !GetAtt RPCALB.CanonicalHostedZoneID
+      HostedZoneName: !Sub "${HostedZone}."
+      Name: !Sub "${ServiceName}.graphql.${HostedZone}"
+      Type: A
+      Weight: 1
+      SetIdentifier: !Sub "${AWS::StackName}"
+  GraphQLALBListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      Actions:
+      - Type: forward
+        TargetGroupArn: !Ref GraphALBGroup
+      Conditions:
+      - Field: host-header
+        Values:
+        - !Sub "${ServiceName}.graphql.${HostedZone}"
+      ListenerArn: !Ref RPCALBListener
+      Priority: 49998
+  WebsocketsALBGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckIntervalSeconds: 30
+      UnhealthyThresholdCount: 2
+      HealthyThresholdCount: 5
+      Port: 8546
+      Protocol: HTTP
+      VpcId:
+        "Fn::ImportValue":
+            !Sub "${InfrastructureStack}-VpcId"
+      Tags:
+        - Key: Service
+          Value: !Sub "${ServiceName}.ws.${HostedZone}"
+  WebsocketsALBDNS:
+    Type: "AWS::Route53::RecordSet"
+    Properties:
+      AliasTarget:
+        DNSName: !GetAtt RPCALB.DNSName
+        EvaluateTargetHealth: False
+        HostedZoneId: !GetAtt RPCALB.CanonicalHostedZoneID
+      HostedZoneName: !Sub "${HostedZone}."
+      Name: !Sub "${ServiceName}.ws.${HostedZone}"
+      Type: A
+      Weight: 1
+      SetIdentifier: !Sub "${AWS::StackName}"
+  WebsocketsALBListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      Actions:
+      - Type: forward
+        TargetGroupArn: !Ref WebsocketsALBGroup
+      Conditions:
+      - Field: host-header
+        Values:
+        - !Sub "${ServiceName}.ws.${HostedZone}"
+      ListenerArn: !Ref RPCALBListener
+      Priority: 49999
 
 Outputs:
   ClusterId:
@@ -128,6 +203,16 @@ Outputs:
     Value: !Sub ${RPCALB.LoadBalancerFullName}
     Export:
       Name: !Sub "${AWS::StackName}-RPCALBName"
+  ALBGroupList:
+    Description: A comma separated list of ALB Groups associated with this stack
+    Value: !Sub "${RPCALBGroup},${GraphQLALBGroup},${WebsocketsALBGroup}"
+    Export:
+      Name: !Sub "${AWS::StackName}-ALBGroupList"
+  WebsocketsALBGroup:
+    Description: The ARN of the alb target group for the Websockets load balancer
+    Value: !Ref WebsocketsALBGroup
+    Export:
+      Name: !Sub "${AWS::StackName}-WebsocketsALBGroup"
   RPCALBDNS:
     Description: The DNS of the RPC load balancer
     Value: !Sub ${RPCALB.DNSName}
