@@ -512,13 +512,13 @@ Resources:
                 chmod +x /usr/local/bin/peerManager.py
                 mkdir -p /var/lib/journald-cloudwatch-logs/
                 mkdir -p /var/lib/ethereum
-                mount -o barrier=0,data=writeback /dev/nvme1n1 /var/lib/ethereum
-                resize2fs /dev/nvme1n1
+                mount -o barrier=0,data=writeback /dev/sdf /var/lib/ethereum
+                resize2fs /dev/sdf
                 useradd -r geth
                 chown -R geth /var/lib/ethereum
                 rm -f /var/lib/ethereum/geth/nodekey
 
-                echo "/dev/nvme1n1  /var/lib/ethereum    ext4   defaults,noatime  1   1" >> /etc/fstab
+                echo "/dev/sdf  /var/lib/ethereum    ext4   defaults,noatime  1   1" >> /etc/fstab
 
                 yum install -y https://s3.amazonaws.com/amazoncloudwatch-agent/amazon_linux/$ARCH/latest/amazon-cloudwatch-agent.rpm nmap-ncat jq python-pip
 
@@ -882,7 +882,7 @@ Resources:
     Properties:
       Code:
         S3Bucket: !Ref S3GethBucketName
-        S3Key: lambdaPackage-9.zip
+        S3Key: lambdaPackage-10.zip
       Description: "A lambda function to process Geth logs into metrics"
       Environment:
         Variables:
@@ -1142,18 +1142,18 @@ Resources:
                 chmod +x /usr/local/bin/journald-cloudwatch-logs
                 mkdir -p /var/lib/journald-cloudwatch-logs/
                 mkdir -p /var/lib/ethereum
-                mount -o barrier=0,data=writeback /dev/nvme1n1 /var/lib/ethereum
+                mount -o barrier=0,data=writeback /dev/sdf /var/lib/ethereum
                 mkdir -p /var/lib/ethereum/overlay
-                resize2fs /dev/nvme1n1
+                resize2fs /dev/sdf
                 useradd -r geth
 
-                echo "/dev/nvme1n1  /var/lib/ethereum    ext4   barrier=0,data=writeback,noatime  1   1" >> /etc/fstab
+                echo "/dev/sdf  /var/lib/ethereum    ext4   barrier=0,data=writeback,noatime  1   1" >> /etc/fstab
 
-                if [ -e /dev/nvme2n1 ]
+                if [ -e /dev/sdg ]
                 then
-                  mkfs.ext4 /dev/nvme2n1
-                  mount -o barrier=0,data=writeback /dev/nvme2n1 /var/lib/ethereum/overlay
-                  echo "/dev/nvme2n1  /var/lib/ethereum/overlay    ext4   barrier=0,data=writeback,noatime  1   1" >> /etc/fstab
+                  mkfs.ext4 /dev/sdg
+                  mount -o barrier=0,data=writeback /dev/sdg /var/lib/ethereum/overlay
+                  echo "/dev/sdg  /var/lib/ethereum/overlay    ext4   barrier=0,data=writeback,noatime  1   1" >> /etc/fstab
                   OVERLAY_FLAG="--datadir.overlay=/var/lib/ethereum/overlay"
                 fi
                 chown -R geth /var/lib/ethereum
@@ -1262,7 +1262,7 @@ Resources:
     Properties:
       Code:
         S3Bucket: !Ref S3GethBucketName
-        S3Key: lambdaPackage-9.zip
+        S3Key: lambdaPackage-10.zip
       Description: "A lambda function to process Geth logs into metrics"
       Environment:
         Variables:
@@ -1561,7 +1561,7 @@ Resources:
     Properties:
       Code:
         S3Bucket: !Ref S3GethBucketName
-        S3Key: lambdaPackage-9.zip
+        S3Key: lambdaPackage-10.zip
       Description: "Launch instances to snapshot chaindata"
       Environment:
         Variables:
@@ -1625,7 +1625,7 @@ Resources:
     Properties:
       Code:
         S3Bucket: !Ref S3GethBucketName
-        S3Key: lambdaPackage-9.zip
+        S3Key: lambdaPackage-10.zip
       Description: "Cleanup old chaindata snapshots"
       Environment:
         Variables:
@@ -1657,7 +1657,7 @@ Resources:
     Properties:
       Code:
         S3Bucket: !Ref S3GethBucketName
-        S3Key: lambdaPackage-9.zip
+        S3Key: lambdaPackage-10.zip
       Description: "Collect metrics for remote RPC URLs"
       Environment:
         Variables:

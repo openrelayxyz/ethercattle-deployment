@@ -7,7 +7,8 @@ import datetime
 import os
 
 client = boto3.client('cloudwatch')
-BLOCK_NUM_RE = re.compile(r"blockNumber: (\d+)")
+MASTER_BLOCK_NUM_RE = re.compile(r"number=(\d+)")
+PEER_BLOCK_NUM_RE = re.compile(r"blockNumber: (\d+)")
 BLOCK_AGE_RE = re.compile(r"age=(\d+w)?(\d+d)?(\d+h)?(\d+m)?(\d+s)?")
 BLOCK_AGE_REP_RE = re.compile(r"blockAge=(\d+w)?(\d+d)?(\d+h)?(\d+m)?(\d+s)?")
 BLOCK_NUM_REP_RE = re.compile("num=(\d+)")
@@ -72,8 +73,12 @@ def masterHandler(event, context):
     for item in eventData["logEvents"]:
         metricData = []
         try:
-            appendMetric(item, metricData, "number",
-                         numberFromRe(item["message"], BLOCK_NUM_RE))
+            if "Imported new chain segment" in item["message"]:
+                appendMetric(item, metricData, "number",
+                             numberFromRe(item["message"], MASTER_BLOCK_NUM_RE))
+            else:
+                appendMetric(item, metricData, "number",
+                             numberFromRe(item["message"], PEER_BLOCK_NUM_RE))
         except ValueError:
             pass
         try:
