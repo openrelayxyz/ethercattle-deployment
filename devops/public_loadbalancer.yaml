@@ -13,9 +13,19 @@ Parameters:
   ServiceName:
     Type: String
     Description: The name for this service (DNS will be ServiceName.HostedZone)
+  AlarmSNSTopic:
+    Type: String
+    Description: An optional SNS topic to receive notifications from alarms
+
+Conditions:
+  HasSNSTopic: !Not [!Equals [ !Ref AlarmSNSTopic, "" ]]
 
 
 Resources:
+  AggregatedNotifications:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: Aggregated Notifications
   AlbSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
@@ -45,7 +55,7 @@ Resources:
           !Sub "${InfrastructureStack}-PublicC"
       LoadBalancerAttributes:
       - Key: idle_timeout.timeout_seconds
-        Value: '10'
+        Value: '30'
       SecurityGroups:
       - !Ref AlbSecurityGroup
       Tags:
@@ -135,7 +145,7 @@ Resources:
     Properties:
       Actions:
       - Type: forward
-        TargetGroupArn: !Ref GraphALBGroup
+        TargetGroupArn: !Ref GraphQLALBGroup
       Conditions:
       - Field: host-header
         Values:
@@ -181,6 +191,54 @@ Resources:
       ListenerArn: !Ref RPCALBListener
       Priority: 49999
 
+
+  UnHealthyHostCountAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmActions:
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+      AlarmDescription: "Alarms when more than 1/4 of replicas are unhealthy"
+      ComparisonOperator: "GreaterThanThreshold"
+      EvaluationPeriods: 1
+      Metrics:
+        - Id: healthy
+          MetricStat:
+            Metric:
+              MetricName: "HealthyHostCount"
+              Namespace: "AWS/ApplicationELB"
+              Dimensions:
+                - Name: TargetGroup
+                  Value : !Sub ${RPCALBGroup.TargetGroupFullName}
+                - Name: LoadBalancer
+                  Value : !Sub ${RPCALB.LoadBalancerFullName}
+            Period: 60
+            Stat: Maximum
+          Label: Healthy Hosts
+          ReturnData: false
+        - Id: unhealthy
+          MetricStat:
+            Metric:
+              MetricName: "UnHealthyHostCount"
+              Namespace: "AWS/ApplicationELB"
+              Dimensions:
+                - Name: TargetGroup
+                  Value : !Sub ${RPCALBGroup.TargetGroupFullName}
+                - Name: LoadBalancer
+                  Value : !Sub ${RPCALB.LoadBalancerFullName}
+            Period: 60
+            Stat: Maximum
+          Label: Unhealthy hosts
+          ReturnData: false
+        - Id: delta
+          Expression: "unhealthy - (healthy / 2)"
+      OKActions:
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+      Threshold: 0
+      TreatMissingData: breaching
+
+
 Outputs:
   ClusterId:
     Description: The cluster ID
@@ -208,6 +266,11 @@ Outputs:
     Value: !Sub "${RPCALBGroup},${GraphQLALBGroup},${WebsocketsALBGroup}"
     Export:
       Name: !Sub "${AWS::StackName}-ALBGroupList"
+  GraphQLALBGroup:
+    Description: The ARN of the alb target group for the GraphQL load balancer
+    Value: !Ref GraphQLALBGroup
+    Export:
+      Name: !Sub "${AWS::StackName}-GraphQLALBGroup"
   WebsocketsALBGroup:
     Description: The ARN of the alb target group for the Websockets load balancer
     Value: !Ref WebsocketsALBGroup

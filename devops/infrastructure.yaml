@@ -1187,6 +1187,16 @@ Outputs:
     Value: !Sub "${RPCALBGroup},${GraphQLALBGroup},${WebsocketsALBGroup}"
     Export:
       Name: !Sub "${AWS::StackName}-ALBGroupList"
+  GraphQLALBGroup:
+    Description: The ARN of the alb target group for the GraphQL load balancer
+    Value: !Ref GraphQLALBGroup
+    Export:
+      Name: !Sub "${AWS::StackName}-GraphQLALBGroup"
+  WebsocketsALBGroup:
+    Description: The ARN of the alb target group for the Websockets load balancer
+    Value: !Ref WebsocketsALBGroup
+    Export:
+      Name: !Sub "${AWS::StackName}-WebsocketsALBGroup"
   VpcId:
     Description: The VPC the stack is deployed to
     Value: !Ref VpcId

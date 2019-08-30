@@ -100,16 +100,9 @@ Parameters:
     Type: Number
     Default: 50
     Description: The percentage (0 - 100) of masters that should be on-demand instead of spot instances.
-  ExternalTargetGroup:
+  AlternateTargetGroup:
     Type: String
-    Description: Optional external target group to register replicas on
-  UseStandardTargetGroup:
-    Type: Number
-    AllowedValues:
-      - 0
-      - 1
-    Default: 1
-    Description: Whether or not to connect replicas to the load balancer from the infrastructure stack
+    Description: An alternative comma-separated list of target groups that replicas should be assigned to.
   NotificationEmail:
     Type: String
     Description: An optional e-mail address to receive notifications from alarms
@@ -123,6 +116,10 @@ Parameters:
   RemoteRPCURL:
     Type: String
     Description: A remote RPC URL to check against local block numbers. If provided, an alarm will go off if this cluster falls significantly behind the specified RPC endpoint. If not specified, an alarm will go off if no blocks are processed in a one minute period.
+  ReplicaExtraSecurityGroup:
+    Type: String
+    Description: An additional security to be assigned to Replicas. Leave this blank unless you need to add additional connectivity rules.
+
 
 
 Metadata:
@@ -132,8 +129,7 @@ Metadata:
           default: Infrastructure
         Parameters:
           - InfrastructureStack
-          - ExternalTargetGroup
-          - UseStandardTargetGroup
+          - AlternateTargetGroup
           - AlarmSNSTopic
           - NotificationEmail
           - KeyName
@@ -167,6 +163,7 @@ Metadata:
           - ReplicaTargetCapacity
           - ReplicaOnDemandPercentage
           - SnapshotValidationThreshold
+          - ReplicaExtraSecurityGroup
     ParameterLabels:
       MasterSize:
         default: Master Size
@@ -206,10 +203,10 @@ Metadata:
         default: Target Capacity
       ReplicaOnDemandPercentage:
         default: On-Demand Percentage
-      ExternalTargetGroup:
-        default: External Target Group
-      UseStandardTargetGroup:
-        default: Use Standard Target Group
+      ReplicaExtraSecurityGroup:
+        default: Replica Extra Security Group
+      AlternateTargetGroup:
+        default: Alternate Target Group
       NotificationEmail:
         default: Notification Email Address
       AlarmSNSTopic:
@@ -293,8 +290,7 @@ Mappings:
 
 Conditions:
   HasKeyName: !Not [!Equals [!Ref KeyName, '']]
-  UseSTG: !Equals [ !Ref UseStandardTargetGroup, 1]
-  HasETG: !Not [!Equals [!Ref ExternalTargetGroup, '']]
+  HasATG: !Not [!Equals [!Ref AlternateTargetGroup, '']]
   ReplicaHDD: !Or [!Equals [ !Ref ReplicaDiskType, "st1"], !Equals [ !Ref ReplicaDiskType, "sc1"]]
   SmallDisk: !Or [
       !Equals [ !Ref DiskSize, "75" ],
@@ -319,6 +315,7 @@ Conditions:
   HasReplicaImageAMI: !Not [!Equals [ !Ref ReplicaImageAMI, "" ]]
   HasRemoteRPCURL: !Not [!Equals [!Ref RemoteRPCURL, ""]]
   NoRemoteRPCURL: !Equals [ !Ref RemoteRPCURL, ""]
+  HasExtraSecurityGroup: !Not [!Equals [ !Ref ReplicaExtraSecurityGroup, "" ]]
   SmallMaster: !Equals [ !Ref MasterSize, "small"]
   SmallReplica: !Equals [ !Ref ReplicaSize, "small"]
 
@@ -580,7 +577,7 @@ Resources:
                 systemctl start geth-peer-data.service
 
                 export AWS_DEFAULT_REGION=${AWS::Region}
-                VOLUME_ID=$(aws ec2 describe-volumes --filters Name=attachment.instance-id,Values="$(curl http://169.254.169.254/latest/meta-data/instance-id)" | jq '.Volumes[] | select(. | .Size > 50) | .VolumeId' -cr)
+                VOLUME_ID=$(aws ec2 describe-volumes --filters Name=attachment.instance-id,Values="$(curl http://169.254.169.254/latest/meta-data/instance-id)" | jq '.Volumes[] | select(. | .Attachments[0].Device == "/dev/sdf") | .VolumeId' -cr)
                 sleep 1800 && aws ec2 modify-volume --volume-id $VOLUME_ID --volume-type gp2 &
 
 
@@ -1141,6 +1138,7 @@ Resources:
                 Value: !Sub "${KafkaTopic}-Replica"
         SecurityGroupIds:
           - !Sub ${ReplicaNodeSecurityGroup.GroupId}
+          - !If [HasExtraSecurityGroup, !Ref ReplicaExtraSecurityGroup, !Ref 'AWS::NoValue']
         IamInstanceProfile:
           Name: !Ref ReplicaNodeInstanceProfile
         KeyName: !If [HasKeyName, !Ref KeyName, !Ref 'AWS::NoValue']
@@ -1202,7 +1200,7 @@ Resources:
 
                 printf "KafkaHostname=${KafkaHostname}\nKafkaTopic=${KafkaTopic}\nNetworkId=${NetworkId}\ninfraName=${InfrastructureStack}\nbaseInfraName=${BaseInfrastructure}\n" > /etc/systemd/system/ethcattle-vars
 
-                printf "[Unit]\nDescription=Ethereum go client replica\nAfter=syslog.target network.target\n[Service]\nUser=geth\nGroup=geth\nEnvironmentHOME=/var/lib/ethereum\nEnvironmentFile=/etc/systemd/system/ethcattle-vars\nType=simple\nLimitNOFILE=655360\nExecStart=/usr/bin/bash -c '/usr/bin/geth replica ${ReplicaExtraFlags} $OVERLAY_FLAG --kafka.broker=\$KafkaHostname --datadir=/var/lib/ethereum --kafka.topic=\$KafkaTopic --kafka.tx.topic=\$NetworkId-tx --replica.startup.age=45 --replica.offset.age 62 ${ReplicaHTTPFlag} ${ReplicaGraphQLFlag} ${ReplicaWebsocketsFlag}'\nKillMode=process\nKillSignal=SIGINT\nTimeoutStopSec=90\nRestart=on-failure\nRestartSec=10s\n[Install]\nWantedBy=multi-user.target\n" > /etc/systemd/system/geth.service
+                printf "[Unit]\nDescription=Ethereum go client replica\nAfter=syslog.target network.target\n[Service]\nUser=geth\nGroup=geth\nEnvironment=HOME=/var/lib/ethereum\nEnvironmentFile=/etc/systemd/system/ethcattle-vars\nType=simple\nLimitNOFILE=655360\nExecStart=/usr/bin/bash -c '/usr/bin/geth replica ${ReplicaExtraFlags} $OVERLAY_FLAG --kafka.broker=\$KafkaHostname --datadir=/var/lib/ethereum --kafka.topic=\$KafkaTopic --kafka.tx.topic=\$NetworkId-tx --replica.startup.age=45 --replica.offset.age 62 ${ReplicaHTTPFlag} ${ReplicaGraphQLFlag} ${ReplicaWebsocketsFlag}'\nKillMode=process\nKillSignal=SIGINT\nTimeoutStopSec=90\nRestart=on-failure\nRestartSec=10s\n[Install]\nWantedBy=multi-user.target\n" > /etc/systemd/system/geth.service
 
                 printf "[Unit]\nDescription=journald-cloudwatch-logs\nWants=basic.target\nAfter=basic.target network.target\n\n[Service]\nExecStart=/usr/local/bin/journald-cloudwatch-logs /usr/local/etc/journald-cloudwatch-logs.conf\nKillMode=process\nRestart=on-failure\nRestartSec=42s" > /etc/systemd/system/journald-cloudwatch-logs.service
 
@@ -1253,7 +1251,8 @@ Resources:
                 ReplicaHTTPFlag:
                     !If [HasReplicaHTTP, "--rpc --rpcaddr 0.0.0.0 --rpcport 8545", ""]
                 ReplicaGraphQLFlag:
-                    !If [HasReplicaGraphQL, "--graphql --graphql.addr 0.0.0.0 --graphql.port 8547 --graphql.vhosts '*'", ""]
+                    # Wow that's a lot of escaping!
+                    !If [HasReplicaGraphQL, "--graphql --graphql.addr 0.0.0.0 --graphql.port 8547 --graphql.vhosts \\\\\\'*\\\\\\'", ""]
                 ReplicaWebsocketsFlag:
                     !If [HasReplicaWebsockets, "--ws --wsaddr 0.0.0.0 --wsport 8546", ""]
                 BaseInfrastructure:
@@ -1282,9 +1281,7 @@ Resources:
       MaxSize: !GetAtt MaxReplicas.Value
       DesiredCapacity: !Ref ReplicaTargetCapacity
       HealthCheckType: EC2
-      TargetGroupARNs:
-        - !If [UseSTG, {"Fn::ImportValue": !Sub "${InfrastructureStack}-RPCALBGroup"}, !Ref 'AWS::NoValue']
-        - !If [HasETG, !Ref ExternalTargetGroup, !Ref 'AWS::NoValue']
+      TargetGroupARNs: !Split [ ",", !If [HasATG, !Ref AlternateTargetGroup, {"Fn::ImportValue": !Sub "${InfrastructureStack}-ALBGroupList"}]]
       MetricsCollection:
       - Granularity: 1Minute
         Metrics:

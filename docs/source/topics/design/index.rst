@@ -1,5 +1,5 @@
 ################
-Techincal Design
+Technical Design
 ################
 
 .. include::    ./intro.rst
