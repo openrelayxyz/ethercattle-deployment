@@ -17,6 +17,10 @@ Parameters:
   AlarmSNSTopic:
     Type: String
     Description: An optional SNS topic to receive notifications from alarms
+  GraphQLPort:
+    Type: Number
+    Default: 8547
+    Description: The port to connect to GraphQL on Replicas
 
 Conditions:
   HasSNSTopic: !Not [!Equals [ !Ref AlarmSNSTopic, "" ]]
@@ -75,7 +79,7 @@ Resources:
       HealthCheckIntervalSeconds: 30
       UnhealthyThresholdCount: 2
       HealthyThresholdCount: 5
-      Port: 8547
+      Port: !Ref GraphQLPort
       Protocol: HTTP
       VpcId:
         "Fn::ImportValue":
