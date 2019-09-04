@@ -46,7 +46,7 @@ Parameters:
     Type: String
     Description: The bucket containing EtherCattle Geth Binaries
   ECGethVersion:
-    Default: v1.9.0-2
+    Default: v1.9.2-0
     Type: String
     Description: The Ether Cattle Geth Version to deploys
   InfrastructureStack:
