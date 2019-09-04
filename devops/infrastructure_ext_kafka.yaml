@@ -305,6 +305,42 @@ Resources:
       Port: 8545
       Protocol: HTTP
       VpcId: !Ref VpcId
+  GraphQLALBListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+      - Type: "forward"
+        TargetGroupArn: !Ref GraphQLALBGroup
+      LoadBalancerArn: !Ref RPCALB
+      Port: '81'
+      Protocol: HTTP
+  GraphQLALBGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckIntervalSeconds: 30
+      UnhealthyThresholdCount: 4
+      HealthyThresholdCount: 4
+      Port: 8547
+      Protocol: HTTP
+      VpcId: !Ref VpcId
+  WebsocketsALBListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+      - Type: "forward"
+        TargetGroupArn: !Ref WebsocketsALBGroup
+      LoadBalancerArn: !Ref RPCALB
+      Port: '82'
+      Protocol: HTTP
+  WebsocketsALBGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckIntervalSeconds: 30
+      UnhealthyThresholdCount: 4
+      HealthyThresholdCount: 4
+      Port: 8546
+      Protocol: HTTP
+      VpcId: !Ref VpcId
 
   AggregatedNotifications:
     Type: AWS::SNS::Topic
@@ -339,6 +375,21 @@ Outputs:
     Value: !Sub ${RPCALB.LoadBalancerFullName}
     Export:
       Name: !Sub "${AWS::StackName}-RPCALBName"
+  ALBGroupList:
+    Description: A comma separated list of ALB Groups associated with this stack
+    Value: !Sub "${RPCALBGroup},${GraphQLALBGroup},${WebsocketsALBGroup}"
+    Export:
+      Name: !Sub "${AWS::StackName}-ALBGroupList"
+  GraphQLALBGroup:
+    Description: The ARN of the alb target group for the GraphQL load balancer
+    Value: !Ref GraphQLALBGroup
+    Export:
+      Name: !Sub "${AWS::StackName}-GraphQLALBGroup"
+  WebsocketsALBGroup:
+    Description: The ARN of the alb target group for the Websockets load balancer
+    Value: !Ref WebsocketsALBGroup
+    Export:
+      Name: !Sub "${AWS::StackName}-WebsocketsALBGroup"
   RPCALBDNS:
     Description: The DNS of the RPC load balancer
     Value: !Sub ${RPCALB.DNSName}
@@ -404,3 +455,8 @@ Outputs:
     Value: !Ref PrivateC
     Export:
       Name: !Sub "${AWS::StackName}-PrivateC"
+  BaseInfrastructure:
+    Description: The base infrastructure stack identifier
+    Value: !Sub ${AWS::StackName}
+    Export:
+      Name: !Sub "${AWS::StackName}-BaseInfrastructure"
