@@ -58,6 +58,13 @@ Parameters:
   AlarmSNSTopic:
     Type: String
     Description: An optional SNS topic to receive notifications from alarms
+  WSHealthCheckPort:
+    Type: Number
+    MaxValue: 65535
+    MinValue: 1
+    Default: 8545
+    Description: Port to use for websocket health checks. AWS load balancers don't handle health checks on websockets, so we need to tie this to a different port.
+
 
 
 Metadata:
@@ -83,6 +90,7 @@ Metadata:
           - PrivateAOctet
           - PrivateBOctet
           - PrivateCOctet
+          - WSHealthCheckPort
       - Label:
           default: Notifications
         Parameters:
@@ -117,6 +125,8 @@ Metadata:
         default: Notification Email Address
       AlarmSNSTopic:
         default: SNS Topic for Alarms
+      WSHealthCheckPort:
+        default: Websocket Healthcheck Port
 
 Mappings:
   RegionMap:
@@ -320,6 +330,8 @@ Resources:
       HealthCheckIntervalSeconds: 30
       UnhealthyThresholdCount: 4
       HealthyThresholdCount: 4
+      Matcher:
+        HttpCode: "200,403"
       Port: 8547
       Protocol: HTTP
       VpcId: !Ref VpcId
@@ -338,6 +350,7 @@ Resources:
       HealthCheckIntervalSeconds: 30
       UnhealthyThresholdCount: 4
       HealthyThresholdCount: 4
+      HealthCheckPort: !Ref WSHealthCheckPort
       Port: 8546
       Protocol: HTTP
       VpcId: !Ref VpcId
