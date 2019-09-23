@@ -78,6 +78,14 @@ Parameters:
   MasterExtraFlags:
     Type: String
     Description: Extra flags for the Geth master (mainly for running other than mainnet)
+  MasterMemoryThresholdLong:
+    Type: Number
+    Default: 75
+    Description: The amount of memory which should trigger alarms if used for > 30 minutes
+  MasterMemoryThresholdHigh:
+    Type: Number
+    Default: 85
+    Description: The amount of memory which should trigger alarms if exceeded for > 1 minute
   ReplicaExtraFlags:
     Type: String
     Description: Extra flags for the Geth replica (mainly for running other than mainnet)
@@ -150,6 +158,8 @@ Metadata:
           - MasterOnDemandPercentage
           - MasterExtraFlags
           - DiskSize
+          - MasterMemoryThresholdLong
+          - MasterMemoryThresholdHigh
       - Label:
           default: Replica
         Parameters:
@@ -645,28 +655,54 @@ Resources:
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
       AlarmDescription: "Alarms when the overlay data directory > 95% full"
       ComparisonOperator: "GreaterThanThreshold"
-      Dimensions:
-        - Name: AutoScalingGroupName
-          Value : !Ref ReplicaAutoScalingGroup
-        - Name: device
-          Value : "nvme2n1"
-        - Name: fstype
-          Value : "ext4"
-        - Name: path
-          Value : "/var/lib/ethereum/overlay"
+      Metrics:
+        - Id: nvme
+          MetricStat:
+            Metric:
+              MetricName: "disk_used_percent"
+              Namespace: CWAgent
+              Dimensions:
+                - Name: AutoScalingGroupName
+                  Value : !Ref ReplicaAutoScalingGroup
+                - Name: device
+                  Value : "nvme2n1"
+                - Name: fstype
+                  Value : "ext4"
+                - Name: path
+                  Value : "/var/lib/ethereum/overlay"
+            Period: 60
+            Stat: Maximum
+          Label: NVME Overlay Volume Disk Usage
+          ReturnData: false
+        - Id: ebs
+          MetricStat:
+            Metric:
+              MetricName: "disk_used_percent"
+              Namespace: CWAgent
+              Dimensions:
+                - Name: AutoScalingGroupName
+                  Value : !Ref ReplicaAutoScalingGroup
+                - Name: device
+                  Value : "nvme1n1"
+                - Name: fstype
+                  Value : "ext4"
+                - Name: path
+                  Value : "/var/lib/ethereum/overlay"
+            Period: 60
+            Stat: Maximum
+          Label: EBS Overlay Disk Usage
+          ReturnData: false
+        - Id: delta
+          Expression: "(ebs + nvme)"
       InsufficientDataActions:
         - !Ref ReplicaOverlayDiskSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
       EvaluationPeriods: 5
-      MetricName: "disk_used_percent"
-      Namespace: CWAgent
       OKActions:
         - !Ref ReplicaOverlayDiskSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
-      Period: 60
-      Statistic: Maximum
       Threshold: 95
       TreatMissingData: missing
   MasterDiskSNS:
@@ -717,7 +753,7 @@ Resources:
         - !Ref MasterMemSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
-      AlarmDescription: "Alarms when the master RAM > 75% for 30 minutes"
+      AlarmDescription: !Sub "Alarms when the master RAM > ${MasterMemoryThresholdLong} for 30 minutes"
       ComparisonOperator: "GreaterThanThreshold"
       Dimensions:
         - Name: AutoScalingGroupName
@@ -736,7 +772,7 @@ Resources:
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
       Period: 60
       Statistic: Maximum
-      Threshold: 75
+      Threshold: !Ref MasterMemoryThresholdLong
       TreatMissingData: missing
   MasterMemAlarmHigh:
     Type: AWS::CloudWatch::Alarm
@@ -745,7 +781,7 @@ Resources:
         - !Ref MasterMemSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
-      AlarmDescription: "Alarms when the master RAM > 85 for 5 minutes%"
+      AlarmDescription: !Sub "Alarms when the master RAM > ${MasterMemoryThresholdHigh} for 5 minutes%"
       ComparisonOperator: "GreaterThanThreshold"
       Dimensions:
         - Name: AutoScalingGroupName
@@ -763,7 +799,7 @@ Resources:
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
       Period: 60
       Statistic: Maximum
-      Threshold: 85
+      Threshold: !Ref MasterMemoryThresholdHigh
       TreatMissingData: missing
   MasterCPUSNS:
     Type: AWS::SNS::Topic
