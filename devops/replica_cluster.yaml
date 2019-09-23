@@ -1188,6 +1188,19 @@ Resources:
                   echo "/dev/sdg  /var/lib/ethereum/overlay    ext4   barrier=0,data=writeback,noatime  1   1" >> /etc/fstab
                   OVERLAY_FLAG="--datadir.overlay=/var/lib/ethereum/overlay"
                 fi
+                ignore="$(readlink -f /dev/sd*) $(readlink -f /dev/xvd*)"
+                cutignore="$(for x in $ignore ; do echo $x | cut -c -12; done | uniq)"
+                devices="$(ls /dev/nvme* | grep -E 'n1$')"
+                cutdevices="$(for x in $devices ; do echo $x | cut -c -12; done | uniq)"
+                localnvme=$(for d in $cutdevices; do if ! $(echo "$cutignore"| grep -q $d) ; then echo $d; fi ; done)
+                if [ ! -z "$localnvme" ]
+                then
+                  mkfs.ext4 $localnvme
+                  mount -o barrier=0,data=writeback $localnvme /var/lib/ethereum/overlay
+                  echo "$localnvme  /var/lib/ethereum/overlay    ext4   barrier=0,data=writeback,noatime  1   1" >> /etc/fstab
+                  OVERLAY_FLAG="--datadir.overlay=/var/lib/ethereum/overlay"
+                fi
+
                 chown -R geth /var/lib/ethereum
 
                 yum install -y https://s3.amazonaws.com/amazoncloudwatch-agent/amazon_linux/$ARCH/latest/amazon-cloudwatch-agent.rpm || true
