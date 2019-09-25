@@ -1,5 +1,6 @@
 import boto3
 import os
+import datetime
 
 ec2 = boto3.resource('ec2')
 
@@ -13,4 +14,11 @@ def handler(event, context):
             "Version": os.environ.get("LAUNCH_TEMPLATE_VERSION"),
         },
         SubnetId=os.environ.get("SUBNET_ID"),
+        InstanceMarketOptions={
+            'MarketType': 'spot',
+            'SpotOptions': {
+                'SpotInstanceType': 'one-time',
+                'ValidUntil': datetime.datetime.utcnow() + datetime.timedelta(days=1),
+            }
+        }
     )
