@@ -18,7 +18,6 @@ def handler(event, context):
             'MarketType': 'spot',
             'SpotOptions': {
                 'SpotInstanceType': 'one-time',
-                'ValidUntil': datetime.datetime.utcnow() + datetime.timedelta(days=1),
             }
         }
     )

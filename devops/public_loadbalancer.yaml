@@ -7,6 +7,9 @@ Parameters:
   CertificateArn:
     Type: String
     Description: The certificate ARN for the public load balancer
+  SNICertificateArns:
+    Type: String
+    Description: A comma separated list of certificate ARNs for the public loadbalancer
   HostedZone:
     Type: String
     Description: Route53 hosted zone for DNS
@@ -29,9 +32,22 @@ Parameters:
 
 Conditions:
   HasSNSTopic: !Not [!Equals [ !Ref AlarmSNSTopic, "" ]]
+  HasSNI: !Not [ !Equals [ !Ref SNICertificateArns, ""  ]]
 
 
 Resources:
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal: {Service: [lambda.amazonaws.com]}
+          Action: ['sts:AssumeRole']
+      Path: "/"
+      ManagedPolicyArns:
+      - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
   AggregatedNotifications:
     Type: AWS::SNS::Topic
     Properties:
@@ -83,6 +99,29 @@ Resources:
         - CertificateArn: !Ref CertificateArn
       Port: '443'
       Protocol: HTTPS
+  CertificateARNSplitter:
+    Type: AWS::Lambda::Function
+    Properties:
+      Handler: index.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Code:
+        ZipFile: !Sub |
+          var response = require('cfn-response');
+          exports.handler = function(event, context) {
+            response.send(event, context, response.SUCCESS, {Value: event.ResourceProperties.CommaSeparatedArns.split(",").map(function(x) { return {"CertificateArn": x} })});
+          };
+      Runtime: nodejs8.10
+  CertificateArnList:
+    Type: Custom::CertificateARNSplitter
+    Properties:
+      ServiceToken: !GetAtt CertificateARNSplitter.Arn
+      CommaSeparatedArns: !Ref SNICertificateArns
+  RPCALBListenerCertificates:
+    Type: AWS::ElasticLoadBalancingV2::ListenerCertificate
+    Condition: HasSNI
+    Properties:
+      Certificates: !GetAtt CertificateArnList.Value
+      ListenerArn: !Ref RPCALBListener
   RPCALBHTTPListener:
     Type: AWS::ElasticLoadBalancingV2::Listener
     Properties:
@@ -124,6 +163,18 @@ Resources:
       Type: A
       Weight: 1
       SetIdentifier: !Sub "${AWS::StackName}"
+  RPCALBWildcardDNS:
+    Type: "AWS::Route53::RecordSet"
+    Properties:
+      AliasTarget:
+        DNSName: !GetAtt RPCALB.DNSName
+        EvaluateTargetHealth: False
+        HostedZoneId: !GetAtt RPCALB.CanonicalHostedZoneID
+      HostedZoneName: !Sub "${HostedZone}."
+      Name: !Sub "*.${ServiceName}.rpc.${HostedZone}"
+      Type: A
+      Weight: 1
+      SetIdentifier: !Sub "${AWS::StackName}"
   GraphQLALBGroup:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
     Properties:
@@ -149,6 +200,18 @@ Resources:
         HostedZoneId: !GetAtt RPCALB.CanonicalHostedZoneID
       HostedZoneName: !Sub "${HostedZone}."
       Name: !Sub "${ServiceName}.graphql.${HostedZone}"
+      Type: A
+      Weight: 1
+      SetIdentifier: !Sub "${AWS::StackName}"
+  GraphQLALBWildcardDNS:
+    Type: "AWS::Route53::RecordSet"
+    Properties:
+      AliasTarget:
+        DNSName: !GetAtt RPCALB.DNSName
+        EvaluateTargetHealth: False
+        HostedZoneId: !GetAtt RPCALB.CanonicalHostedZoneID
+      HostedZoneName: !Sub "${HostedZone}."
+      Name: !Sub "*.${ServiceName}.graphql.${HostedZone}"
       Type: A
       Weight: 1
       SetIdentifier: !Sub "${AWS::StackName}"
@@ -188,6 +251,18 @@ Resources:
         HostedZoneId: !GetAtt RPCALB.CanonicalHostedZoneID
       HostedZoneName: !Sub "${HostedZone}."
       Name: !Sub "${ServiceName}.ws.${HostedZone}"
+      Type: A
+      Weight: 1
+      SetIdentifier: !Sub "${AWS::StackName}"
+  WebsocketsALBWildcardDNS:
+    Type: "AWS::Route53::RecordSet"
+    Properties:
+      AliasTarget:
+        DNSName: !GetAtt RPCALB.DNSName
+        EvaluateTargetHealth: False
+        HostedZoneId: !GetAtt RPCALB.CanonicalHostedZoneID
+      HostedZoneName: !Sub "${HostedZone}."
+      Name: !Sub "*.${ServiceName}.ws.${HostedZone}"
       Type: A
       Weight: 1
       SetIdentifier: !Sub "${AWS::StackName}"

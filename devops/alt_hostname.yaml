@@ -47,7 +47,7 @@ Resources:
       Conditions:
       - Field: host-header
         Values:
-        - !Sub "${ServiceName}.rpc.${HostedZone}"
+        - !Sub "*${ServiceName}.rpc.${HostedZone}"
       ListenerArn:
         "Fn::ImportValue":
           !Sub "${InfrastructureStack}-RPCALBListener"
@@ -77,6 +77,20 @@ Resources:
           "Fn::ImportValue": !Sub "${InfrastructureStack}-RPCALBCanonicalHostedZoneId"
       HostedZoneName: !Sub "${HostedZone}."
       Name: !Sub "${ServiceName}.rpc.${HostedZone}"
+      Type: A
+      Weight: 1
+      SetIdentifier: !Sub "${AWS::StackName}"
+  RPCALBWildcardDNS:
+    Type: "AWS::Route53::RecordSet"
+    Properties:
+      AliasTarget:
+        DNSName:
+          "Fn::ImportValue": !Sub "${InfrastructureStack}-RPCALBDNS"
+        EvaluateTargetHealth: False
+        HostedZoneId:
+          "Fn::ImportValue": !Sub "${InfrastructureStack}-RPCALBCanonicalHostedZoneId"
+      HostedZoneName: !Sub "${HostedZone}."
+      Name: !Sub "*.${ServiceName}.rpc.${HostedZone}"
       Type: A
       Weight: 1
       SetIdentifier: !Sub "${AWS::StackName}"
@@ -110,6 +124,20 @@ Resources:
       Type: A
       Weight: 1
       SetIdentifier: !Sub "${AWS::StackName}"
+  GraphQLALBWildcardDNS:
+    Type: "AWS::Route53::RecordSet"
+    Properties:
+      AliasTarget:
+        DNSName:
+          "Fn::ImportValue": !Sub "${InfrastructureStack}-RPCALBDNS"
+        EvaluateTargetHealth: False
+        HostedZoneId:
+          "Fn::ImportValue": !Sub "${InfrastructureStack}-RPCALBCanonicalHostedZoneId"
+      HostedZoneName: !Sub "${HostedZone}."
+      Name: !Sub "*.${ServiceName}.graphql.${HostedZone}"
+      Type: A
+      Weight: 1
+      SetIdentifier: !Sub "${AWS::StackName}"
   GraphQLALBListenerRule:
     Type: AWS::ElasticLoadBalancingV2::ListenerRule
     Properties:
@@ -119,7 +147,7 @@ Resources:
       Conditions:
       - Field: host-header
         Values:
-        - !Sub "${ServiceName}.graphql.${HostedZone}"
+        - !Sub "*${ServiceName}.graphql.${HostedZone}"
       ListenerArn:
         "Fn::ImportValue": !Sub "${InfrastructureStack}-RPCALBListener"
       Priority: !Sub "30${Priority}"
@@ -152,6 +180,20 @@ Resources:
       Type: A
       Weight: 1
       SetIdentifier: !Sub "${AWS::StackName}"
+  WebsocketsALBWildcardDNS:
+    Type: "AWS::Route53::RecordSet"
+    Properties:
+      AliasTarget:
+        DNSName:
+          "Fn::ImportValue": !Sub "${InfrastructureStack}-RPCALBDNS"
+        EvaluateTargetHealth: False
+        HostedZoneId:
+          "Fn::ImportValue": !Sub "${InfrastructureStack}-RPCALBCanonicalHostedZoneId"
+      HostedZoneName: !Sub "${HostedZone}."
+      Name: !Sub "*.${ServiceName}.ws.${HostedZone}"
+      Type: A
+      Weight: 1
+      SetIdentifier: !Sub "${AWS::StackName}"
   WebsocketsALBListenerRule:
     Type: AWS::ElasticLoadBalancingV2::ListenerRule
     Properties:
@@ -161,7 +203,7 @@ Resources:
       Conditions:
       - Field: host-header
         Values:
-        - !Sub "${ServiceName}.ws.${HostedZone}"
+        - !Sub "*${ServiceName}.ws.${HostedZone}"
       ListenerArn:
         "Fn::ImportValue": !Sub "${InfrastructureStack}-RPCALBListener"
       Priority: !Sub "40${Priority}"
