@@ -224,7 +224,7 @@ Resources:
       Conditions:
       - Field: host-header
         Values:
-        - !Sub "${ServiceName}.graphql.${HostedZone}"
+        - !Sub "*${ServiceName}.graphql.${HostedZone}"
       ListenerArn: !Ref RPCALBListener
       Priority: 49998
   WebsocketsALBGroup:
@@ -275,7 +275,7 @@ Resources:
       Conditions:
       - Field: host-header
         Values:
-        - !Sub "${ServiceName}.ws.${HostedZone}"
+        - !Sub "*${ServiceName}.ws.${HostedZone}"
       ListenerArn: !Ref RPCALBListener
       Priority: 49999
 
