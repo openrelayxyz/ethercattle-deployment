@@ -563,7 +563,7 @@ Resources:
                 echo "5,20,35,50 * * * * /usr/bin/sh -c 'for x in \$(ls /dev/sd*) ; do echo resizing \$(readlink -f \$x) if needed; /usr/sbin/resize2fs \$(readlink -f \$x) ; done'" >> newcrontab
                 crontab newcrontab
 
-                printf "[Unit]\nDescription=Ethereum go client\nAfter=syslog.target network.target\n\n[Service]\nUser=geth\nGroup=geth\nEnvironment=HOME=/var/lib/ethereum\nType=simple\nExecStartPre=/usr/bin/geth replica ${ReplicaExtraFlags} --kafka.broker=${KafkaHostname} --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown\nExecStart=/usr/bin/geth ${MasterExtraFlags} --light.maxpeers 0 --maxpeers 25 --gcmode=archive --kafka.broker=${KafkaHostname} --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic}\nKillMode=process\nKillSignal=SIGINT\nTimeoutStartSec=86400\nTimeoutStopSec=90\nOnFailure=poweroff.target\n\n[Install]\nWantedBy=multi-user.target\n" > /etc/systemd/system/geth.service
+                printf "[Unit]\nDescription=Ethereum go client\nAfter=syslog.target network.target\nOnFailure=poweroff.target\n\n[Service]\nUser=geth\nGroup=geth\nEnvironment=HOME=/var/lib/ethereum\nType=simple\nExecStartPre=/usr/bin/geth replica ${ReplicaExtraFlags} --kafka.broker=${KafkaHostname} --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown\nExecStart=/usr/bin/geth ${MasterExtraFlags} --light.maxpeers 0 --maxpeers 25 --gcmode=archive --kafka.broker=${KafkaHostname} --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic}\nKillMode=process\nKillSignal=SIGINT\nTimeoutStartSec=86400\nTimeoutStopSec=90\n\n[Install]\nWantedBy=multi-user.target\n" > /etc/systemd/system/geth.service
 
                 printf "[Unit]\nDescription=Ethereum go client transaction relay\nAfter=syslog.target network.target geth\n\n[Service]\nUser=geth\nGroup=geth\nEnvironment=HOME=/var/lib/ethereum\nType=simple\nExecStart=/usr/bin/geth txrelay --kafka.broker=${KafkaHostname} --kafka.tx.topic=${NetworkId}-tx --kafka.tx.consumergroup=${KafkaTopic}-cg /var/lib/ethereum/geth.ipc\nKillMode=process\nKillSignal=SIGINT\nTimeoutStopSec=90\nRestart=on-failure\nRestartSec=10s\n\n[Install]\nWantedBy=multi-user.target\n" > /etc/systemd/system/geth-tx.service
 
@@ -613,6 +613,7 @@ Resources:
       MaxSize: 7
       DesiredCapacity: !Ref MasterCount
       HealthCheckType: EC2
+      HealthCheckGracePeriod: 1800
       MixedInstancesPolicy:
         InstancesDistribution:
           OnDemandPercentageAboveBaseCapacity: !Ref MasterOnDemandPercentage
@@ -1257,7 +1258,7 @@ Resources:
 
                 printf "KafkaHostname=${KafkaHostname}\nKafkaTopic=${KafkaTopic}\nNetworkId=${NetworkId}\ninfraName=${InfrastructureStack}\nbaseInfraName=${BaseInfrastructure}\nnetwork=${NetworkId}" > /etc/systemd/system/ethcattle-vars
 
-                printf "[Unit]\nDescription=Ethereum go client replica\nAfter=syslog.target network.target\n[Service]\nUser=geth\nGroup=geth\nEnvironment=HOME=/var/lib/ethereum\nEnvironmentFile=/etc/systemd/system/ethcattle-vars\nType=simple\nLimitNOFILE=655360\nExecStart=/usr/bin/bash -c '/usr/bin/geth replica ${ReplicaExtraFlags} $OVERLAY_FLAG --kafka.broker=\$KafkaHostname --datadir=/var/lib/ethereum --kafka.topic=\$KafkaTopic --kafka.tx.topic=\$NetworkId-tx --replica.startup.age=45 --replica.offset.age 62 ${ReplicaHTTPFlag} ${ReplicaGraphQLFlag} ${ReplicaWebsocketsFlag}'\nKillMode=process\nKillSignal=SIGINT\nTimeoutStopSec=90\nRestart=on-failure\nRestartSec=10s\n[Install]\nWantedBy=multi-user.target\n" > /etc/systemd/system/geth.service
+                printf "[Unit]\nDescription=Ethereum go client replica\nAfter=syslog.target network.target\nOnFailure=poweroff.target\n[Service]\nUser=geth\nGroup=geth\nEnvironment=HOME=/var/lib/ethereum\nEnvironmentFile=/etc/systemd/system/ethcattle-vars\nType=simple\nLimitNOFILE=655360\nExecStart=/usr/bin/bash -c '/usr/bin/geth replica ${ReplicaExtraFlags} $OVERLAY_FLAG --kafka.broker=\$KafkaHostname --datadir=/var/lib/ethereum --kafka.topic=\$KafkaTopic --kafka.tx.topic=\$NetworkId-tx --replica.startup.age=45 --replica.offset.age 62 ${ReplicaHTTPFlag} ${ReplicaGraphQLFlag} ${ReplicaWebsocketsFlag}'\nKillMode=process\nKillSignal=SIGINT\nTimeoutStopSec=90\nRestart=on-failure\nRestartSec=10s\n[Install]\nWantedBy=multi-user.target\n" > /etc/systemd/system/geth.service
 
                 printf "[Unit]\nDescription=journald-cloudwatch-logs\nWants=basic.target\nAfter=basic.target network.target\n\n[Service]\nExecStart=/usr/local/bin/journald-cloudwatch-logs /usr/local/etc/journald-cloudwatch-logs.conf\nKillMode=process\nRestart=on-failure\nRestartSec=42s" > /etc/systemd/system/journald-cloudwatch-logs.service
 
@@ -1341,6 +1342,7 @@ Resources:
       MaxSize: !GetAtt MaxReplicas.Value
       DesiredCapacity: !Ref ReplicaTargetCapacity
       HealthCheckType: EC2
+      HealthCheckGracePeriod: 1800
       TargetGroupARNs: !Split [ ",", !If [HasATG, !Ref AlternateTargetGroup, {"Fn::ImportValue": !Sub "${InfrastructureStack}-ALBGroupList"}]]
       MetricsCollection:
       - Granularity: 1Minute
