@@ -15,6 +15,7 @@ import socket
 import random
 import time
 import logging
+from six.moves.urllib.parse import unquote_plus
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -56,9 +57,9 @@ class IPCBackend(object):
         return res
 
 
-def trustedPeerManager(path, brokers, topic):
+def trustedPeerManager(path, broker_config, topic):
     backend = IPCBackend(path)
-    admin = kafka.KafkaAdminClient(bootstrap_servers=brokers)
+    admin = kafka.KafkaAdminClient(**broker_config)
     try:
         # We can't rely on auto-creating the topic, because it will default to
         # snappy compression, which Python doesn't natively support and we
@@ -69,9 +70,8 @@ def trustedPeerManager(path, brokers, topic):
         ])
     except kafka.errors.TopicAlreadyExistsError:
         pass
-    consumer = kafka.KafkaConsumer(topic, bootstrap_servers=brokers,
-                                   auto_offset_reset='earliest')
-    producer = kafka.KafkaProducer(bootstrap_servers=brokers)
+    consumer = kafka.KafkaConsumer(topic, auto_offset_reset='earliest', **broker_config)
+    producer = kafka.KafkaProducer(**broker_config)
     myIp = socket.gethostbyname(socket.gethostname())
     node_info = backend.get("admin_nodeInfo")["result"]
     enode = node_info["enode"]
@@ -132,11 +132,34 @@ if __name__ == "__main__":
 
     parser.add_argument("ipc_path")
     parser.add_argument("topic")
-    parser.add_argument("brokers", nargs="+")
+    parser.add_argument("broker_url")
     args = parser.parse_args()
+
+    broker_config = {}
+    try:
+        credentials, resource = args.broker_url.split("@")
+    except ValueError:
+        resource = args.broker_url
+    else:
+        try:
+            broker_config["sasl_plain_username"], password = credentials.split(":")
+        except ValueError:
+            broker_config["sasl_plain_username"] = credentials
+        else:
+            broker_config["sasl_plain_password"] = unquote_plus(password)
+        broker_config["security_protocol"] = "SASL_PLAINTEXT"
+        broker_config["sasl_mechanism"] = "PLAIN"
+    try:
+        hosts, tls = resource.split("?")
+    except ValueError:
+        broker_config["bootstrap_servers"] = resource.split(",")
+    else:
+        broker_config["bootstrap_servers"] = hosts.split(",")
+        if tls == "tls=1":
+            broker_config["security_protocol"] = "SASL_SSL"
     p1 = multiprocessing.Process(
         target=trustedPeerManager,
-        args=(args.ipc_path, args.brokers, args.topic)
+        args=(args.ipc_path, broker_config, args.topic)
     )
     p2 = multiprocessing.Process(
         target=externalPeerManager,

@@ -539,7 +539,7 @@ Resources:
                 LOGS_BIN="journald-cloudwatch-logs-$ARCH"
                 aws s3 cp s3://${S3GethBucketName}/${ECGethVersion}/$GETH_BIN /usr/bin/geth
                 aws s3 cp s3://${S3GethBucketName}/$LOGS_BIN /usr/local/bin/journald-cloudwatch-logs
-                aws s3 cp s3://${S3GethBucketName}/peerManager.py /usr/local/bin/peerManager.py
+                aws s3 cp s3://${S3GethBucketName}/peerManagerAuth.py /usr/local/bin/peerManager.py
                 chmod +x /usr/bin/geth
                 chmod +x /usr/local/bin/journald-cloudwatch-logs
                 chmod +x /usr/local/bin/peerManager.py
@@ -592,7 +592,7 @@ Resources:
 
 
               - KafkaHostname:
-                  "Fn::ImportValue": !Sub "${InfrastructureStack}-Kafka2HostnameA"
+                  "Fn::ImportValue": !Sub "${InfrastructureStack}-KafkaBrokerURL"
                 ClusterId:
                   "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
 
@@ -1305,7 +1305,7 @@ Resources:
                 VOLUME_ID=$(aws ec2 describe-volumes --filters Name=attachment.instance-id,Values="$(curl http://169.254.169.254/latest/meta-data/instance-id)" | jq '.Volumes[] | select(. | .Attachments[0].Device == "/dev/sdf") | .VolumeId' -cr)
                 sleep 300 && aws ec2 modify-volume --volume-id $VOLUME_ID --volume-type gp2 &
               - KafkaHostname:
-                  "Fn::ImportValue": !Sub "${InfrastructureStack}-Kafka2HostnameA"
+                  "Fn::ImportValue": !Sub "${InfrastructureStack}-KafkaBrokerURL"
                 ClusterId:
                   "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
                 ReplicaHTTPFlag:
@@ -1508,7 +1508,7 @@ Resources:
                 fi
                 poweroff
               - KafkaHostname:
-                  "Fn::ImportValue": !Sub "${InfrastructureStack}-Kafka2HostnameA"
+                  "Fn::ImportValue": !Sub "${InfrastructureStack}-KafkaBrokerURL"
                 ClusterId:
                   "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
 

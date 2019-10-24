@@ -409,6 +409,13 @@ Outputs:
       "Fn::ImportValue": !Sub "${InfrastructureStack}-Kafka2HostnameC"
     Export:
       Name: !Sub "${AWS::StackName}-Kafka2HostnameC"
+  KafkaBrokerURL:
+    Description: The Kafka Broker URL
+    Value:
+      "Fn::ImportValue": !Sub "${InfrastructureStack}-KafkaBrokerURL"
+    Export:
+      Name: !Sub "${AWS::StackName}-KafkaBrokerURL"
+
   PublicA:
     Description: The Subnet in availability zone 'a'
     Value:

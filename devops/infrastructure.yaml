@@ -1234,6 +1234,12 @@ Outputs:
     Value: !Sub ${Kafka2RegistryC.Name}.${ClusterId}-ns:9092
     Export:
       Name: !Sub "${AWS::StackName}-Kafka2HostnameC"
+  KafkaBrokerURL:
+    Description: The Kafka Broker URL
+    Value: !Sub "!Sub ${Kafka2RegistryA.Name}.${ClusterId}-ns:9092,!Sub ${Kafka2RegistryB.Name}.${ClusterId}-ns:9092,!Sub ${Kafka2RegistryC.Name}.${ClusterId}-ns:9092"
+    Export:
+      Name: !Sub "${AWS::StackName}-KafkaBrokerURL"
+
   PublicA:
     Description: The Subnet in availability zone 'a'
     Value: !Ref PublicA
