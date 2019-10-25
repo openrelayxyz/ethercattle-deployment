@@ -609,9 +609,8 @@ Resources:
       # LaunchTemplate:
       #   LaunchTemplateId: !Ref MasterLaunchTemplate
       #   Version: !Sub ${MasterLaunchTemplate.LatestVersionNumber}
-      MinSize: 1
+      MinSize: !Ref MasterCount
       MaxSize: 7
-      DesiredCapacity: !Ref MasterCount
       HealthCheckType: EC2
       MixedInstancesPolicy:
         InstancesDistribution:
@@ -1337,9 +1336,8 @@ Resources:
             LaunchTemplateId: !Ref ReplicaLaunchTemplate
             Version: !Sub ${ReplicaLaunchTemplate.LatestVersionNumber}
           Overrides: !FindInMap [InstanceSizes, Replica, !Ref ReplicaSize]
-      MinSize: 1
+      MinSize: !Ref ReplicaTargetCapacity
       MaxSize: !GetAtt MaxReplicas.Value
-      DesiredCapacity: !Ref ReplicaTargetCapacity
       HealthCheckType: EC2
       TargetGroupARNs: !Split [ ",", !If [HasATG, !Ref AlternateTargetGroup, {"Fn::ImportValue": !Sub "${InfrastructureStack}-ALBGroupList"}]]
       MetricsCollection:
