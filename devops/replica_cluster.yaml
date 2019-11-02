@@ -1444,7 +1444,7 @@ Resources:
                   /usr/bin/replica-snapshot-hook
                 fi
 
-                sudo -u geth /usr/bin/geth replica ${ReplicaExtraFlags} --kafka.broker=${KafkaHostname} --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown
+                sudo -u geth /usr/bin/geth replica ${ReplicaExtraFlags} --kafka.broker=$(printf "${KafkaHostname}") --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown
                 if ! sudo -u geth /usr/bin/geth verifystatetrie --datadir=/var/lib/ethereum ${SnapshotValidationThreshold}
                 then
                   if [ "${AggregatedNotifications}" != "" ]
