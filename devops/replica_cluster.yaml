@@ -243,8 +243,8 @@ Mappings:
         - InstanceType: t3a.medium
     Replica:
       full:
-        - InstanceType: m5ad.large
-        - InstanceType: m5d.large
+        - InstanceType: m5ad.xlarge
+        - InstanceType: m5d.xlarge
         - InstanceType: r5d.large
         - InstanceType: r5ad.large
       small:
