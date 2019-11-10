@@ -245,8 +245,10 @@ Mappings:
       full:
         - InstanceType: m5ad.xlarge
         - InstanceType: m5d.xlarge
-        - InstanceType: r5d.large
-        - InstanceType: r5ad.large
+        - InstanceType: r5d.xlarge
+        - InstanceType: r5ad.xlarge
+        - InstanceType: c5d.2xlarge
+        - InstanceType: c5ad.2xlarge
       small:
         - InstanceType: t3.medium
         - InstanceType: t3a.medium
