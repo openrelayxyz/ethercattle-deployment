@@ -92,7 +92,11 @@ Parameters:
   ReplicaTargetCapacity:
     Type: Number
     Default: 2
-    Description: Target number of instances for replicas
+    Description: Minimum number of instances for replicas
+  ReplicaMaxCapacity:
+    Type: Number
+    Default: 5
+    Description: Maximum number of instances for replicas
   ReplicaOnDemandPercentage:
     Type: Number
     Default: 0
@@ -390,12 +394,6 @@ Resources:
       Op1: !Ref DiskSize
       Op2: 50
       Max: 5000
-  MaxReplicas:
-    Type: Custom::MulMin
-    Properties:
-      ServiceToken: !GetAtt MulMin.Arn
-      Op1: !Ref ReplicaTargetCapacity
-      Op2: 2
   MasterLG:
     Type: AWS::Logs::LogGroup
     Properties:
@@ -1361,7 +1359,7 @@ Resources:
             Version: !Sub ${ReplicaLaunchTemplate.LatestVersionNumber}
           Overrides: !FindInMap [InstanceSizes, Replica, !Ref ReplicaSize]
       MinSize: !Ref ReplicaTargetCapacity
-      MaxSize: !GetAtt MaxReplicas.Value
+      MaxSize: !Ref ReplicaMaxCapacity
       HealthCheckType: EC2
       TargetGroupARNs: !Split [ ",", !If [HasATG, !Ref AlternateTargetGroup, {"Fn::ImportValue": !Sub "${InfrastructureStack}-ALBGroupList"}]]
       MetricsCollection:
