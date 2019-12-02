@@ -27,6 +27,12 @@ Parameters:
     MinValue: 1
     Default: 8545
     Description: Port to use for websocket health checks. AWS load balancers don't handle health checks on websockets, so we need to tie this to a different port.
+  ReplicaHealthCheckPort:
+    Type: Number
+    MaxValue: 65535
+    MinValue: 1
+    Default: 8545
+    Description: Port to use for replica health checks. Enables you to use more advanced healtchecks if needed for RPC.
 
 
 Conditions:
@@ -59,6 +65,7 @@ Resources:
       UnhealthyThresholdCount: 2
       HealthyThresholdCount: 5
       Port: 8545
+      HealthCheckPort: !Ref ReplicaHealthCheckPort
       Protocol: HTTP
       VpcId:
         "Fn::ImportValue":
