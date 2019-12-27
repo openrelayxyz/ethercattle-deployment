@@ -135,6 +135,9 @@ Parameters:
   ReplicaExtraSecurityGroup:
     Type: String
     Description: An additional security to be assigned to Replicas. Leave this blank unless you need to add additional connectivity rules.
+  DashboardExtension:
+    Type: String
+    Description: The name of a cloudformation output to be added to the dashboard
 
 
 
@@ -150,6 +153,7 @@ Metadata:
           - NotificationEmail
           - KeyName
           - RemoteRPCURL
+          - DashboardExtension
       - Label:
           default: Cluster
         Parameters:
@@ -233,6 +237,8 @@ Metadata:
         default: Snapshot Validation Threshold
       RemoteRPCURL:
         default: Remote RPC URL
+      DashboardExtension:
+        default: Dashboard Extension
 
 Mappings:
   InstanceSizes:
@@ -338,6 +344,7 @@ Conditions:
   HasExtraSecurityGroup: !Not [!Equals [ !Ref ReplicaExtraSecurityGroup, "" ]]
   SmallMaster: !Equals [ !Ref MasterSize, "small"]
   SmallReplica: !Equals [ !Ref ReplicaSize, "small"]
+  HasDashboardExtensions: !Equals [ !Ref DashboardExtension, "" ]
 
 Resources:
   LambdaExecutionRole:
@@ -1992,8 +1999,9 @@ Resources:
                             "region": "${AWS::Region}",
                             "title": "Master Peer Count"
                         }
-                    }
+                    }${DashExt}
                 ]
               }
           - TargetGroup: {"Fn::ImportValue": !Sub "${InfrastructureStack}-RPCALBGroupName"}
             LoadBalancer: {"Fn::ImportValue": !Sub "${InfrastructureStack}-RPCALBName"}
+            DashExt: !If [ HasDashboardExtensions, {"Fn::ImportValue": !Ref DashboardExtension}, "" ]
