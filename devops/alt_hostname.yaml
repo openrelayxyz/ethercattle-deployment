@@ -295,6 +295,11 @@ Outputs:
     Value: !Ref GraphQLALBGroup
     Export:
       Name: !Sub "${AWS::StackName}-GraphQLALBGroup"
+  GraphQLALBGroupName:
+    Description: The ARN of the alb target group for the GraphQL load balancer
+    Value: !Sub ${GraphQLALBGroup.TargetGroupFullName}
+    Export:
+      Name: !Sub "${AWS::StackName}-GraphQLALBGroupName"
   WebsocketsALBGroup:
     Description: The ARN of the alb target group for the Websockets load balancer
     Value: !Ref WebsocketsALBGroup
