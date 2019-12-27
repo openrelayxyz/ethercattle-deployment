@@ -344,7 +344,7 @@ Conditions:
   HasExtraSecurityGroup: !Not [!Equals [ !Ref ReplicaExtraSecurityGroup, "" ]]
   SmallMaster: !Equals [ !Ref MasterSize, "small"]
   SmallReplica: !Equals [ !Ref ReplicaSize, "small"]
-  HasDashboardExtensions: !Equals [ !Ref DashboardExtension, "" ]
+  HasDashboardExtensions: !Not [!Equals [ !Ref DashboardExtension, "" ]]
 
 Resources:
   LambdaExecutionRole:
