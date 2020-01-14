@@ -295,11 +295,21 @@ Outputs:
     Value: !Ref GraphQLALBGroup
     Export:
       Name: !Sub "${AWS::StackName}-GraphQLALBGroup"
+  GraphQLALBGroupName:
+    Description: The ARN of the alb target group for the GraphQL load balancer
+    Value: !Sub ${GraphQLALBGroup.TargetGroupFullName}
+    Export:
+      Name: !Sub "${AWS::StackName}-GraphQLALBGroupName"
   WebsocketsALBGroup:
     Description: The ARN of the alb target group for the Websockets load balancer
     Value: !Ref WebsocketsALBGroup
     Export:
       Name: !Sub "${AWS::StackName}-WebsocketsALBGroup"
+  WebsocketsALBGroupName:
+    Description: The ARN of the alb target group for the Websockets load balancer
+    Value: !Sub ${WebsocketsALBGroup.TargetGroupFullName}
+    Export:
+      Name: !Sub "${AWS::StackName}-WebsocketsALBGroupName"
   RPCALBDNS:
     Description: The DNS of the RPC load balancer
     Value:
