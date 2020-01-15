@@ -138,6 +138,10 @@ Parameters:
   DashboardExtension:
     Type: String
     Description: The name of a cloudformation output to be added to the dashboard
+  SnapshotScheduleExpression:
+    Type: String
+    Description: A schedule expression for the frequency to take snapshots
+    Default: "cron(55 0/6 * * ? *)"
 
 
 
@@ -153,6 +157,7 @@ Metadata:
           - NotificationEmail
           - KeyName
           - RemoteRPCURL
+          - SnapshotScheduleExpression
           - DashboardExtension
       - Label:
           default: Cluster
@@ -239,6 +244,8 @@ Metadata:
         default: Remote RPC URL
       DashboardExtension:
         default: Dashboard Extension
+      SnapshotScheduleExpression:
+        default: Snapshot Schedule Expression
 
 Mappings:
   InstanceSizes:
@@ -985,7 +992,7 @@ Resources:
     Properties:
       Code:
         S3Bucket: !Ref S3GethBucketName
-        S3Key: lambdaPackage-14.zip
+        S3Key: lambdaPackage-15.zip
       Description: "A lambda function to process Geth logs into metrics"
       Environment:
         Variables:
@@ -1419,7 +1426,7 @@ Resources:
     Properties:
       Code:
         S3Bucket: !Ref S3GethBucketName
-        S3Key: lambdaPackage-14.zip
+        S3Key: lambdaPackage-15.zip
       Description: "A lambda function to process Geth logs into metrics"
       Environment:
         Variables:
@@ -1725,7 +1732,7 @@ Resources:
     Properties:
       Code:
         S3Bucket: !Ref S3GethBucketName
-        S3Key: lambdaPackage-14.zip
+        S3Key: lambdaPackage-15.zip
       Description: "Launch instances to snapshot chaindata"
       Environment:
         Variables:
@@ -1743,7 +1750,7 @@ Resources:
     Type: AWS::Events::Rule
     Properties:
       Description: !Sub "Take a daily snapshot for the ${KafkaTopic} cluster"
-      ScheduleExpression: "rate(1 day)"
+      ScheduleExpression: !Ref SnapshotScheduleExpression
       Targets:
         - Arn: !Sub ${SnapshotterLambdaFunction.Arn}
           Id: !Sub "snapshot-${KafkaTopic}"
@@ -1789,7 +1796,7 @@ Resources:
     Properties:
       Code:
         S3Bucket: !Ref S3GethBucketName
-        S3Key: lambdaPackage-14.zip
+        S3Key: lambdaPackage-15.zip
       Description: "Cleanup old chaindata snapshots"
       Environment:
         Variables:
@@ -1821,7 +1828,7 @@ Resources:
     Properties:
       Code:
         S3Bucket: !Ref S3GethBucketName
-        S3Key: lambdaPackage-14.zip
+        S3Key: lambdaPackage-15.zip
       Description: "Collect metrics for remote RPC URLs"
       Environment:
         Variables:
