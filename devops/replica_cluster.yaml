@@ -1842,7 +1842,7 @@ Resources:
     Condition: HasRemoteRPCURL
     Type: AWS::Events::Rule
     Properties:
-      Description: !Sub ""
+      Description: !Sub "Remote metrics"
       ScheduleExpression: "rate(1 minute)"
       Targets:
         - Arn: !Sub ${RemoteMetricsLambdaFunction.Arn}
