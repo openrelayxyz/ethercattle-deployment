@@ -373,7 +373,7 @@ Resources:
       Role: !GetAtt LambdaExecutionRole.Arn
       Code:
         ZipFile: !Sub |
-          var response = require('cfn-response');
+          var response = require('./cfn-response');
           exports.handler = function(event, context) {
             var result = parseInt(event.ResourceProperties.Op1) * parseInt(event.ResourceProperties.Op2);
             if(event.ResourceProperties.Max) {
@@ -389,7 +389,7 @@ Resources:
       Role: !GetAtt LambdaExecutionRole.Arn
       Code:
         ZipFile: !Sub |
-          var response = require('cfn-response');
+          var response = require('./cfn-response');
           exports.handler = function(event, context) {
             var result = Math.max(parseInt(event.ResourceProperties.Op1), parseInt(event.ResourceProperties.Op2));
             response.send(event, context, response.SUCCESS, {Value: result});
