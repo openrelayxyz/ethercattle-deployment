@@ -1545,6 +1545,18 @@ Resources:
                 fi
 
                 SNAPSHOT_ID=`aws ec2 create-snapshot --volume-id $VOLUME_ID --tag-specification="ResourceType=snapshot,Tags=[{Key=cluster,Value=${KafkaTopic}},{Key=Name,Value=${KafkaTopic}-chaindata-$(date -Isecond -u)}]" | jq '.SnapshotId' -cr`
+
+                if [ "$SNAPSHOT_ID" == "null" ]; then
+                  if [ "${AggregatedNotifications}" != "" ]
+                  then
+                    aws sns publish --topic-arn=${AggregatedNotifications} --subject="${AWS::StackName} - Snapshotting Volume Failed" --message="The snapshotting process for ${KafkaTopic} failed to take a snapshot."
+                  fi
+                  if [ "${AlarmSNSTopic}" != "" ]
+                  then
+                    aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - Snapshotting Volume Failed" --message="The snapshotting process for ${KafkaTopic} failed to take a snapshot."
+                  fi
+                  exit poweroff
+                done
                 echo "Waiting for snapshot to complete"
                 while [ `aws ec2 describe-snapshots --filters=Name=snapshot-id,Values=$SNAPSHOT_ID | jq '.Snapshots[0].State' -cr` != "completed" ];
                 do
