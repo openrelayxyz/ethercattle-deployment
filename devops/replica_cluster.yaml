@@ -99,7 +99,7 @@ Parameters:
     Description: Maximum number of instances for replicas
   FallbackTargetCapacity:
     Type: Number
-    Default: 2
+    Default: 0
     Description: Minimum number of instances for replicas
   FallbackMaxCapacity:
     Type: Number
