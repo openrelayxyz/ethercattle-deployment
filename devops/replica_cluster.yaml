@@ -292,8 +292,11 @@ Mappings:
         - InstanceType: t3a.medium
     Fallback:
       full:
-        - InstanceType: i3.2xlarge
+        # - InstanceType: i3.2xlarge
+        - InstanceType: c5.4xlarge
         - InstanceType: c5d.4xlarge
+        - InstanceType: m5d.4xlarge
+        - InstanceType: m5.4xlarge
         # - InstanceType: c5d.xlarge
         # - InstanceType: c5ad.2xlarge
       small:
