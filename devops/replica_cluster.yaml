@@ -205,9 +205,6 @@ Metadata:
         Parameters:
           - FallbackTargetCapacity
           - FallbackMaxCapacity
-          - ReplicaOnDemandPercentage
-          - SnapshotValidationThreshold
-          - ReplicaExtraSecurityGroup
     ParameterLabels:
       MasterSize:
         default: Master Size
