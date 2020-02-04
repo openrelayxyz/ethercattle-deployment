@@ -2006,6 +2006,7 @@ Example:
 2. subscriptions require a full duplex connection. Geth offers such connections in the form of websockets (enable with --ws) and ipc (enabled by default).
 3. subscriptions are coupled to a connection. If the connection is closed all subscriptions that are created over this connection are removed.
 4. notifications are stored in an internal buffer and sent from this buffer to the client. If the client is unable to keep up and the number of buffered notifications reaches a limit (currently 10k) the connection is closed. Keep in mind that subscribing to some events can cause a flood of notifications, e.g. listening for all logs/blocks when the node starts to synchronize.
+5. within Rivet, you will be billed one request for every item served to you for a subscription.
 
 ## Create subscription
 Subscriptions are creates with a regular RPC call with `eth_subscribe` as method and the subscription name as first parameter. If successful it returns the subscription id.
@@ -2116,3 +2117,30 @@ none
     << {"jsonrpc":"2.0","id":2,"result":"0xe2ffeb2703bcf602d42922385829ce96"}
 
     << {"subscription":"0xe2ffeb2703bcf602d42922385829ce96","result":{"syncing":true,"status":{"startingBlock":674427,"currentBlock":67400,"highestBlock":674432,"pulledStates":0,"knownStates":0}}}}
+
+# Rivet custom Subscriptions
+
+Rivet has some custom subscriptions to allow you to subscribe to data not available through the standard Web3 RPC Subscriptions.
+
+## filteredPendingTransactions
+
+Subscribing to newPendingTransactions provides the transaction hash of every new transaction, but this tells you very little about the transaction itself, and does not allow you to filter for transactions of interest to your application. Rivet's filteredPendingTransactions gives you access to the full transaction, and allows you to filter for pending transactions of interest to you.
+
+### Parameters
+* criteria
+  ** hash: A list of transaction hashes you want to be notified when it is introduced the the transaction pool
+  ** from: A list of addresses you wish to be notified when they send transactions to the pool
+  ** to: A list of addresses you wish to be notified when a new transaction is sent to them
+  ** nonce: A list of nonces for transactions. This would usually be used in conjunction with 'to', perhaps to watch for replacement transactions
+
+### Example
+
+  >> {"id": 1, "method": "eth_subscribe", "params": ["filteredPendingTransactions", {}]}
+  << {"jsonrpc":"2.0","id":1,"result":"0x1"}
+  << {"jsonrpc":"2.0","method":"eth_subscription","params":{"subscription":"0x1","result":{"nonce":"0x1","gasPrice":"0x77359400","gas":"0x5208","to":"0x789c19ef373353e445165f26ca948939d64e3208","value":"0x2f4b318740000","input":"0x","v":"0x26","r":"0xa9bbc5ac3ef8d3d38c0c0e6a01a744d510882340680af16d79e18ba7b14a956e","s":"0x60141a5dbd43ce863f38ad52be290cee7abc391de7dccee2e162e91ffb15c419","hash":"0xe66d08be726dce470d0c00d46c39260a66a691c5550b0830e02af22b931e4c17"}}}
+  << "jsonrpc":"2.0","method":"eth_subscription","params":{"subscription":"0x1","result":{"nonce":"0xa4a","gasPrice":"0x3b9aca00","gas":"0x30d40","to":"0xac9bb427953ac7fddc562adca86cf42d988047fd","value":"0x0","input":"0xa9059cbb000000000000000000000000ad38af2762f8a210d8eb1c8cdd15a505b7a88e990000000000000000000000000000000000000000000000000de0b6b3a7640000","v":"0x25","r":"0xa8ba37f1c2200bf8b32d7e151a66c3f8a0645b4f8dae0252a46813ca76c53a","s":"0x52e5a0f61ca956cdd5665e10a7ff58caeb54e74602c9139597666cbfdadbee50","hash":"0xa9c115a4040927e04c8cef74899fa8aa62709ce96421a1fec87cf17b10d64cf1"}}}
+
+### Example 2
+  >> {"id": 1, "method": "eth_subscribe", "params": ["filteredPendingTransactions", {"nonce": ["0x1"]}]}
+  << {"jsonrpc":"2.0","id":1,"result":"0x1"}
+  << {"jsonrpc":"2.0","method":"eth_subscription","params":{"subscription":"0x1","result":{"nonce":"0x1","gasPrice":"0x77359400","gas":"0x5208","to":"0x789c19ef373353e445165f26ca948939d64e3208","value":"0x2f4b318740000","input":"0x","v":"0x26","r":"0xa9bbc5ac3ef8d3d38c0c0e6a01a744d510882340680af16d79e18ba7b14a956e","s":"0x60141a5dbd43ce863f38ad52be290cee7abc391de7dccee2e162e91ffb15c419","hash":"0xe66d08be726dce470d0c00d46c39260a66a691c5550b0830e02af22b931e4c17"}}}
