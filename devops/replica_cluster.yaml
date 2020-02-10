@@ -265,10 +265,10 @@ Mappings:
   InstanceSizes:
     Master:
       full:
-        - InstanceType: m5a.large
-        - InstanceType: m5ad.large
-        - InstanceType: m5.large
-        - InstanceType: m5d.large
+        - InstanceType: m5a.xlarge
+        - InstanceType: m5ad.xlarge
+        - InstanceType: m5.xlarge
+        - InstanceType: m5d.xlarge
         - InstanceType: r5.large
         - InstanceType: r5d.large
         - InstanceType: r5a.large
@@ -607,9 +607,47 @@ Resources:
                 echo "5,20,35,50 * * * * /usr/bin/sh -c 'for x in \$(ls /dev/sd*) ; do echo resizing \$(readlink -f \$x) if needed; /usr/sbin/resize2fs \$(readlink -f \$x) ; done'" >> newcrontab
                 crontab newcrontab
 
-                printf "[Unit]\nDescription=Ethereum go client\nAfter=syslog.target network.target\n\n[Service]\nUser=geth\nGroup=geth\nEnvironment=HOME=/var/lib/ethereum\nType=simple\nLimitNOFILE=655360\nExecStartPre=/usr/bin/geth replica ${ReplicaExtraFlags} --kafka.broker=${KafkaHostname} --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown\nExecStart=/usr/bin/geth ${MasterExtraFlags} --light.maxpeers 0 --maxpeers 25 --gcmode=archive --kafka.broker=${KafkaHostname} --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --kafka.txpool.topic=${InfrastructureStack}-txpool\nKillMode=process\nKillSignal=SIGINT\nTimeoutStartSec=86400\nTimeoutStopSec=90\nOnFailure=poweroff.target\n\n[Install]\nWantedBy=multi-user.target\n" > /etc/systemd/system/geth.service
+                printf "[Unit]
+                Description=Ethereum go client
+                After=syslog.target network.target
 
-                printf "[Unit]\nDescription=Ethereum go client transaction relay\nAfter=syslog.target network.target geth\n\n[Service]\nUser=geth\nGroup=geth\nEnvironment=HOME=/var/lib/ethereum\nType=simple\nExecStart=/usr/bin/geth txrelay --kafka.broker=${KafkaHostname} --kafka.tx.topic=${NetworkId}-tx --kafka.tx.consumergroup=${KafkaTopic}-cg /var/lib/ethereum/geth.ipc\nKillMode=process\nKillSignal=SIGINT\nTimeoutStopSec=90\nRestart=on-failure\nRestartSec=10s\n\n[Install]\nWantedBy=multi-user.target\n" > /etc/systemd/system/geth-tx.service
+                [Service]
+                User=geth
+                Group=geth
+                Environment=HOME=/var/lib/ethereum
+                Type=simple
+                LimitNOFILE=655360
+                ExecStartPre=/usr/bin/geth replica ${ReplicaExtraFlags} --kafka.broker=${KafkaHostname}  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown
+                ExecStart=/usr/bin/geth ${MasterExtraFlags} --light.maxpeers 0 --maxpeers 25 --gcmode=archive --kafka.broker=${KafkaHostname}&net.maxopenrequests=1&message.send.max.retries=20000  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --kafka.txpool.topic=${InfrastructureStack}-txpool
+                KillMode=process
+                KillSignal=SIGINT
+                TimeoutStartSec=86400
+                TimeoutStopSec=90
+                OnFailure=poweroff.target
+
+                [Install]
+                WantedBy=multi-user.target
+                " > /etc/systemd/system/geth.service
+
+                printf "[Unit]
+                Description=Ethereum go client transaction relay
+                After=syslog.target network.target geth
+
+                [Service]
+                User=geth
+                Group=geth
+                Environment=HOME=/var/lib/ethereum
+                Type=simple
+                ExecStart=/usr/bin/geth txrelay --kafka.broker=${KafkaHostname} --kafka.tx.topic=${NetworkId}-tx --kafka.tx.consumergroup=${KafkaTopic}-cg /var/lib/ethereum/geth.ipc
+                KillMode=process
+                KillSignal=SIGINT
+                TimeoutStopSec=90
+                Restart=on-failure
+                RestartSec=10s
+
+                [Install]
+                WantedBy=multi-user.target
+                " > /etc/systemd/system/geth-tx.service
 
                 printf "[Unit]\nDescription=journald-cloudwatch-logs\nWants=basic.target\nAfter=basic.target network.target\n\n[Service]\nExecStart=/usr/local/bin/journald-cloudwatch-logs /usr/local/etc/journald-cloudwatch-logs.conf\nKillMode=process\nRestart=on-failure\nRestartSec=42s" > /etc/systemd/system/journald-cloudwatch-logs.service
 
@@ -1331,10 +1369,38 @@ Resources:
                 echo "5,20,35,50 * * * * /usr/bin/sh -c 'for x in \$(ls /dev/sd*) ; do echo resizing \$(readlink -f \$x) if needed; /usr/sbin/resize2fs \$(readlink -f \$x) ; done'" >> newcrontab
                 crontab newcrontab
 
-                printf "KafkaHostname=${KafkaHostname}\nKafkaTopic=${KafkaTopic}\nNetworkId=${NetworkId}\ninfraName=${InfrastructureStack}\nbaseInfraName=${BaseInfrastructure}\nnetwork=${NetworkId}\nLOG_BLOCK_LIMIT=10000" > /etc/systemd/system/ethcattle-vars
+                printf "KafkaHostname=${KafkaHostname}
+                KafkaTopic=${KafkaTopic}
+                NetworkId=${NetworkId}
+                infraName=${InfrastructureStack}
+                baseInfraName=${BaseInfrastructure}
+                network=${NetworkId}
+                LOG_BLOCK_LIMIT=10000" > /etc/systemd/system/ethcattle-vars
 
                 SEP=$(echo "${KafkaHostname}" | grep -q "?" && echo "&" || echo "?")
-                printf "[Unit]\nDescription=Ethereum go client replica\nAfter=syslog.target network.target\n[Service]\nUser=geth\nGroup=geth\nEnvironment=HOME=/var/lib/ethereum\nEnvironmentFile=/etc/systemd/system/ethcattle-vars\nType=simple\nLimitNOFILE=655360\nExecStartPre=/usr/bin/geth replica ${ReplicaExtraFlags} $OVERLAY_FLAG --kafka.broker=${KafkaHostname}""$SEP""fetch.default=8388608&max.waittime=25 --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown\nExecStart=/usr/bin/bash -c '/usr/bin/geth replica ${ReplicaExtraFlags} $OVERLAY_FLAG --kafka.broker=\$KafkaHostname --datadir=/var/lib/ethereum --kafka.topic=\$KafkaTopic --kafka.txpool.topic=\$infraName-txpool  --kafka.tx.topic=\$NetworkId-tx --replica.startup.age=45  ${ReplicaHTTPFlag} ${ReplicaGraphQLFlag} ${ReplicaWebsocketsFlag}'\nCPUSchedulingPolicy=fifo\nCPUSchedulingPriority=20\nKillMode=process\nKillSignal=SIGINT\nTimeoutStopSec=90\nRestart=on-failure\nTimeoutStartSec=86400\nRestartSec=10s\n[Install]\nWantedBy=multi-user.target\n" > /etc/systemd/system/geth.service
+                printf "[Unit]
+                Description=Ethereum go client replica
+                After=syslog.target network.target
+                [Service]
+                User=geth
+                Group=geth
+                Environment=HOME=/var/lib/ethereum
+                EnvironmentFile=/etc/systemd/system/ethcattle-vars
+                Type=simple
+                LimitNOFILE=655360
+                ExecStartPre=/usr/bin/geth replica ${ReplicaExtraFlags} $OVERLAY_FLAG --kafka.broker=${KafkaHostname}""$SEP""fetch.default=8388608&max.waittime=25 --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown
+                ExecStart=/usr/bin/bash -c '/usr/bin/geth replica ${ReplicaExtraFlags} $OVERLAY_FLAG --kafka.broker=\$KafkaHostname --datadir=/var/lib/ethereum --kafka.topic=\$KafkaTopic --kafka.txpool.topic=\$infraName-txpool  --kafka.tx.topic=\$NetworkId-tx --replica.startup.age=45  ${ReplicaHTTPFlag} ${ReplicaGraphQLFlag} ${ReplicaWebsocketsFlag}'
+                CPUSchedulingPolicy=fifo
+                CPUSchedulingPriority=20
+                KillMode=process
+                KillSignal=SIGINT
+                TimeoutStopSec=90
+                Restart=on-failure
+                TimeoutStartSec=86400
+                RestartSec=10s
+                [Install]
+                WantedBy=multi-user.target
+                " > /etc/systemd/system/geth.service
 
                 printf "[Unit]\nDescription=journald-cloudwatch-logs\nWants=basic.target\nAfter=basic.target network.target\n\n[Service]\nExecStart=/usr/local/bin/journald-cloudwatch-logs /usr/local/etc/journald-cloudwatch-logs.conf\nKillMode=process\nRestart=on-failure\nRestartSec=42s" > /etc/systemd/system/journald-cloudwatch-logs.service
 
