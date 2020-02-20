@@ -2135,12 +2135,12 @@ Subscribing to newPendingTransactions provides the transaction hash of every new
 
 ### Example
 
-  >> {"id": 1, "method": "eth_subscribe", "params": ["filteredPendingTransactions", {}]}
-  << {"jsonrpc":"2.0","id":1,"result":"0x1"}
-  << {"jsonrpc":"2.0","method":"eth_subscription","params":{"subscription":"0x1","result":{"nonce":"0x1","gasPrice":"0x77359400","gas":"0x5208","to":"0x789c19ef373353e445165f26ca948939d64e3208","value":"0x2f4b318740000","input":"0x","v":"0x26","r":"0xa9bbc5ac3ef8d3d38c0c0e6a01a744d510882340680af16d79e18ba7b14a956e","s":"0x60141a5dbd43ce863f38ad52be290cee7abc391de7dccee2e162e91ffb15c419","hash":"0xe66d08be726dce470d0c00d46c39260a66a691c5550b0830e02af22b931e4c17"}}}
-  << "jsonrpc":"2.0","method":"eth_subscription","params":{"subscription":"0x1","result":{"nonce":"0xa4a","gasPrice":"0x3b9aca00","gas":"0x30d40","to":"0xac9bb427953ac7fddc562adca86cf42d988047fd","value":"0x0","input":"0xa9059cbb000000000000000000000000ad38af2762f8a210d8eb1c8cdd15a505b7a88e990000000000000000000000000000000000000000000000000de0b6b3a7640000","v":"0x25","r":"0xa8ba37f1c2200bf8b32d7e151a66c3f8a0645b4f8dae0252a46813ca76c53a","s":"0x52e5a0f61ca956cdd5665e10a7ff58caeb54e74602c9139597666cbfdadbee50","hash":"0xa9c115a4040927e04c8cef74899fa8aa62709ce96421a1fec87cf17b10d64cf1"}}}
+    >> {"id": 1, "method": "eth_subscribe", "params": ["filteredPendingTransactions", {}]}
+    << {"jsonrpc":"2.0","id":1,"result":"0x1"}
+    << {"jsonrpc":"2.0","method":"eth_subscription","params":{"subscription":"0x1","result":{"nonce":"0x1","gasPrice":"0x77359400","gas":"0x5208","to":"0x789c19ef373353e445165f26ca948939d64e3208","value":"0x2f4b318740000","input":"0x","v":"0x26","r":"0xa9bbc5ac3ef8d3d38c0c0e6a01a744d510882340680af16d79e18ba7b14a956e","s":"0x60141a5dbd43ce863f38ad52be290cee7abc391de7dccee2e162e91ffb15c419","hash":"0xe66d08be726dce470d0c00d46c39260a66a691c5550b0830e02af22b931e4c17"}}}
+    << "jsonrpc":"2.0","method":"eth_subscription","params":{"subscription":"0x1","result":{"nonce":"0xa4a","gasPrice":"0x3b9aca00","gas":"0x30d40","to":"0xac9bb427953ac7fddc562adca86cf42d988047fd","value":"0x0","input":"0xa9059cbb000000000000000000000000ad38af2762f8a210d8eb1c8cdd15a505b7a88e990000000000000000000000000000000000000000000000000de0b6b3a7640000","v":"0x25","r":"0xa8ba37f1c2200bf8b32d7e151a66c3f8a0645b4f8dae0252a46813ca76c53a","s":"0x52e5a0f61ca956cdd5665e10a7ff58caeb54e74602c9139597666cbfdadbee50","hash":"0xa9c115a4040927e04c8cef74899fa8aa62709ce96421a1fec87cf17b10d64cf1"}}}
 
 ### Example 2
-  >> {"id": 1, "method": "eth_subscribe", "params": ["filteredPendingTransactions", {"nonce": ["0x1"]}]}
-  << {"jsonrpc":"2.0","id":1,"result":"0x1"}
-  << {"jsonrpc":"2.0","method":"eth_subscription","params":{"subscription":"0x1","result":{"nonce":"0x1","gasPrice":"0x77359400","gas":"0x5208","to":"0x789c19ef373353e445165f26ca948939d64e3208","value":"0x2f4b318740000","input":"0x","v":"0x26","r":"0xa9bbc5ac3ef8d3d38c0c0e6a01a744d510882340680af16d79e18ba7b14a956e","s":"0x60141a5dbd43ce863f38ad52be290cee7abc391de7dccee2e162e91ffb15c419","hash":"0xe66d08be726dce470d0c00d46c39260a66a691c5550b0830e02af22b931e4c17"}}}
+    >> {"id": 1, "method": "eth_subscribe", "params": ["filteredPendingTransactions", {"nonce": ["0x1"]}]}
+    << {"jsonrpc":"2.0","id":1,"result":"0x1"}
+    << {"jsonrpc":"2.0","method":"eth_subscription","params":{"subscription":"0x1","result":{"nonce":"0x1","gasPrice":"0x77359400","gas":"0x5208","to":"0x789c19ef373353e445165f26ca948939d64e3208","value":"0x2f4b318740000","input":"0x","v":"0x26","r":"0xa9bbc5ac3ef8d3d38c0c0e6a01a744d510882340680af16d79e18ba7b14a956e","s":"0x60141a5dbd43ce863f38ad52be290cee7abc391de7dccee2e162e91ffb15c419","hash":"0xe66d08be726dce470d0c00d46c39260a66a691c5550b0830e02af22b931e4c17"}}}
