@@ -26,6 +26,7 @@ def handler(event, context):
     yesterday_snaps = [i for i in sorted_snaps if yesterday <= i["StartTime"] < today]
     older_snaps = [i for i in sorted_snaps if i["StartTime"] < yesterday]
     for snapshot in today_snaps[:-today_keep_count] + older_snaps[:-keep_count] + yesterday_snaps[:-1]:
-        ec2.delete_snapshot(
-            SnapshotId=snapshot["SnapshotId"]
-        )
+        if snapshot["SnapshotId"] != os.environ.get("SNAPSHOT_ID"):
+            ec2.delete_snapshot(
+                SnapshotId=snapshot["SnapshotId"]
+            )

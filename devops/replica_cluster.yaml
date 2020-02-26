@@ -1056,7 +1056,7 @@ Resources:
     Properties:
       Code:
         S3Bucket: !Ref S3GethBucketName
-        S3Key: lambdaPackage-15.zip
+        S3Key: lambdaPackage-16.zip
       Description: "A lambda function to process Geth logs into metrics"
       Environment:
         Variables:
@@ -1518,7 +1518,7 @@ Resources:
     Properties:
       Code:
         S3Bucket: !Ref S3GethBucketName
-        S3Key: lambdaPackage-15.zip
+        S3Key: lambdaPackage-16.zip
       Description: "A lambda function to process Geth logs into metrics"
       Environment:
         Variables:
@@ -2080,7 +2080,7 @@ Resources:
     Properties:
       Code:
         S3Bucket: !Ref S3GethBucketName
-        S3Key: lambdaPackage-15.zip
+        S3Key: lambdaPackage-16.zip
       Description: "Launch instances to snapshot chaindata"
       Environment:
         Variables:
@@ -2144,11 +2144,12 @@ Resources:
     Properties:
       Code:
         S3Bucket: !Ref S3GethBucketName
-        S3Key: lambdaPackage-15.zip
+        S3Key: lambdaPackage-16.zip
       Description: "Cleanup old chaindata snapshots"
       Environment:
         Variables:
           CLUSTER_ID: !Ref KafkaTopic
+          SNAPSHOT_ID: !Ref SnapshotId
       Handler: "gcSnapshot.handler"
       Role: !Sub ${SnapshotGCLambdaRole.Arn}
       Runtime: python3.7
@@ -2176,7 +2177,7 @@ Resources:
     Properties:
       Code:
         S3Bucket: !Ref S3GethBucketName
-        S3Key: lambdaPackage-15.zip
+        S3Key: lambdaPackage-16.zip
       Description: "Collect metrics for remote RPC URLs"
       Environment:
         Variables:
