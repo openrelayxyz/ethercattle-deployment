@@ -1972,6 +1972,7 @@ Resources:
               - lambda:GetFunctionConfiguration
             Resource:
               - !Sub ${SnapshotterLambdaFunction.Arn}
+              - !Sub ${SnapshotGCLambdaFunction.Arn}
             Effect: Allow
           - Action:
               - iam:PassRole
@@ -1982,6 +1983,7 @@ Resources:
               - !Sub "${MasterNodeRole.Arn}"
               - !Sub "${SnapshotterLambdaRole.Arn}"
               - !Sub "${SnapshotterNodeRole.Arn}"
+              - !Sub "${SnapshotGCLambdaRole.Arn}"
             Effect: Allow
           - Action:
               - sns:Publish
