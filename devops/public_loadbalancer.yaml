@@ -235,6 +235,7 @@ Resources:
       HealthyThresholdCount: 5
       Port: 8546
       HealthCheckPort: !Ref WSHealthCheckPort
+      HealthCheckPath: "/?queryChecks=0"
       Protocol: HTTP
       VpcId:
         "Fn::ImportValue":

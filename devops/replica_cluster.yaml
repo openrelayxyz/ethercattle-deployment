@@ -97,6 +97,14 @@ Parameters:
     Type: Number
     Default: 5
     Description: Maximum number of instances for replicas
+  FallbackTargetCapacity:
+    Type: Number
+    Default: 0
+    Description: Minimum number of instances for replicas
+  FallbackMaxCapacity:
+    Type: Number
+    Default: 5
+    Description: Maximum number of instances for replicas
   ReplicaOnDemandPercentage:
     Type: Number
     Default: 0
@@ -138,6 +146,10 @@ Parameters:
   DashboardExtension:
     Type: String
     Description: The name of a cloudformation output to be added to the dashboard
+  SnapshotScheduleExpression:
+    Type: String
+    Description: A schedule expression for the frequency to take snapshots
+    Default: "cron(55 0/6 * * ? *)"
 
 
 
@@ -153,6 +165,7 @@ Metadata:
           - NotificationEmail
           - KeyName
           - RemoteRPCURL
+          - SnapshotScheduleExpression
           - DashboardExtension
       - Label:
           default: Cluster
@@ -183,9 +196,15 @@ Metadata:
           - ReplicaExtraFlags
           - ReplicaDiskType
           - ReplicaTargetCapacity
+          - ReplicaMaxCapacity
           - ReplicaOnDemandPercentage
           - SnapshotValidationThreshold
           - ReplicaExtraSecurityGroup
+      - Label:
+          default: Fallback
+        Parameters:
+          - FallbackTargetCapacity
+          - FallbackMaxCapacity
     ParameterLabels:
       MasterSize:
         default: Master Size
@@ -239,15 +258,17 @@ Metadata:
         default: Remote RPC URL
       DashboardExtension:
         default: Dashboard Extension
+      SnapshotScheduleExpression:
+        default: Snapshot Schedule Expression
 
 Mappings:
   InstanceSizes:
     Master:
       full:
-        - InstanceType: m5a.large
-        - InstanceType: m5ad.large
-        - InstanceType: m5.large
-        - InstanceType: m5d.large
+        - InstanceType: m5a.xlarge
+        - InstanceType: m5ad.xlarge
+        - InstanceType: m5.xlarge
+        - InstanceType: m5d.xlarge
         - InstanceType: r5.large
         - InstanceType: r5d.large
         - InstanceType: r5a.large
@@ -266,6 +287,18 @@ Mappings:
       small:
         - InstanceType: t3.medium
         - InstanceType: t3a.medium
+    Fallback:
+      full:
+        # - InstanceType: i3.2xlarge
+        - InstanceType: c5.4xlarge
+        - InstanceType: c5d.4xlarge
+        - InstanceType: m5d.4xlarge
+        - InstanceType: m5.4xlarge
+        # - InstanceType: c5d.xlarge
+        # - InstanceType: c5ad.2xlarge
+      small:
+        - InstanceType: m5ad.xlarge
+        - InstanceType: m5d.xlarge
   PoolSize:
     Size:
       full: 11
@@ -366,7 +399,7 @@ Resources:
       Role: !GetAtt LambdaExecutionRole.Arn
       Code:
         ZipFile: !Sub |
-          var response = require('cfn-response');
+          var response = require('./cfn-response');
           exports.handler = function(event, context) {
             var result = parseInt(event.ResourceProperties.Op1) * parseInt(event.ResourceProperties.Op2);
             if(event.ResourceProperties.Max) {
@@ -382,7 +415,7 @@ Resources:
       Role: !GetAtt LambdaExecutionRole.Arn
       Code:
         ZipFile: !Sub |
-          var response = require('cfn-response');
+          var response = require('./cfn-response');
           exports.handler = function(event, context) {
             var result = Math.max(parseInt(event.ResourceProperties.Op1), parseInt(event.ResourceProperties.Op2));
             response.send(event, context, response.SUCCESS, {Value: result});
@@ -574,9 +607,47 @@ Resources:
                 echo "5,20,35,50 * * * * /usr/bin/sh -c 'for x in \$(ls /dev/sd*) ; do echo resizing \$(readlink -f \$x) if needed; /usr/sbin/resize2fs \$(readlink -f \$x) ; done'" >> newcrontab
                 crontab newcrontab
 
-                printf "[Unit]\nDescription=Ethereum go client\nAfter=syslog.target network.target\n\n[Service]\nUser=geth\nGroup=geth\nEnvironment=HOME=/var/lib/ethereum\nType=simple\nLimitNOFILE=655360\nExecStartPre=/usr/bin/geth replica ${ReplicaExtraFlags} --kafka.broker=${KafkaHostname} --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown\nExecStart=/usr/bin/geth ${MasterExtraFlags} --light.maxpeers 0 --maxpeers 25 --gcmode=archive --kafka.broker=${KafkaHostname} --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --kafka.txpool.topic=${InfrastructureStack}-txpool\nKillMode=process\nKillSignal=SIGINT\nTimeoutStartSec=86400\nTimeoutStopSec=90\nOnFailure=poweroff.target\n\n[Install]\nWantedBy=multi-user.target\n" > /etc/systemd/system/geth.service
+                printf "[Unit]
+                Description=Ethereum go client
+                After=syslog.target network.target
 
-                printf "[Unit]\nDescription=Ethereum go client transaction relay\nAfter=syslog.target network.target geth\n\n[Service]\nUser=geth\nGroup=geth\nEnvironment=HOME=/var/lib/ethereum\nType=simple\nExecStart=/usr/bin/geth txrelay --kafka.broker=${KafkaHostname} --kafka.tx.topic=${NetworkId}-tx --kafka.tx.consumergroup=${KafkaTopic}-cg /var/lib/ethereum/geth.ipc\nKillMode=process\nKillSignal=SIGINT\nTimeoutStopSec=90\nRestart=on-failure\nRestartSec=10s\n\n[Install]\nWantedBy=multi-user.target\n" > /etc/systemd/system/geth-tx.service
+                [Service]
+                User=geth
+                Group=geth
+                Environment=HOME=/var/lib/ethereum
+                Type=simple
+                LimitNOFILE=655360
+                ExecStartPre=/usr/bin/geth replica ${ReplicaExtraFlags} --kafka.broker=${KafkaHostname}  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown
+                ExecStart=/usr/bin/geth ${MasterExtraFlags} --light.maxpeers 0 --maxpeers 25 --gcmode=archive --kafka.broker=${KafkaHostname}&net.maxopenrequests=1&message.send.max.retries=20000  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --kafka.txpool.topic=${InfrastructureStack}-txpool
+                KillMode=process
+                KillSignal=SIGINT
+                TimeoutStartSec=86400
+                TimeoutStopSec=90
+                OnFailure=poweroff.target
+
+                [Install]
+                WantedBy=multi-user.target
+                " > /etc/systemd/system/geth.service
+
+                printf "[Unit]
+                Description=Ethereum go client transaction relay
+                After=syslog.target network.target geth
+
+                [Service]
+                User=geth
+                Group=geth
+                Environment=HOME=/var/lib/ethereum
+                Type=simple
+                ExecStart=/usr/bin/geth txrelay --kafka.broker=${KafkaHostname} --kafka.tx.topic=${NetworkId}-tx --kafka.tx.consumergroup=${KafkaTopic}-cg /var/lib/ethereum/geth.ipc
+                KillMode=process
+                KillSignal=SIGINT
+                TimeoutStopSec=90
+                Restart=on-failure
+                RestartSec=10s
+
+                [Install]
+                WantedBy=multi-user.target
+                " > /etc/systemd/system/geth-tx.service
 
                 printf "[Unit]\nDescription=journald-cloudwatch-logs\nWants=basic.target\nAfter=basic.target network.target\n\n[Service]\nExecStart=/usr/local/bin/journald-cloudwatch-logs /usr/local/etc/journald-cloudwatch-logs.conf\nKillMode=process\nRestart=on-failure\nRestartSec=42s" > /etc/systemd/system/journald-cloudwatch-logs.service
 
@@ -716,6 +787,38 @@ Resources:
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
       Threshold: 95
+      TreatMissingData: missing
+  ReplicaCPUSNS:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: Master Disk
+  ReplicasCPUAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmActions:
+        - !Ref ReplicaCPUSNS
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+      AlarmDescription: "Alarms when the replica CPU > 80%"
+      ComparisonOperator: "GreaterThanThreshold"
+      Dimensions:
+        - Name: AutoScalingGroupName
+          Value : !Ref ReplicaAutoScalingGroup
+      InsufficientDataActions:
+        - !Ref ReplicaCPUSNS
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+      EvaluationPeriods: 10
+      DatapointsToAlarm: 7
+      MetricName: "CPUUtilization"
+      Namespace: AWS/EC2
+      OKActions:
+        - !Ref ReplicaCPUSNS
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+      Period: 60
+      Statistic: Maximum
+      Threshold: 80
       TreatMissingData: missing
   MasterDiskSNS:
     Type: AWS::SNS::Topic
@@ -953,7 +1056,7 @@ Resources:
     Properties:
       Code:
         S3Bucket: !Ref S3GethBucketName
-        S3Key: lambdaPackage-12.zip
+        S3Key: lambdaPackage-16.zip
       Description: "A lambda function to process Geth logs into metrics"
       Environment:
         Variables:
@@ -1266,10 +1369,38 @@ Resources:
                 echo "5,20,35,50 * * * * /usr/bin/sh -c 'for x in \$(ls /dev/sd*) ; do echo resizing \$(readlink -f \$x) if needed; /usr/sbin/resize2fs \$(readlink -f \$x) ; done'" >> newcrontab
                 crontab newcrontab
 
-                printf "KafkaHostname=${KafkaHostname}\nKafkaTopic=${KafkaTopic}\nNetworkId=${NetworkId}\ninfraName=${InfrastructureStack}\nbaseInfraName=${BaseInfrastructure}\nnetwork=${NetworkId}" > /etc/systemd/system/ethcattle-vars
+                printf "KafkaHostname=${KafkaHostname}
+                KafkaTopic=${KafkaTopic}
+                NetworkId=${NetworkId}
+                infraName=${InfrastructureStack}
+                baseInfraName=${BaseInfrastructure}
+                network=${NetworkId}
+                LOG_BLOCK_LIMIT=10000" > /etc/systemd/system/ethcattle-vars
 
                 SEP=$(echo "${KafkaHostname}" | grep -q "?" && echo "&" || echo "?")
-                printf "[Unit]\nDescription=Ethereum go client replica\nAfter=syslog.target network.target\n[Service]\nUser=geth\nGroup=geth\nEnvironment=HOME=/var/lib/ethereum\nEnvironmentFile=/etc/systemd/system/ethcattle-vars\nType=simple\nLimitNOFILE=655360\nExecStartPre=/usr/bin/geth replica ${ReplicaExtraFlags} $OVERLAY_FLAG --kafka.broker=${KafkaHostname}""$SEP""fetch.default=8388608&max.waittime=25 --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown\nExecStart=/usr/bin/bash -c '/usr/bin/geth replica ${ReplicaExtraFlags} $OVERLAY_FLAG --kafka.broker=\$KafkaHostname --datadir=/var/lib/ethereum --kafka.topic=\$KafkaTopic --kafka.txpool.topic=\$infraName-txpool  --kafka.tx.topic=\$NetworkId-tx --replica.startup.age=45 --replica.offset.age 62 ${ReplicaHTTPFlag} ${ReplicaGraphQLFlag} ${ReplicaWebsocketsFlag}'\nCPUSchedulingPolicy=fifo\nCPUSchedulingPriority=20\nKillMode=process\nKillSignal=SIGINT\nTimeoutStopSec=90\nRestart=on-failure\nTimeoutStartSec=86400\nRestartSec=10s\n[Install]\nWantedBy=multi-user.target\n" > /etc/systemd/system/geth.service
+                printf "[Unit]
+                Description=Ethereum go client replica
+                After=syslog.target network.target
+                [Service]
+                User=geth
+                Group=geth
+                Environment=HOME=/var/lib/ethereum
+                EnvironmentFile=/etc/systemd/system/ethcattle-vars
+                Type=simple
+                LimitNOFILE=655360
+                ExecStartPre=/usr/bin/geth replica ${ReplicaExtraFlags} $OVERLAY_FLAG --kafka.broker=${KafkaHostname}""$SEP""fetch.default=8388608&max.waittime=25 --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown
+                ExecStart=/usr/bin/bash -c '/usr/bin/geth replica ${ReplicaExtraFlags} $OVERLAY_FLAG --kafka.broker=\$KafkaHostname --datadir=/var/lib/ethereum --kafka.topic=\$KafkaTopic --kafka.txpool.topic=\$infraName-txpool  --kafka.tx.topic=\$NetworkId-tx --replica.startup.age=45  ${ReplicaHTTPFlag} ${ReplicaGraphQLFlag} ${ReplicaWebsocketsFlag}'
+                CPUSchedulingPolicy=fifo
+                CPUSchedulingPriority=20
+                KillMode=process
+                KillSignal=SIGINT
+                TimeoutStopSec=90
+                Restart=on-failure
+                TimeoutStartSec=86400
+                RestartSec=10s
+                [Install]
+                WantedBy=multi-user.target
+                " > /etc/systemd/system/geth.service
 
                 printf "[Unit]\nDescription=journald-cloudwatch-logs\nWants=basic.target\nAfter=basic.target network.target\n\n[Service]\nExecStart=/usr/local/bin/journald-cloudwatch-logs /usr/local/etc/journald-cloudwatch-logs.conf\nKillMode=process\nRestart=on-failure\nRestartSec=42s" > /etc/systemd/system/journald-cloudwatch-logs.service
 
@@ -1387,7 +1518,7 @@ Resources:
     Properties:
       Code:
         S3Bucket: !Ref S3GethBucketName
-        S3Key: lambdaPackage-12.zip
+        S3Key: lambdaPackage-16.zip
       Description: "A lambda function to process Geth logs into metrics"
       Environment:
         Variables:
@@ -1399,7 +1530,7 @@ Resources:
     Type: AWS::Logs::SubscriptionFilter
     Properties:
       DestinationArn: !Sub ${ReplicaLogMetricsFunction.Arn}
-      FilterPattern: '{$.systemdUnit = "geth.service"}'
+      FilterPattern: '{$.systemdUnit = "geth.service" || $.systemdUnit="proxy.service"}'
       LogGroupName: !Ref ReplicaLG
   ReplicaLogMetricFunctionInvokePermission:
     Type: AWS::Lambda::Permission
@@ -1506,6 +1637,18 @@ Resources:
                 fi
 
                 SNAPSHOT_ID=`aws ec2 create-snapshot --volume-id $VOLUME_ID --tag-specification="ResourceType=snapshot,Tags=[{Key=cluster,Value=${KafkaTopic}},{Key=Name,Value=${KafkaTopic}-chaindata-$(date -Isecond -u)}]" | jq '.SnapshotId' -cr`
+
+                if [ "$SNAPSHOT_ID" == "null" ]; then
+                  if [ "${AggregatedNotifications}" != "" ]
+                  then
+                    aws sns publish --topic-arn=${AggregatedNotifications} --subject="${AWS::StackName} - Snapshotting Volume Failed" --message="The snapshotting process for ${KafkaTopic} failed to take a snapshot."
+                  fi
+                  if [ "${AlarmSNSTopic}" != "" ]
+                  then
+                    aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - Snapshotting Volume Failed" --message="The snapshotting process for ${KafkaTopic} failed to take a snapshot."
+                  fi
+                  exit poweroff
+                fi
                 echo "Waiting for snapshot to complete"
                 while [ `aws ec2 describe-snapshots --filters=Name=snapshot-id,Values=$SNAPSHOT_ID | jq '.Snapshots[0].State' -cr` != "completed" ];
                 do
@@ -1542,6 +1685,250 @@ Resources:
                   "Fn::ImportValue": !Sub "${InfrastructureStack}-KafkaBrokerURL"
                 ClusterId:
                   "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
+  FallBackLG:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays: 7
+      LogGroupName:
+        "Fn::Sub":
+          - "/${ClusterId}/${AWS::StackName}/fallback"
+          - ClusterId:
+              "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
+
+  FallbackLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateData:
+        ImageId: !If [HasReplicaImageAMI, !Ref ReplicaImageAMI, !FindInMap [RegionMap, !Ref "AWS::Region", AL2AMI]]
+        InstanceType: m5ad.large
+        TagSpecifications:
+          - ResourceType: instance
+            Tags:
+              - Key: Name
+                Value: !Sub "${KafkaTopic}-Fallback"
+          - ResourceType: volume
+            Tags:
+              - Key: Name
+                Value: !Sub "${KafkaTopic}-Fallback"
+        SecurityGroupIds:
+          - !Sub ${ReplicaNodeSecurityGroup.GroupId}
+          - !If [HasExtraSecurityGroup, !Ref ReplicaExtraSecurityGroup, !Ref 'AWS::NoValue']
+        IamInstanceProfile:
+          Name: !Ref ReplicaNodeInstanceProfile
+        KeyName: !If [HasKeyName, !Ref KeyName, !Ref 'AWS::NoValue']
+        CreditSpecification: !If [SmallReplica, {CpuCredits: standard}, !Ref 'AWS::NoValue']
+        BlockDeviceMappings:
+        - DeviceName: "/dev/xvda"
+          Ebs:
+            VolumeSize: 8
+            VolumeType: gp2
+        - DeviceName: "/dev/sdf"
+          Ebs:
+            VolumeSize: !If [ReplicaHDD, !GetAtt HDDSize.Value, !Ref DiskSize]
+            VolumeType: !If [ReplicaHDD, !Ref ReplicaDiskType, "io1"]
+            Iops: !If [ReplicaHDD, !Ref 'AWS::NoValue', !GetAtt VolumeIOPS.Value ]
+            SnapshotId: !Ref SnapshotId
+        - !If [ SmallReplica, {DeviceName: "/dev/sdg", Ebs: {VolumeSize: 25, VolumeType: gp2}}, !Ref 'AWS::NoValue']
+        UserData:
+          "Fn::Base64":
+            "Fn::Sub":
+              - |
+                #!/bin/bash -xe
+                if [ "$(arch)" == "x86_64" ]
+                then
+                  ARCH="amd64"
+                elif [ "$(arch)" == "aarch64" ]
+                then
+                  ARCH="arm64"
+                fi
+                GETH_BIN="geth-linux-$ARCH"
+                LOGS_BIN="journald-cloudwatch-logs-$ARCH"
+                aws s3 cp s3://${S3GethBucketName}/${ECGethVersion}/$GETH_BIN /usr/bin/geth
+                aws s3 cp s3://${S3GethBucketName}/$LOGS_BIN /usr/local/bin/journald-cloudwatch-logs
+                chmod +x /usr/bin/geth
+                chmod +x /usr/local/bin/journald-cloudwatch-logs
+                mkdir -p /var/lib/journald-cloudwatch-logs/
+                mkdir -p /var/lib/ethereum
+                mount -o barrier=0,data=writeback /dev/sdf /var/lib/ethereum
+                mkdir -p /var/lib/ethereum/overlay
+                resize2fs /dev/sdf
+                useradd -r geth
+
+                echo "/dev/sdf  /var/lib/ethereum    ext4   barrier=0,data=writeback,noatime  1   1" >> /etc/fstab
+
+                if [ -e /dev/sdg ]
+                then
+                  mkfs.ext4 /dev/sdg
+                  mount -o barrier=0,data=writeback /dev/sdg /var/lib/ethereum/overlay
+                  echo "/dev/sdg  /var/lib/ethereum/overlay    ext4   barrier=0,data=writeback,noatime  1   1" >> /etc/fstab
+                  OVERLAY_FLAG="--datadir.overlay=/var/lib/ethereum/overlay"
+                fi
+                ignore="$(readlink -f /dev/sd*) $(readlink -f /dev/xvd*)"
+                cutignore="$(for x in $ignore ; do echo $x | cut -c -12; done | uniq)"
+                devices="$(ls /dev/nvme* | grep -E 'n1$')"
+                cutdevices="$(for x in $devices ; do echo $x | cut -c -12; done | uniq)"
+                localnvme=$(for d in $cutdevices; do if ! $(echo "$cutignore"| grep -q $d) ; then echo $d; fi ; done)
+                #DisableOverlay until can figure out write back to overlay support for full nodes
+                #if [ ! -z "$localnvme" ]
+                #then
+                #  mkfs.ext4 $localnvme
+                #  mount -o barrier=0,data=writeback $localnvme /var/lib/ethereum/overlay
+                #  echo "$localnvme  /var/lib/ethereum/overlay    ext4   barrier=0,data=writeback,noatime  1   1" >> /etc/fstab
+                #  OVERLAY_FLAG="--datadir.overlay=/var/lib/ethereum/overlay"
+                #fi
+
+                chown -R geth /var/lib/ethereum
+
+                yum install -y https://s3.amazonaws.com/amazoncloudwatch-agent/amazon_linux/$ARCH/latest/amazon-cloudwatch-agent.rpm jq fio || true
+
+
+                /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -c ssm:${MetricsConfigParameter} -s
+
+                crontab -l >  newcrontab || true
+                echo "5,20,35,50 * * * * /usr/bin/sh -c 'for x in \$(ls /dev/sd*) ; do echo resizing \$(readlink -f \$x) if needed; /usr/sbin/resize2fs \$(readlink -f \$x) ; done'" >> newcrontab
+                crontab newcrontab
+
+                printf "KafkaHostname=${KafkaHostname}
+                KafkaTopic=${KafkaTopic}
+                NetworkId=${NetworkId}
+                infraName=${InfrastructureStack}
+                baseInfraName=${BaseInfrastructure}
+                network=${NetworkId}
+                LOG_BLOCK_LIMIT=10000" > /etc/systemd/system/ethcattle-vars
+
+                SEP=$(echo "${KafkaHostname}" | grep -q "?" && echo "&" || echo "?")
+                printf "[Unit]
+                Description=Ethereum go client replica
+                After=syslog.target network.target
+                [Service]
+                User=geth
+                Group=geth
+                Environment=HOME=/var/lib/ethereum
+                EnvironmentFile=/etc/systemd/system/ethcattle-vars
+                Type=simple
+                LimitNOFILE=655360
+                ExecStartPre=/usr/bin/geth replica --kafka.broker=${KafkaHostname}""$SEP""fetch.default=8388608&max.waittime=25 --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown || true
+                ExecStart=/usr/bin/bash -c '/usr/bin/geth --datadir=/var/lib/ethereum --light.maxpeers 0 --maxpeers 25 ${ReplicaHTTPFlag} ${ReplicaGraphQLFlag} ${ReplicaWebsocketsFlag}'
+                CPUSchedulingPolicy=fifo
+                CPUSchedulingPriority=20
+                KillMode=process
+                KillSignal=SIGINT
+                TimeoutStopSec=90
+                TimeoutStartSec=86400
+                RestartSec=10s
+                [Install]
+                WantedBy=multi-user.target
+                " > /etc/systemd/system/geth.service
+
+                printf "[Unit]\nDescription=journald-cloudwatch-logs\nWants=basic.target\nAfter=basic.target network.target\n\n[Service]\nExecStart=/usr/local/bin/journald-cloudwatch-logs /usr/local/etc/journald-cloudwatch-logs.conf\nKillMode=process\nRestart=on-failure\nRestartSec=42s" > /etc/systemd/system/journald-cloudwatch-logs.service
+
+                printf "log_group = \"${FallBackLG}\"\nstate_file = \"/var/lib/journald-cloudwatch-logs/state\"" > /usr/local/etc/journald-cloudwatch-logs.conf
+
+                echo "geth        hard nofile 500000" >> /etc/security/limits.conf
+                echo "geth        soft nofile 500000" >> /etc/security/limits.conf
+                sysctl -w fs.file-max=12000500
+                sysctl -w fs.nr_open=20000500
+                # Set the maximum number of open file descriptors
+                ulimit -n 20000000
+
+                # Set the memory size for TCP with minimum, default and maximum thresholds
+                sysctl -w net.ipv4.tcp_mem='10000000 10000000 10000000'
+
+                # Set the receive buffer for each TCP connection with minumum, default and maximum thresholds
+                sysctl -w net.ipv4.tcp_rmem='1024 4096 16384'
+
+                # Set the TCP send buffer space with minumum, default and maximum thresholds
+                sysctl -w net.ipv4.tcp_wmem='1024 4096 16384'
+
+                # The maximum socket receive buffer sizemem_max=16384
+                sysctl -w net.core.rmem_max=16384
+
+                # The maximum socket send buffer size
+                sysctl -w net.core.wmem_max=16384
+
+                sysctl -w vm.swappiness=0
+
+                systemctl daemon-reload
+                systemctl enable geth.service
+                sleep 5 #TODO- workaround for a deadlock on topic creation
+                rm /var/lib/ethereum/geth.ipc || true
+                systemctl start geth.service || true &
+                systemctl enable amazon-cloudwatch-agent.service
+                systemctl start amazon-cloudwatch-agent.service
+                systemctl enable journald-cloudwatch-logs
+                systemctl start journald-cloudwatch-logs
+
+                fio --filename=/dev/sdf --rw=read --bs=128k --iodepth=32 --ioengine=libaio --prio=7 --prioclass=3 --thinktime=2 --rate_iops=$((${DiskSize} * 3 - 100 )) --direct=1 --name=volume-initialize &
+                if [ -f /usr/bin/replica-hook ]
+                then
+                  /usr/bin/replica-hook
+                fi
+                export AWS_DEFAULT_REGION=${AWS::Region}
+                VOLUME_ID=$(aws ec2 describe-volumes --filters Name=attachment.instance-id,Values="$(curl http://169.254.169.254/latest/meta-data/instance-id)" | jq '.Volumes[] | select(. | .Attachments[0].Device == "/dev/sdf") | .VolumeId' -cr)
+                # aws ec2 modify-volume --volume-id $VOLUME_ID --volume-type gp2 &
+              - KafkaHostname:
+                  "Fn::ImportValue": !Sub "${InfrastructureStack}-KafkaBrokerURL"
+                ClusterId:
+                  "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
+                ReplicaHTTPFlag:
+                    !If [HasReplicaHTTP, "--rpc --rpcaddr 0.0.0.0 --rpcport 8545", ""]
+                ReplicaGraphQLFlag:
+                    # Wow that's a lot of escaping!
+                    !If [HasReplicaGraphQL, "--graphql --graphql.addr 0.0.0.0 --graphql.port 8547 --graphql.vhosts \\\\\\'*\\\\\\'", ""]
+                ReplicaWebsocketsFlag:
+                    !If [HasReplicaWebsockets, "--ws --wsaddr 0.0.0.0 --wsport 8546", ""]
+                BaseInfrastructure:
+                  "Fn::ImportValue": !Sub "${InfrastructureStack}-BaseInfrastructure"
+
+  FallbackAutoScalingPolicy:
+    Type: AWS::AutoScaling::ScalingPolicy
+    Properties:
+      # AdjustmentType: String
+      AutoScalingGroupName: !Ref FallbackAutoScalingGroup
+      # Cooldown: 900
+      EstimatedInstanceWarmup: 600
+      # MetricAggregationType: String
+      # MinAdjustmentMagnitude: Integer
+      PolicyType: TargetTrackingScaling
+      # ScalingAdjustment: Integer
+      # StepAdjustments:
+      #   - StepAdjustment
+      TargetTrackingConfiguration:
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ASGAverageCPUUtilization
+        TargetValue: !Ref ReplicaCPUScalingTargetValue
+
+  FallbackAutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      VPCZoneIdentifier:
+        - "Fn::ImportValue":
+            !Sub "${InfrastructureStack}-PublicA"
+        - "Fn::ImportValue":
+            !Sub "${InfrastructureStack}-PublicB"
+        - "Fn::ImportValue":
+            !Sub "${InfrastructureStack}-PublicC"
+      MixedInstancesPolicy:
+        InstancesDistribution:
+          OnDemandPercentageAboveBaseCapacity: !Ref ReplicaOnDemandPercentage
+          SpotInstancePools: !FindInMap [PoolSize, Size, !Ref ReplicaSize]
+        LaunchTemplate:
+          LaunchTemplateSpecification:
+            LaunchTemplateId: !Ref FallbackLaunchTemplate
+            Version: !Sub ${FallbackLaunchTemplate.LatestVersionNumber}
+          Overrides: !FindInMap [InstanceSizes, Fallback, !Ref ReplicaSize]
+      MinSize: !Ref FallbackTargetCapacity
+      MaxSize: !Ref FallbackMaxCapacity
+      HealthCheckType: EC2
+      TargetGroupARNs: !Split [ ",", !If [HasATG, !Ref AlternateTargetGroup, {"Fn::ImportValue": !Sub "${InfrastructureStack}-ALBGroupList"}]]
+      MetricsCollection:
+      - Granularity: 1Minute
+        Metrics:
+        - GroupInServiceInstances
+      Tags:
+      - Key: Name
+        Value: !Sub ${AWS::StackName}-Fallback
+        PropagateAtLaunch: 'true'
 
   SnapshotterNodeRole:
     Type: "AWS::IAM::Role"
@@ -1693,7 +2080,7 @@ Resources:
     Properties:
       Code:
         S3Bucket: !Ref S3GethBucketName
-        S3Key: lambdaPackage-12.zip
+        S3Key: lambdaPackage-16.zip
       Description: "Launch instances to snapshot chaindata"
       Environment:
         Variables:
@@ -1711,7 +2098,7 @@ Resources:
     Type: AWS::Events::Rule
     Properties:
       Description: !Sub "Take a daily snapshot for the ${KafkaTopic} cluster"
-      ScheduleExpression: "rate(1 day)"
+      ScheduleExpression: !Ref SnapshotScheduleExpression
       Targets:
         - Arn: !Sub ${SnapshotterLambdaFunction.Arn}
           Id: !Sub "snapshot-${KafkaTopic}"
@@ -1757,11 +2144,12 @@ Resources:
     Properties:
       Code:
         S3Bucket: !Ref S3GethBucketName
-        S3Key: lambdaPackage-12.zip
+        S3Key: lambdaPackage-16.zip
       Description: "Cleanup old chaindata snapshots"
       Environment:
         Variables:
           CLUSTER_ID: !Ref KafkaTopic
+          SNAPSHOT_ID: !Ref SnapshotId
       Handler: "gcSnapshot.handler"
       Role: !Sub ${SnapshotGCLambdaRole.Arn}
       Runtime: python3.7
@@ -1789,7 +2177,7 @@ Resources:
     Properties:
       Code:
         S3Bucket: !Ref S3GethBucketName
-        S3Key: lambdaPackage-12.zip
+        S3Key: lambdaPackage-16.zip
       Description: "Collect metrics for remote RPC URLs"
       Environment:
         Variables:
@@ -1803,7 +2191,7 @@ Resources:
     Condition: HasRemoteRPCURL
     Type: AWS::Events::Rule
     Properties:
-      Description: !Sub ""
+      Description: !Sub "Remote metrics"
       ScheduleExpression: "rate(1 minute)"
       Targets:
         - Arn: !Sub ${RemoteMetricsLambdaFunction.Arn}
@@ -1998,6 +2386,44 @@ Resources:
                             ],
                             "region": "${AWS::Region}",
                             "title": "Master Peer Count"
+                        }
+                    },
+                    {
+                        "type": "metric",
+                        "properties": {
+                            "view": "timeSeries",
+                            "stacked": false,
+                            "metrics": [
+                                [ "ReplicaData", "delta",  "clusterId", "${KafkaTopic}", { "stat": "Average", "label": "Replica Delta (avg)" } ],
+                                [ "ReplicaData", "delta",  "clusterId", "${KafkaTopic}", { "stat": "Maximum", "label": "Replica Delta (max)" } ]
+                            ],
+                            "region": "${AWS::Region}",
+                            "title": "Replication Delta"
+                        }
+                    },
+                    {
+                        "type": "metric",
+                        "properties": {
+                            "view": "timeSeries",
+                            "stacked": false,
+                            "metrics": [
+                                [ "ReplicaData", "concurrency",  "clusterId", "${KafkaTopic}", { "stat": "Average", "label": "Concurrent Requests (avg)" } ],
+                                [ "ReplicaData", "concurrency",  "clusterId", "${KafkaTopic}", { "stat": "Maximum", "label": "Concurrent Requests (max)" } ]
+                            ],
+                            "region": "${AWS::Region}",
+                            "title": "Replica Concurrency"
+                        }
+                    },
+                    {
+                        "type": "metric",
+                        "properties": {
+                            "view": "timeSeries",
+                            "stacked": false,
+                            "metrics": [
+                                [ "ReplicaData", "backend_error",  "clusterId", "${KafkaTopic}", { "stat": "Sum", "label": "Backend Errors (avg)" } ]
+                            ],
+                            "region": "${AWS::Region}",
+                            "title": "Backend Errors"
                         }
                     }${DashExt}
                 ]

@@ -14,7 +14,9 @@ BLOCK_AGE_REP_RE = re.compile(r"blockAge=(\d+w)?(\d+d)?(\d+h)?(\d+m)?(\d+s)?")
 BLOCK_NUM_REP_RE = re.compile("num=(\d+)")
 OFFSET_NUM_RE = re.compile("offset=(\d+)")
 OFFSET_AGE_RE = re.compile(r"offsetAge=(\d+w)?(\d+d)?(\d+h)?(\d+m)?(\d+s)?")
+DELTA_RE = re.compile(r"delta=(\d+w)?(\d+d)?(\d+h)?(\d+m(?!s))?(\d+(?:[.]\d+)?s)?(\d+(?:[.]\d+)?ms)?")
 PEER_COUNT_RE = re.compile(r"peerCount: (\d+)")
+CONCURRENCY_RE = re.compile(r"Serving (\d+) concurrent")
 
 
 def numberFromRe(message, regex):
@@ -41,6 +43,27 @@ def ageFromRe(message, regex):
     if second:
         ageSec += int(second[:-1])
     return ageSec
+
+
+def ageFromReMs(message, regex):
+    m = regex.search(message)
+    if not m:
+        raise ValueError("Message does not match regex")
+    ageMs = 0
+    week, day, hour, minute, second, millis = m.groups()
+    if week:
+        ageMs += int(week[:-1]) * 60 * 60 * 24 * 7 * 1000
+    if day:
+        ageMs += int(day[:-1]) * 60 * 60 * 24 * 1000
+    if hour:
+        ageMs += int(hour[:-1]) * 60 * 60 * 1000
+    if minute:
+        ageMs += int(minute[:-1]) * 60 * 1000
+    if second:
+        ageMs += float(second[:-1]) * 1000
+    if millis:
+        ageMs += float(millis[:-2])
+    return ageMs
 
 
 def appendMetric(item, metricData, metricName, value, unit="None", stream=None):
@@ -138,6 +161,26 @@ def replicaHandler(event, context):
                          ageFromRe(item["message"], OFFSET_AGE_RE), "Seconds")
         except ValueError:
             pass
+        try:
+            appendMetric(item, metricData, "delta",
+                         ageFromReMs(item["message"], DELTA_RE), "Milliseconds",
+                         stream=eventData["logStream"])
+            appendMetric(item, metricData, "delta",
+                         ageFromReMs(item["message"], DELTA_RE), "Milliseconds")
+        except ValueError:
+            pass
+        try:
+            appendMetric(item, metricData, "concurrency",
+                         numberFromRe(item["message"], CONCURRENCY_RE),
+                         stream=eventData["logStream"])
+            appendMetric(item, metricData, "concurrency",
+                         numberFromRe(item["message"], CONCURRENCY_RE))
+        except ValueError:
+            pass
+
+        if "Error communicating with backend:" in item:
+            appendMetric(item, metricData, "backend_error", 1,
+                         stream=eventData["logStream"])
 
         if metricData:
             client.put_metric_data(
