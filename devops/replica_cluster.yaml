@@ -1056,7 +1056,7 @@ Resources:
     Properties:
       Code:
         S3Bucket: !Ref S3GethBucketName
-        S3Key: lambdaPackage-16.zip
+        S3Key: lambdaPackage-17.zip
       Description: "A lambda function to process Geth logs into metrics"
       Environment:
         Variables:
@@ -1518,7 +1518,7 @@ Resources:
     Properties:
       Code:
         S3Bucket: !Ref S3GethBucketName
-        S3Key: lambdaPackage-16.zip
+        S3Key: lambdaPackage-17.zip
       Description: "A lambda function to process Geth logs into metrics"
       Environment:
         Variables:
@@ -2052,6 +2052,7 @@ Resources:
               - logs:CreateLogStream
               - logs:CreateLogGroup
               - logs:PutLogEvents
+              - sns:Publish
             Effect: Allow
             Resource: "*"
           - Effect: Allow
@@ -2082,7 +2083,7 @@ Resources:
     Properties:
       Code:
         S3Bucket: !Ref S3GethBucketName
-        S3Key: lambdaPackage-16.zip
+        S3Key: lambdaPackage-17.zip
       Description: "Launch instances to snapshot chaindata"
       Environment:
         Variables:
@@ -2137,6 +2138,7 @@ Resources:
         Statement:
           - Effect: Allow
             Action:
+              - sns:Publish
               - ec2:DescribeSnapshots
               - ec2:DeleteSnapshot
             Resource: "*"
@@ -2146,12 +2148,13 @@ Resources:
     Properties:
       Code:
         S3Bucket: !Ref S3GethBucketName
-        S3Key: lambdaPackage-16.zip
+        S3Key: lambdaPackage-17.zip
       Description: "Cleanup old chaindata snapshots"
       Environment:
         Variables:
           CLUSTER_ID: !Ref KafkaTopic
           SNAPSHOT_ID: !Ref SnapshotId
+          SNS_TOPICS: !Sub "${AggregatedNotifications};${AlarmSNSTopic}"
       Handler: "gcSnapshot.handler"
       Role: !Sub ${SnapshotGCLambdaRole.Arn}
       Runtime: python3.7
@@ -2179,7 +2182,7 @@ Resources:
     Properties:
       Code:
         S3Bucket: !Ref S3GethBucketName
-        S3Key: lambdaPackage-16.zip
+        S3Key: lambdaPackage-17.zip
       Description: "Collect metrics for remote RPC URLs"
       Environment:
         Variables:
