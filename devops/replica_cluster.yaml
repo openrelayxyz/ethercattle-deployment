@@ -1006,6 +1006,75 @@ Resources:
       Statistic: Maximum
       Threshold: 10
       TreatMissingData: missing
+
+  ReplicaCountAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmActions:
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+      AlarmDescription: !Sub "Alarms when the number of replicas < desired capacity"
+      ComparisonOperator: "LessThanThreshold"
+
+      InsufficientDataActions:
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+      EvaluationPeriods: 5
+      DatapointsToAlarm: 2
+      Metrics:
+        - Id: instances
+          MetricStat:
+            Metric:
+              MetricName: "GroupInServiceInstances"
+              Namespace: AWS/AutoScaling
+              Dimensions:
+                - Name: AutoScalingGroupName
+                  Value : !Ref ReplicaAutoScalingGroup
+            Period: 60
+            Stat: Minimum
+          Label: Instances
+          ReturnData: false
+        - Id: measured
+          Expression: "(instances + 1)"
+      OKActions:
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+      Threshold: !Ref ReplicaTargetCapacity
+      TreatMissingData: missing
+  MasterCountAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmActions:
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+      AlarmDescription: !Sub "Alarms when the number of replicas < desired capacity"
+      ComparisonOperator: "LessThanThreshold"
+
+      InsufficientDataActions:
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+      EvaluationPeriods: 5
+      DatapointsToAlarm: 2
+      Metrics:
+        - Id: instances
+          MetricStat:
+            Metric:
+              MetricName: "GroupInServiceInstances"
+              Namespace: AWS/AutoScaling
+              Dimensions:
+                - Name: AutoScalingGroupName
+                  Value : !Ref MasterAutoScalingGroup
+            Period: 60
+            Stat: Minimum
+          Label: Instances
+          ReturnData: false
+        - Id: measured
+          Expression: "(instances + 1)"
+      OKActions:
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+      Threshold: !Ref MasterCount
+      TreatMissingData: missing
   MasterLogMetricsFunctionLG:
     Type: AWS::Logs::LogGroup
     Properties:
