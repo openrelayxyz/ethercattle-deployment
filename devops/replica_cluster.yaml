@@ -1006,6 +1006,75 @@ Resources:
       Statistic: Maximum
       Threshold: 10
       TreatMissingData: missing
+
+  ReplicaCountAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmActions:
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+      AlarmDescription: !Sub "Alarms when the number of replicas < desired capacity"
+      ComparisonOperator: "LessThanThreshold"
+
+      InsufficientDataActions:
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+      EvaluationPeriods: 5
+      DatapointsToAlarm: 2
+      Metrics:
+        - Id: instances
+          MetricStat:
+            Metric:
+              MetricName: "GroupInServiceInstances"
+              Namespace: AWS/AutoScaling
+              Dimensions:
+                - Name: AutoScalingGroupName
+                  Value : !Ref ReplicaAutoScalingGroup
+            Period: 60
+            Stat: Minimum
+          Label: Instances
+          ReturnData: false
+        - Id: measured
+          Expression: "(instances + 1)"
+      OKActions:
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+      Threshold: !Ref ReplicaTargetCapacity
+      TreatMissingData: missing
+  MasterCountAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmActions:
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+      AlarmDescription: !Sub "Alarms when the number of replicas < desired capacity"
+      ComparisonOperator: "LessThanThreshold"
+
+      InsufficientDataActions:
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+      EvaluationPeriods: 5
+      DatapointsToAlarm: 2
+      Metrics:
+        - Id: instances
+          MetricStat:
+            Metric:
+              MetricName: "GroupInServiceInstances"
+              Namespace: AWS/AutoScaling
+              Dimensions:
+                - Name: AutoScalingGroupName
+                  Value : !Ref MasterAutoScalingGroup
+            Period: 60
+            Stat: Minimum
+          Label: Instances
+          ReturnData: false
+        - Id: measured
+          Expression: "(instances + 1)"
+      OKActions:
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+      Threshold: !Ref MasterCount
+      TreatMissingData: missing
   MasterLogMetricsFunctionLG:
     Type: AWS::Logs::LogGroup
     Properties:
@@ -1056,7 +1125,7 @@ Resources:
     Properties:
       Code:
         S3Bucket: !Ref S3GethBucketName
-        S3Key: lambdaPackage-16.zip
+        S3Key: lambdaPackage-17.zip
       Description: "A lambda function to process Geth logs into metrics"
       Environment:
         Variables:
@@ -1518,7 +1587,7 @@ Resources:
     Properties:
       Code:
         S3Bucket: !Ref S3GethBucketName
-        S3Key: lambdaPackage-16.zip
+        S3Key: lambdaPackage-17.zip
       Description: "A lambda function to process Geth logs into metrics"
       Environment:
         Variables:
@@ -2052,6 +2121,7 @@ Resources:
               - logs:CreateLogStream
               - logs:CreateLogGroup
               - logs:PutLogEvents
+              - sns:Publish
             Effect: Allow
             Resource: "*"
           - Effect: Allow
@@ -2082,7 +2152,7 @@ Resources:
     Properties:
       Code:
         S3Bucket: !Ref S3GethBucketName
-        S3Key: lambdaPackage-16.zip
+        S3Key: lambdaPackage-17.zip
       Description: "Launch instances to snapshot chaindata"
       Environment:
         Variables:
@@ -2137,6 +2207,7 @@ Resources:
         Statement:
           - Effect: Allow
             Action:
+              - sns:Publish
               - ec2:DescribeSnapshots
               - ec2:DeleteSnapshot
             Resource: "*"
@@ -2146,12 +2217,13 @@ Resources:
     Properties:
       Code:
         S3Bucket: !Ref S3GethBucketName
-        S3Key: lambdaPackage-16.zip
+        S3Key: lambdaPackage-17.zip
       Description: "Cleanup old chaindata snapshots"
       Environment:
         Variables:
           CLUSTER_ID: !Ref KafkaTopic
           SNAPSHOT_ID: !Ref SnapshotId
+          SNS_TOPICS: !Sub "${AggregatedNotifications};${AlarmSNSTopic}"
       Handler: "gcSnapshot.handler"
       Role: !Sub ${SnapshotGCLambdaRole.Arn}
       Runtime: python3.7
@@ -2179,7 +2251,7 @@ Resources:
     Properties:
       Code:
         S3Bucket: !Ref S3GethBucketName
-        S3Key: lambdaPackage-16.zip
+        S3Key: lambdaPackage-17.zip
       Description: "Collect metrics for remote RPC URLs"
       Environment:
         Variables:

@@ -3,11 +3,35 @@ import os
 import datetime
 
 ec2 = boto3.client('ec2')
+sns = boto3.client('sns')
 keep_count = int(os.environ.get("KEEP_COUNT", 2))
 today_keep_count = int(os.environ.get("TODAY_KEEP_COUNT", 2))
 
 
 def handler(event, context):
+    try:
+        current_snap = ec2.describe_snapshots(SnapshotIds=[os.environ.get("SNAPSHOT_ID")])["Snapshots"]
+    except Exception as e:
+        topics = os.environ.get("SNS_TOPICS").split(";")
+        for topic in topics:
+            if topic:
+                sns.publish(
+                    TopicArn=topic,
+                    Subject="Warning: %s snapshot unavailable" % os.environ.get("CLUSTER_ID"),
+                    Message="The current snapshot for cluster %(CLUSTER_ID)s is %(SNAPSHOT_ID)s, but could not be found." % os.environ,
+                )
+    else:
+        now = datetime.datetime.utcnow().replace(tzinfo=current_snap[0]["StartTime"].tzinfo)
+        if now - current_snap[0]["StartTime"] > datetime.timedelta(hours=12):
+            topics = os.environ.get("SNS_TOPICS").split(";")
+            for topic in topics:
+                if topic:
+                    sns.publish(
+                        TopicArn=topic,
+                        Subject="Warning: %s Snapshot outdated" % os.environ.get("CLUSTER_ID"),
+                        Message="The current snapshot for cluster %(CLUSTER_ID)s is %(SNAPSHOT_ID)s, but it is over 12 hours old." % os.environ,
+                    )
+
     rsp = ec2.describe_snapshots(
         Filters=[{
             "Name": "tag:cluster",
