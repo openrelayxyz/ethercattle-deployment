@@ -110,7 +110,7 @@ Resources:
           exports.handler = function(event, context) {
             response.send(event, context, response.SUCCESS, {Value: event.ResourceProperties.CommaSeparatedArns.split(",").map(function(x) { return {"CertificateArn": x} })});
           };
-      Runtime: nodejs8.10
+      Runtime: nodejs12.x
   CertificateArnList:
     Type: Custom::CertificateARNSplitter
     Properties:

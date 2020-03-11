@@ -150,6 +150,9 @@ Parameters:
     Type: String
     Description: A schedule expression for the frequency to take snapshots
     Default: "cron(55 0/6 * * ? *)"
+  EventsTopic:
+    Type: String
+    Description: A Kafka topic for log data and events
 
 
 
@@ -160,6 +163,7 @@ Metadata:
           default: Infrastructure
         Parameters:
           - InfrastructureStack
+          - EventsTopic
           - AlternateTargetGroup
           - AlarmSNSTopic
           - NotificationEmail
@@ -260,6 +264,8 @@ Metadata:
         default: Dashboard Extension
       SnapshotScheduleExpression:
         default: Snapshot Schedule Expression
+      EventsTopic:
+        default: Events topic
 
 Mappings:
   InstanceSizes:
@@ -378,6 +384,7 @@ Conditions:
   SmallMaster: !Equals [ !Ref MasterSize, "small"]
   SmallReplica: !Equals [ !Ref ReplicaSize, "small"]
   HasDashboardExtensions: !Not [!Equals [ !Ref DashboardExtension, "" ]]
+  HasEventsTopic: !Not [!Equals [!Ref EventsTopic, "" ]]
 
 Resources:
   LambdaExecutionRole:
@@ -618,7 +625,7 @@ Resources:
                 Type=simple
                 LimitNOFILE=655360
                 ExecStartPre=/usr/bin/geth replica ${ReplicaExtraFlags} --kafka.broker=${KafkaHostname}  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown
-                ExecStart=/usr/bin/geth ${MasterExtraFlags} --light.maxpeers 0 --maxpeers 25 --gcmode=archive --kafka.broker=${KafkaHostname}&net.maxopenrequests=1&message.send.max.retries=20000  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --kafka.txpool.topic=${InfrastructureStack}-txpool
+                ExecStart=/usr/bin/geth ${MasterExtraFlags} --light.maxpeers 0 --maxpeers 25 --gcmode=archive --kafka.broker=${KafkaHostname}&net.maxopenrequests=1&message.send.max.retries=20000  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --kafka.txpool.topic=${InfrastructureStack}-txpool ${EventsTopicFlag}
                 KillMode=process
                 KillSignal=SIGINT
                 TimeoutStartSec=86400
@@ -679,6 +686,7 @@ Resources:
                   "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
                 BaseInfrastructure:
                   "Fn::ImportValue": !Sub "${InfrastructureStack}-BaseInfrastructure"
+                EventsTopicFlag: !If [ HasEventsTopic, !Sub "--kafka.events.topic ${EventsTopic}", ""]
 
   MasterAutoScalingGroup:
     Type: AWS::AutoScaling::AutoScalingGroup
