@@ -153,6 +153,9 @@ Parameters:
   EventsTopic:
     Type: String
     Description: A Kafka topic for log data and events
+  FlumeURL:
+    Type: String
+    Description: (optional) The URL of a Flume server for indexed logging
 
 
 
@@ -171,6 +174,7 @@ Metadata:
           - RemoteRPCURL
           - SnapshotScheduleExpression
           - DashboardExtension
+          - FlumeURL
       - Label:
           default: Cluster
         Parameters:
@@ -266,6 +270,8 @@ Metadata:
         default: Snapshot Schedule Expression
       EventsTopic:
         default: Events topic
+      FlumeURL:
+        default: Flume URL
 
 Mappings:
   InstanceSizes:
@@ -385,6 +391,7 @@ Conditions:
   SmallReplica: !Equals [ !Ref ReplicaSize, "small"]
   HasDashboardExtensions: !Not [!Equals [ !Ref DashboardExtension, "" ]]
   HasEventsTopic: !Not [!Equals [!Ref EventsTopic, "" ]]
+  HasFlume: !Not [!Equals [!Ref FlumeURL, ""]]
 
 Resources:
   LambdaExecutionRole:
@@ -1452,7 +1459,8 @@ Resources:
                 infraName=${InfrastructureStack}
                 baseInfraName=${BaseInfrastructure}
                 network=${NetworkId}
-                LOG_BLOCK_LIMIT=10000" > /etc/systemd/system/ethcattle-vars
+                LOG_BLOCK_LIMIT=10000
+                FLUME_URL=${FlumeURL}" > /etc/systemd/system/ethcattle-vars
 
                 SEP=$(echo "${KafkaHostname}" | grep -q "?" && echo "&" || echo "?")
                 printf "[Unit]
