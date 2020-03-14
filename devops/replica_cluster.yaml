@@ -693,7 +693,7 @@ Resources:
                   "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
                 BaseInfrastructure:
                   "Fn::ImportValue": !Sub "${InfrastructureStack}-BaseInfrastructure"
-                EventsTopicFlag: !If [ HasEventsTopic, !Sub "--kafka.events.topic ${EventsTopic}", ""]
+                EventsTopicFlag: !If [ HasEventsTopic, !Sub "--kafka.event.topic ${EventsTopic}", ""]
 
   MasterAutoScalingGroup:
     Type: AWS::AutoScaling::AutoScalingGroup
