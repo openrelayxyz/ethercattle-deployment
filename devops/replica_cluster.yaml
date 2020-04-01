@@ -82,6 +82,10 @@ Parameters:
     Type: Number
     Default: 75
     Description: The amount of memory which should trigger alarms if used for > 30 minutes
+  MasterMemoryThresholdLow:
+    Type: Number
+    Default: 10
+    Description: The amount of memory below which an alarm should triger
   MasterMemoryThresholdHigh:
     Type: Number
     Default: 85
@@ -903,6 +907,33 @@ Resources:
       Period: 60
       Statistic: Maximum
       Threshold: !Ref MasterMemoryThresholdLong
+      TreatMissingData: missing
+  MasterMemAlarmLow:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmActions:
+        - !Ref MasterMemSNS
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+      AlarmDescription: !Sub "Alarms when the master RAM < ${MasterMemoryThresholdLow} for 5 minutes"
+      ComparisonOperator: "LessThanThreshold"
+      Dimensions:
+        - Name: AutoScalingGroupName
+          Value : !Ref MasterAutoScalingGroup
+      InsufficientDataActions:
+        - !Ref MasterMemSNS
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+      EvaluationPeriods: 5
+      MetricName: "mem_used_percent"
+      Namespace: CWAgent
+      OKActions:
+        - !Ref MasterMemSNS
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+      Period: 60
+      Statistic: Minimum
+      Threshold: !Ref MasterMemoryThresholdLow
       TreatMissingData: missing
   MasterMemAlarmHigh:
     Type: AWS::CloudWatch::Alarm
