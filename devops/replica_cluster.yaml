@@ -431,6 +431,8 @@ Conditions:
   HasDashboardExtensions: !Not [!Equals [ !Ref DashboardExtension, "" ]]
   HasEventsTopic: !Not [!Equals [!Ref EventsTopic, "" ]]
   HasFlume: !Not [!Equals [!Ref FlumeURL, ""]]
+  MasterSpotLowestPrice: !Equals [!Ref MasterSpotAllocationStrategy, "lowest-price"]
+  ReplicaSpotLowestPrice: !Equals [!Ref ReplicaSpotAllocationStrategy, "lowest-price"]
 
 Resources:
   LambdaExecutionRole:
@@ -754,7 +756,7 @@ Resources:
         InstancesDistribution:
           SpotAllocationStrategy: !Ref MasterSpotAllocationStrategy
           OnDemandPercentageAboveBaseCapacity: !Ref MasterOnDemandPercentage
-          SpotInstancePools: !FindInMap [PoolSize, Size, !Ref MasterSize]
+          SpotInstancePools: !If [ MasterSpotLowestPrice, !FindInMap [PoolSize, Size, !Ref MasterSize], !Ref "AWS::NoValue"]
         LaunchTemplate:
           LaunchTemplateSpecification:
             LaunchTemplateId: !Ref MasterLaunchTemplate
@@ -1646,7 +1648,7 @@ Resources:
         InstancesDistribution:
           OnDemandPercentageAboveBaseCapacity: !Ref ReplicaOnDemandPercentage
           SpotAllocationStrategy: !Ref ReplicaSpotAllocationStrategy
-          SpotInstancePools: !FindInMap [PoolSize, Size, !Ref ReplicaSize]
+          SpotInstancePools: !If [ ReplicaSpotLowestPrice, !FindInMap [PoolSize, Size, !Ref ReplicaSize], !Ref "AWS::NoValue"]
         LaunchTemplate:
           LaunchTemplateSpecification:
             LaunchTemplateId: !Ref ReplicaLaunchTemplate
@@ -2065,7 +2067,7 @@ Resources:
         InstancesDistribution:
           OnDemandPercentageAboveBaseCapacity: !Ref FallbackOnDemandPercentage
           SpotAllocationStrategy: ReplicaSpotAllocationStrategy
-          SpotInstancePools: !FindInMap [PoolSize, Size, !Ref ReplicaSize]
+          SpotInstancePools: !If [ ReplicaSpotLowestPrice, !FindInMap [PoolSize, Size, !Ref ReplicaSize], !Ref "AWS::NoValue"]
         LaunchTemplate:
           LaunchTemplateSpecification:
             LaunchTemplateId: !Ref FallbackLaunchTemplate
