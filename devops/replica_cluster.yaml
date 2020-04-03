@@ -2066,7 +2066,7 @@ Resources:
       MixedInstancesPolicy:
         InstancesDistribution:
           OnDemandPercentageAboveBaseCapacity: !Ref FallbackOnDemandPercentage
-          SpotAllocationStrategy: ReplicaSpotAllocationStrategy
+          SpotAllocationStrategy: !Ref ReplicaSpotAllocationStrategy
           SpotInstancePools: !If [ ReplicaSpotLowestPrice, !FindInMap [PoolSize, Size, !Ref ReplicaSize], !Ref "AWS::NoValue"]
         LaunchTemplate:
           LaunchTemplateSpecification:
