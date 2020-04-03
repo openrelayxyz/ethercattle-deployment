@@ -113,6 +113,16 @@ Parameters:
     Type: Number
     Default: 0
     Description: The percentage (0 - 100) of replica that should be on-demand instead of spot instances.
+  FallbackOnDemandPercentage:
+    Type: Number
+    Default: 100
+    Description: The percentage (0 - 100) of replica that should be on-demand instead of spot instances.
+  ReplicaSpotAllocationStrategy:
+    Type: String
+    AllowedValues:
+      - "lowest-price"
+      - "capacity-optimized"
+    Default: "capacity-optimized"
   ReplicaCPUScalingTargetValue:
     Type: Number
     Default: 80
@@ -128,6 +138,12 @@ Parameters:
     Type: Number
     Default: 50
     Description: The percentage (0 - 100) of masters that should be on-demand instead of spot instances.
+  MasterSpotAllocationStrategy:
+    Type: String
+    AllowedValues:
+      - "lowest-price"
+      - "capacity-optimized"
+    Default: "capacity-optimized"
   AlternateTargetGroup:
     Type: String
     Description: An alternative comma-separated list of target groups that replicas should be assigned to.
@@ -193,6 +209,7 @@ Metadata:
           - MasterSize
           - MasterCount
           - MasterOnDemandPercentage
+          - MasterSpotAllocationStrategy
           - MasterExtraFlags
           - DiskSize
           - MasterMemoryThresholdLong
@@ -210,6 +227,7 @@ Metadata:
           - ReplicaTargetCapacity
           - ReplicaMaxCapacity
           - ReplicaOnDemandPercentage
+          - ReplicaSpotAllocationStrategy
           - SnapshotValidationThreshold
           - ReplicaExtraSecurityGroup
       - Label:
@@ -217,6 +235,7 @@ Metadata:
         Parameters:
           - FallbackTargetCapacity
           - FallbackMaxCapacity
+          - FallbackOnDemandPercentage
     ParameterLabels:
       MasterSize:
         default: Master Size
@@ -256,6 +275,10 @@ Metadata:
         default: Target Capacity
       ReplicaOnDemandPercentage:
         default: On-Demand Percentage
+      ReplicaSpotAllocationStrategy:
+        default: Spot Allocation Strategy
+      MasterSpotAllocationStrategy:
+        default: Spot Allocation Strategy
       ReplicaExtraSecurityGroup:
         default: Replica Extra Security Group
       AlternateTargetGroup:
@@ -276,17 +299,25 @@ Metadata:
         default: Events topic
       FlumeURL:
         default: Flume URL
+      FallbackOnDemandPercentage:
+        default: Fallback On Demand Percentage
 
 Mappings:
   InstanceSizes:
     Master:
       full:
+        - InstanceType: m4.xlarge
         - InstanceType: m5a.xlarge
         - InstanceType: m5ad.xlarge
         - InstanceType: m5.xlarge
         - InstanceType: m5d.xlarge
+        - InstanceType: m5dn.xlarge
+        - InstanceType: r4.large
+        - InstanceType: i3.large
+        - InstanceType: i3en.large
         - InstanceType: r5.large
         - InstanceType: r5d.large
+        - InstanceType: r5dn.large
         - InstanceType: r5a.large
         - InstanceType: r5ad.large
       small:
@@ -296,7 +327,11 @@ Mappings:
       full:
         - InstanceType: m5ad.xlarge
         - InstanceType: m5d.xlarge
+        - InstanceType: m5dn.xlarge
+        - InstanceType: i3.xlarge
+        - InstanceType: i3en.xlarge
         - InstanceType: r5d.xlarge
+        - InstanceType: r5dn.xlarge
         - InstanceType: r5ad.xlarge
         # - InstanceType: c5d.xlarge
         # - InstanceType: c5ad.2xlarge
@@ -717,6 +752,7 @@ Resources:
       HealthCheckType: EC2
       MixedInstancesPolicy:
         InstancesDistribution:
+          SpotAllocationStrategy: !Ref MasterSpotAllocationStrategy
           OnDemandPercentageAboveBaseCapacity: !Ref MasterOnDemandPercentage
           SpotInstancePools: !FindInMap [PoolSize, Size, !Ref MasterSize]
         LaunchTemplate:
@@ -1609,6 +1645,7 @@ Resources:
       MixedInstancesPolicy:
         InstancesDistribution:
           OnDemandPercentageAboveBaseCapacity: !Ref ReplicaOnDemandPercentage
+          SpotAllocationStrategy: !Ref ReplicaSpotAllocationStrategy
           SpotInstancePools: !FindInMap [PoolSize, Size, !Ref ReplicaSize]
         LaunchTemplate:
           LaunchTemplateSpecification:
@@ -2026,7 +2063,8 @@ Resources:
             !Sub "${InfrastructureStack}-PublicC"
       MixedInstancesPolicy:
         InstancesDistribution:
-          OnDemandPercentageAboveBaseCapacity: !Ref ReplicaOnDemandPercentage
+          OnDemandPercentageAboveBaseCapacity: !Ref FallbackOnDemandPercentage
+          SpotAllocationStrategy: ReplicaSpotAllocationStrategy
           SpotInstancePools: !FindInMap [PoolSize, Size, !Ref ReplicaSize]
         LaunchTemplate:
           LaunchTemplateSpecification:
