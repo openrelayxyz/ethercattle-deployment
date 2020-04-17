@@ -69,6 +69,7 @@ Parameters:
     Description: Whether to use full size masters or smaller ones. "full" will use a pool of large instances from the m5(ad) and r5(ad) families. "small" will use a pool of medium instances from the t3 and t3a families. For mainnet this must be full - for testnets and private networks it will depend on the network volume.
     AllowedValues:
       - full
+      - medium
       - small
     Default: full
   MasterCount:
@@ -132,6 +133,7 @@ Parameters:
     Description: Whether to use full size replicas or smaller ones. "full" will use a pool of large instances from the m5d, m5ad, r5d, and r5ad families. "small" will use a pool of medium instances from the t3 and t3a families. Use "small" if you expect a small request volume.
     AllowedValues:
       - full
+      - medium
       - small
     Default: full
   MasterOnDemandPercentage:
@@ -320,6 +322,9 @@ Mappings:
         - InstanceType: r5dn.large
         - InstanceType: r5a.large
         - InstanceType: r5ad.large
+      medium:
+        - InstanceType: t3.large
+        - InstanceType: t3a.large
       small:
         - InstanceType: t3.medium
         - InstanceType: t3a.medium
@@ -335,6 +340,9 @@ Mappings:
         - InstanceType: r5ad.xlarge
         # - InstanceType: c5d.xlarge
         # - InstanceType: c5ad.2xlarge
+      medium:
+        - InstanceType: t3.large
+        - InstanceType: t3a.large
       small:
         - InstanceType: t3.medium
         - InstanceType: t3a.medium
@@ -347,6 +355,9 @@ Mappings:
         - InstanceType: m5.4xlarge
         # - InstanceType: c5d.xlarge
         # - InstanceType: c5ad.2xlarge
+      medium:
+        - InstanceType: m5ad.xlarge
+        - InstanceType: m5d.xlarge
       small:
         - InstanceType: m5ad.xlarge
         - InstanceType: m5d.xlarge
