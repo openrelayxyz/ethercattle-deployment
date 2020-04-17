@@ -364,6 +364,7 @@ Mappings:
   PoolSize:
     Size:
       full: 11
+      medium: 6
       small: 6
   RegionMap:
     us-west-1:
