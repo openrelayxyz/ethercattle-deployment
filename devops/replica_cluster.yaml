@@ -826,6 +826,24 @@ Resources:
             Stat: Maximum
           Label: NVME Overlay Volume Disk Usage
           ReturnData: false
+        - Id: nvme0
+          MetricStat:
+            Metric:
+              MetricName: "disk_used_percent"
+              Namespace: CWAgent
+              Dimensions:
+                - Name: AutoScalingGroupName
+                  Value : !Ref ReplicaAutoScalingGroup
+                - Name: device
+                  Value : "nvme0n1"
+                - Name: fstype
+                  Value : "ext4"
+                - Name: path
+                  Value : "/var/lib/ethereum/overlay"
+            Period: 60
+            Stat: Maximum
+          Label: NVME Overlay Volume Disk Usage
+          ReturnData: false
         - Id: ebs
           MetricStat:
             Metric:
@@ -845,7 +863,7 @@ Resources:
           Label: EBS Overlay Disk Usage
           ReturnData: false
         - Id: delta
-          Expression: "(ebs + nvme)"
+          Expression: "MAX(METRICS())"
       InsufficientDataActions:
         - !Ref ReplicaOverlayDiskSNS
         - !Ref AggregatedNotifications
@@ -900,30 +918,56 @@ Resources:
         - !Ref MasterDiskSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
-      AlarmDescription: "Alarms when the ethereum data directory > 95% full"
+      AlarmDescription: "Alarms when the master data directory > 95% full"
       ComparisonOperator: "GreaterThanThreshold"
-      Dimensions:
-        - Name: AutoScalingGroupName
-          Value : !Ref MasterAutoScalingGroup
-        - Name: device
-          Value : "nvme1n1"
-        - Name: fstype
-          Value : "ext4"
-        - Name: path
-          Value : "/var/lib/ethereum"
+      Metrics:
+        - Id: xvdf
+          MetricStat:
+            Metric:
+              MetricName: "disk_used_percent"
+              Namespace: CWAgent
+              Dimensions:
+                - Name: AutoScalingGroupName
+                  Value : !Ref MasterAutoScalingGroup
+                - Name: device
+                  Value : "xvdf"
+                - Name: fstype
+                  Value : "ext4"
+                - Name: path
+                  Value : "/var/lib/ethereum"
+            Period: 60
+            Stat: Maximum
+          Label: NVME Overlay Volume Disk Usage
+          ReturnData: false
+        - Id: nvme1n1
+          MetricStat:
+            Metric:
+              MetricName: "disk_used_percent"
+              Namespace: CWAgent
+              Dimensions:
+                - Name: AutoScalingGroupName
+                  Value : !Ref MasterAutoScalingGroup
+                - Name: device
+                  Value : "nvme1n1"
+                - Name: fstype
+                  Value : "ext4"
+                - Name: path
+                  Value : "/var/lib/ethereum"
+            Period: 60
+            Stat: Maximum
+          Label: EBS Overlay Disk Usage
+          ReturnData: false
+        - Id: delta
+          Expression: "MAX(METRICS())"
       InsufficientDataActions:
         - !Ref MasterDiskSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
       EvaluationPeriods: 5
-      MetricName: "disk_used_percent"
-      Namespace: CWAgent
       OKActions:
         - !Ref MasterDiskSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
-      Period: 60
-      Statistic: Maximum
       Threshold: 95
       TreatMissingData: missing
   MasterMemSNS:
@@ -2451,7 +2495,8 @@ Resources:
                             "view": "timeSeries",
                             "stacked": false,
                             "metrics": [
-                                [ "CWAgent", "disk_used_percent", "path", "/var/lib/ethereum", "AutoScalingGroupName", "${MasterAutoScalingGroup}", "device", "nvme1n1", "fstype", "ext4" ]
+                                [ "CWAgent", "disk_used_percent", "path", "/var/lib/ethereum", "AutoScalingGroupName", "${MasterAutoScalingGroup}", "device", "nvme1n1", "fstype", "ext4" ],
+                                [ "CWAgent", "disk_used_percent", "path", "/var/lib/ethereum", "AutoScalingGroupName", "${MasterAutoScalingGroup}", "device", "xvdf", "fstype", "ext4" ]
                             ],
                             "region": "${AWS::Region}",
                             "title": "Disk Usage"
