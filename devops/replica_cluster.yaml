@@ -1818,6 +1818,8 @@ Resources:
                   /usr/bin/replica-snapshot-hook
                 fi
 
+                sysctl -w fs.file-max=12000500
+                sysctl -w fs.nr_open=20000500
                 ulimit -n 20000000
 
                 SEP=$(echo "${KafkaHostname}" | grep -q "?" && echo "&" || echo "?")
