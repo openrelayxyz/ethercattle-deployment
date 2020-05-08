@@ -183,7 +183,7 @@ Parameters:
     Description: (optional) An s3 bucket to use for storing Geth Freezer data. If not provided, the InfrastructureStack's bucket will be used
   EnableS3Freezer:
     Type: String
-    Default: false
+    Default: "false"
     AllowedValues:
       - "true"
       - "false"
