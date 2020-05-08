@@ -591,7 +591,7 @@ Resources:
               - s3:GetBucketPolicy
               - s3:GetObjectTagging
               - s3:GetBucketLocation
-            Resource: "Fn::Sub": ["arn:aws:s3:::${Bucket}/*", {"Bucket": !If [ HasFreezerBucket, !Ref FreezerBucket, {"Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket"} ]}]
+            Resource: {"Fn::Sub": ["arn:aws:s3:::${Bucket}/*", {"Bucket": !If [ HasFreezerBucket, !Ref FreezerBucket, {"Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket"} ]}]}
             Effect: Allow
           - Action:
               - cloudwatch:PutMetricData
@@ -1490,7 +1490,7 @@ Resources:
               - s3:GetBucketPolicy
               - s3:GetObjectTagging
               - s3:GetBucketLocation
-            Resource: "Fn::Sub": ["arn:aws:s3:::${Bucket}/*", {"Bucket": !If [ HasFreezerBucket, !Ref FreezerBucket, {"Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket"} ]}]
+            Resource: {"Fn::Sub": ["arn:aws:s3:::${Bucket}/*", {"Bucket": !If [ HasFreezerBucket, !Ref FreezerBucket, {"Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket"} ]}]}
             Effect: Allow
           - Action:
               - cloudwatch:PutMetricData
@@ -2445,7 +2445,7 @@ Resources:
               - s3:GetBucketPolicy
               - s3:GetObjectTagging
               - s3:GetBucketLocation
-            Resource: "Fn::Sub": ["arn:aws:s3:::${Bucket}/*", {"Bucket": !If [ HasFreezerBucket, !Ref FreezerBucket, {"Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket"} ]}]
+            Resource: {"Fn::Sub": ["arn:aws:s3:::${Bucket}/*", {"Bucket": !If [ HasFreezerBucket, !Ref FreezerBucket, {"Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket"} ]}]}
             Effect: Allow
           - Action:
               - cloudformation:UpdateStack
