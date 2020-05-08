@@ -705,6 +705,7 @@ Resources:
                 User=geth
                 Group=geth
                 Environment=HOME=/var/lib/ethereum
+                EnvironmentFile=/etc/systemd/system/ethcattle-vars
                 Type=simple
                 LimitNOFILE=655360
                 ExecStartPre=/usr/bin/geth replica ${ReplicaExtraFlags} ${FreezerFlags} --kafka.broker=${KafkaHostname}  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown
@@ -1617,6 +1618,7 @@ Resources:
                 infraName=${InfrastructureStack}
                 baseInfraName=${BaseInfrastructure}
                 network=${NetworkId}
+                AWS_REGION=${AWS::Region}
                 LOG_BLOCK_LIMIT=10000
                 FLUME_URL=${FlumeURL}" > /etc/systemd/system/ethcattle-vars
 
@@ -1845,7 +1847,7 @@ Resources:
                 yum install -y jq
 
                 export AWS_DEFAULT_REGION=${AWS::Region}
-                printf "KafkaHostname=${KafkaHostname}\nKafkaTopic=${KafkaTopic}\nNetworkId=${NetworkId}\ninfraName=${InfrastructureStack}\n" > /etc/systemd/system/ethcattle-vars
+                printf "KafkaHostname=${KafkaHostname}\nKafkaTopic=${KafkaTopic}\nNetworkId=${NetworkId}\ninfraName=${InfrastructureStack}\nAWS_REGION=${AWS::Region}\n" > /etc/systemd/system/ethcattle-vars
 
                 if [ -f /usr/bin/replica-snapshot-hook ]
                 then
@@ -2026,7 +2028,7 @@ Resources:
   #               yum install -y jq
   #
   #               export AWS_DEFAULT_REGION=${AWS::Region}
-  #               printf "KafkaHostname=${KafkaHostname}\nKafkaTopic=${KafkaTopic}\nNetworkId=${NetworkId}\ninfraName=${InfrastructureStack}\n" > /etc/systemd/system/ethcattle-vars
+  #               printf "KafkaHostname=${KafkaHostname}\nKafkaTopic=${KafkaTopic}\nNetworkId=${NetworkId}\ninfraName=${InfrastructureStack}\nAWS_REGION=${AWS::Region}\n" > /etc/systemd/system/ethcattle-vars
   #
   #               if [ -f /usr/bin/replica-snapshot-hook ]
   #               then
@@ -2274,6 +2276,7 @@ Resources:
                 infraName=${InfrastructureStack}
                 baseInfraName=${BaseInfrastructure}
                 network=${NetworkId}
+                AWS_REGION=${AWS::Region}
                 LOG_BLOCK_LIMIT=10000" > /etc/systemd/system/ethcattle-vars
 
                 SEP=$(echo "${KafkaHostname}" | grep -q "?" && echo "&" || echo "?")
@@ -2287,8 +2290,8 @@ Resources:
                 EnvironmentFile=/etc/systemd/system/ethcattle-vars
                 Type=simple
                 LimitNOFILE=655360
-                ExecStartPre=/usr/bin/geth replica --kafka.broker=${KafkaHostname}""$SEP""fetch.default=8388608&max.waittime=25 --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown || true
-                ExecStart=/usr/bin/bash -c '/usr/bin/geth --datadir=/var/lib/ethereum --light.maxpeers 0 --maxpeers 25 ${ReplicaHTTPFlag} ${ReplicaGraphQLFlag} ${ReplicaWebsocketsFlag}'
+                ExecStartPre=/usr/bin/geth replica ${FreezerFlags} --kafka.broker=${KafkaHostname}""$SEP""fetch.default=8388608&max.waittime=25 --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown || true
+                ExecStart=/usr/bin/bash -c '/usr/bin/geth ${FreezerFlags} --datadir=/var/lib/ethereum --light.maxpeers 0 --maxpeers 25 ${ReplicaHTTPFlag} ${ReplicaGraphQLFlag} ${ReplicaWebsocketsFlag}'
                 CPUSchedulingPolicy=fifo
                 CPUSchedulingPriority=20
                 KillMode=process
