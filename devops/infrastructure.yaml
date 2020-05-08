@@ -133,6 +133,9 @@ Parameters:
     MinValue: 1
     Default: 8545
     Description: Port to use for websocket health checks. AWS load balancers don't handle health checks on websockets, so we need to tie this to a different port.
+  FreezerBucketInput:
+    Type: String
+    Description: An optional S3 Bucket (bucket name only) for storing the Geth freezer. If not specified, a bucket will be created
 
 
 Metadata:
@@ -252,6 +255,7 @@ Conditions:
   IsProd: !Equals [!Ref ClusterId, "prod"]
   HasNotificationEmail: !Not [!Equals [ !Ref NotificationEmail, "" ]]
   HasSNSTopic: !Not [!Equals [ !Ref AlarmSNSTopic, "" ]]
+  CreateFreezerBucket: !Equals [ !Ref FreezerBucketInput, "" ]
 
 Resources:
   # TODO: Sooner or later we should probably put some of this on private subnets
@@ -1167,6 +1171,11 @@ Resources:
               }
           - ClusterASG: !Ref KafkaClusterAutoScalingGroup
 
+  FreezerBucket:
+    Type: AWS::S3::Bucket
+    Condition: CreateFreezerBucket
+
+
 
 Outputs:
   ClusterId:
@@ -1265,3 +1274,8 @@ Outputs:
     Value: !Sub ${AWS::StackName}
     Export:
       Name: !Sub "${AWS::StackName}-BaseInfrastructure"
+  FreezerBucket:
+    Description: S3 Bucket to cointain Geth freezers
+    Value: !If [CreateFreezerBucket, !Ref FreezerBucket, !Ref FreezerBucketInput]
+    Export:
+      Name: !Sub "${AWS::StackName}-FreezerBucket"

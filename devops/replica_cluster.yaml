@@ -178,7 +178,15 @@ Parameters:
   FlumeURL:
     Type: String
     Description: (optional) The URL of a Flume server for indexed logging
-
+  FreezerBucket:
+    Type: String
+    Description: (optional) An s3 bucket to use for storing Geth Freezer data. If not provided, the InfrastructureStack's bucket will be used
+  EnableS3Freezer:
+    Type: String
+    Default: false
+    AllowedValues:
+      - "true"
+      - "false"
 
 
 Metadata:
@@ -197,6 +205,8 @@ Metadata:
           - SnapshotScheduleExpression
           - DashboardExtension
           - FlumeURL
+          - FreezerBucket
+          - EnableS3Freezer
       - Label:
           default: Cluster
         Parameters:
@@ -303,6 +313,8 @@ Metadata:
         default: Flume URL
       FallbackOnDemandPercentage:
         default: Fallback On Demand Percentage
+      FreezerBucket:
+        default: Freezer S3 Bucket
 
 Mappings:
   InstanceSizes:
@@ -445,6 +457,8 @@ Conditions:
   HasFlume: !Not [!Equals [!Ref FlumeURL, ""]]
   MasterSpotLowestPrice: !Equals [!Ref MasterSpotAllocationStrategy, "lowest-price"]
   ReplicaSpotLowestPrice: !Equals [!Ref ReplicaSpotAllocationStrategy, "lowest-price"]
+  HasFreezerBucket: !Not [ !Equals [ !Ref FreezerBucket, "" ] ]
+  EnabledFreezerBucket: !Equals [ !Ref EnableS3Freezer, "true" ]
 
 Resources:
   LambdaExecutionRole:
@@ -684,8 +698,8 @@ Resources:
                 Environment=HOME=/var/lib/ethereum
                 Type=simple
                 LimitNOFILE=655360
-                ExecStartPre=/usr/bin/geth replica ${ReplicaExtraFlags} --kafka.broker=${KafkaHostname}  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown
-                ExecStart=/usr/bin/geth ${MasterExtraFlags} --light.maxpeers 0 --maxpeers 25 --gcmode=archive --kafka.broker=${KafkaHostname}&net.maxopenrequests=1&message.send.max.retries=20000  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --kafka.txpool.topic=${InfrastructureStack}-txpool ${EventsTopicFlag}
+                ExecStartPre=/usr/bin/geth replica ${ReplicaExtraFlags} ${FreezerFlags} --kafka.broker=${KafkaHostname}  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown
+                ExecStart=/usr/bin/geth ${MasterExtraFlags} ${FreezerFlags} --light.maxpeers 0 --maxpeers 25 --gcmode=archive --kafka.broker=${KafkaHostname}&net.maxopenrequests=1&message.send.max.retries=20000  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --kafka.txpool.topic=${InfrastructureStack}-txpool ${EventsTopicFlag}
                 KillMode=process
                 KillSignal=SIGINT
                 TimeoutStartSec=86400
@@ -747,6 +761,7 @@ Resources:
                 BaseInfrastructure:
                   "Fn::ImportValue": !Sub "${InfrastructureStack}-BaseInfrastructure"
                 EventsTopicFlag: !If [ HasEventsTopic, !Sub "--kafka.event.topic ${EventsTopic}", ""]
+                FreezerFlags: !If [ EnabledFreezerBucket, {"Fn::Sub": ["--datadir.ancient=${Bucket}", {Bucket: !If [ HasFreezerBucket, !Ref FreezerBucket, {"Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket"} ]} ]}]
 
   MasterAutoScalingGroup:
     Type: AWS::AutoScaling::AutoScalingGroup
@@ -1598,8 +1613,8 @@ Resources:
                 EnvironmentFile=/etc/systemd/system/ethcattle-vars
                 Type=simple
                 LimitNOFILE=655360
-                ExecStartPre=/usr/bin/geth replica ${ReplicaExtraFlags} $OVERLAY_FLAG --kafka.broker=${KafkaHostname}""$SEP""fetch.default=8388608&max.waittime=25 --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown
-                ExecStart=/usr/bin/bash -c '/usr/bin/geth replica ${ReplicaExtraFlags} $OVERLAY_FLAG --kafka.broker=\$KafkaHostname --datadir=/var/lib/ethereum --kafka.topic=\$KafkaTopic --kafka.txpool.topic=\$infraName-txpool  --kafka.tx.topic=\$NetworkId-tx --replica.startup.age=45  ${ReplicaHTTPFlag} ${ReplicaGraphQLFlag} ${ReplicaWebsocketsFlag}'
+                ExecStartPre=/usr/bin/geth replica ${ReplicaExtraFlags} ${FreezerFlags} $OVERLAY_FLAG --kafka.broker=${KafkaHostname}""$SEP""fetch.default=8388608&max.waittime=25 --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown
+                ExecStart=/usr/bin/bash -c '/usr/bin/geth replica ${ReplicaExtraFlags} ${FreezerFlags} $OVERLAY_FLAG --kafka.broker=\$KafkaHostname --datadir=/var/lib/ethereum --kafka.topic=\$KafkaTopic --kafka.txpool.topic=\$infraName-txpool  --kafka.tx.topic=\$NetworkId-tx --replica.startup.age=45  ${ReplicaHTTPFlag} ${ReplicaGraphQLFlag} ${ReplicaWebsocketsFlag}'
                 CPUSchedulingPolicy=fifo
                 CPUSchedulingPriority=20
                 KillMode=process
@@ -1671,6 +1686,7 @@ Resources:
                     !If [HasReplicaWebsockets, "--ws --wsaddr 0.0.0.0 --wsport 8546", ""]
                 BaseInfrastructure:
                   "Fn::ImportValue": !Sub "${InfrastructureStack}-BaseInfrastructure"
+                FreezerFlags: !If [ EnabledFreezerBucket, {"Fn::Sub": ["--datadir.ancient=${Bucket}", {Bucket: !If [ HasFreezerBucket, !Ref FreezerBucket, {"Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket"} ]} ]}]
 
   ReplicaAutoScalingPolicy:
     Type: AWS::AutoScaling::ScalingPolicy
@@ -1823,7 +1839,7 @@ Resources:
                 ulimit -n 20000000
 
                 SEP=$(echo "${KafkaHostname}" | grep -q "?" && echo "&" || echo "?")
-                sudo -u geth /usr/bin/geth replica ${ReplicaExtraFlags} --kafka.broker=$(printf "${KafkaHostname}")""$SEP""fetch.default=8388608\&max.waittime=25 --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown
+                sudo -u geth /usr/bin/geth replica ${ReplicaExtraFlags} ${FreezerFlags} --kafka.broker=$(printf "${KafkaHostname}")""$SEP""fetch.default=8388608\&max.waittime=25 --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown
                 if ! sudo -u geth /usr/bin/geth verifystatetrie --datadir=/var/lib/ethereum ${SnapshotValidationThreshold}
                 then
                   if [ "${AggregatedNotifications}" != "" ]
@@ -1880,7 +1896,7 @@ Resources:
                 # check on the snapshot, as it requires it to be able to validate blocks.
                 # We don't want this to end up in our final snapshot, but if we can't sync from
                 # the network we don't want to present this snapshot to the cluster.
-                if ! sudo -u geth /usr/bin/geth replica ${ReplicaExtraFlags} --datadir=/var/lib/ethereum --exitwhensynced
+                if ! sudo -u geth /usr/bin/geth replica ${ReplicaExtraFlags} ${FreezerFlags} --datadir=/var/lib/ethereum --exitwhensynced
                 then
                   if [ "${AggregatedNotifications}" != "" ]
                   then
@@ -1923,6 +1939,7 @@ Resources:
                   "Fn::ImportValue": !Sub "${InfrastructureStack}-KafkaBrokerURL"
                 ClusterId:
                   "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
+                FreezerFlags: !If [ EnabledFreezerBucket, {"Fn::Sub": ["--datadir.ancient=${Bucket}", {Bucket: !If [ HasFreezerBucket, !Ref FreezerBucket, {"Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket"} ]} ]}]
   PrunerLaunchTemplate:
     Type: AWS::EC2::LaunchTemplate
     Properties:
@@ -2003,7 +2020,7 @@ Resources:
                 ulimit -n 20000000
 
                 SEP=$(echo "${KafkaHostname}" | grep -q "?" && echo "&" || echo "?")
-                sudo -u geth /usr/bin/geth replica ${ReplicaExtraFlags} --kafka.broker=$(printf "${KafkaHostname}")""$SEP""fetch.default=8388608\&max.waittime=25 --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown
+                sudo -u geth /usr/bin/geth replica ${ReplicaExtraFlags} ${FreezerFlags} --kafka.broker=$(printf "${KafkaHostname}")""$SEP""fetch.default=8388608\&max.waittime=25 --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown
                 if ! sudo -u geth /usr/bin/geth verifystatetrie --datadir=/var/lib/ethereum ${SnapshotValidationThreshold}
                 then
                   if [ "${AggregatedNotifications}" != "" ]
@@ -2053,7 +2070,7 @@ Resources:
                 fi
 
                 # Sync from Kafka, then verify again. This should catch any reorgs from the block we pruned
-                sudo -u geth /usr/bin/geth replica ${ReplicaExtraFlags} --kafka.broker=$(printf "${KafkaHostname}")""$SEP""fetch.default=8388608\&max.waittime=25 --datadir=/tmp/new --kafka.topic=${KafkaTopic} --replica.syncshutdown
+                sudo -u geth /usr/bin/geth replica ${ReplicaExtraFlags} ${FreezerFlags} --kafka.broker=$(printf "${KafkaHostname}")""$SEP""fetch.default=8388608\&max.waittime=25 --datadir=/tmp/new --kafka.topic=${KafkaTopic} --replica.syncshutdown
                 if ! sudo -u geth /usr/bin/geth verifystatetrie --datadir=/tmp/new ${SnapshotValidationThreshold}
                 then
                   if [ "${AggregatedNotifications}" != "" ]
@@ -2105,7 +2122,7 @@ Resources:
                 # If it can do this, the state trie is in good shape. We do this after taking the snapshot but
                 # before updating cloudformation so that this won't change the content of the snapshot, but if it
                 # doesn't work we don't impose a bad snapshot on our cluster.
-                if ! sudo -u geth /usr/bin/geth replica ${ReplicaExtraFlags} --datadir=/tmp/new --exitwhensynced
+                if ! sudo -u geth /usr/bin/geth replica ${ReplicaExtraFlags} ${FreezerFlags} --datadir=/tmp/new --exitwhensynced
                 then
                   if [ "${AggregatedNotifications}" != "" ]
                   then
@@ -2129,6 +2146,7 @@ Resources:
                   "Fn::ImportValue": !Sub "${InfrastructureStack}-KafkaBrokerURL"
                 ClusterId:
                   "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
+                FreezerFlags: !If [ EnabledFreezerBucket, {"Fn::Sub": ["--datadir.ancient=${Bucket}", {Bucket: !If [ HasFreezerBucket, !Ref FreezerBucket, {"Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket"} ]} ]}]
   FallBackLG:
     Type: AWS::Logs::LogGroup
     Properties:
@@ -2323,6 +2341,7 @@ Resources:
                     !If [HasReplicaWebsockets, "--ws --wsaddr 0.0.0.0 --wsport 8546", ""]
                 BaseInfrastructure:
                   "Fn::ImportValue": !Sub "${InfrastructureStack}-BaseInfrastructure"
+                FreezerFlags: !If [ EnabledFreezerBucket, {"Fn::Sub": ["--datadir.ancient=${Bucket}", {Bucket: !If [ HasFreezerBucket, !Ref FreezerBucket, {"Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket"} ]} ]}]
 
   FallbackAutoScalingPolicy:
     Type: AWS::AutoScaling::ScalingPolicy
