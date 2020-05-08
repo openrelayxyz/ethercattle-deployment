@@ -591,7 +591,9 @@ Resources:
               - s3:GetBucketPolicy
               - s3:GetObjectTagging
               - s3:GetBucketLocation
-            Resource: {"Fn::Sub": ["arn:aws:s3:::${Bucket}/*", {"Bucket": !If [ HasFreezerBucket, !Ref FreezerBucket, {"Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket"} ]}]}
+            Resource:
+              - {"Fn::Sub": ["arn:aws:s3:::${Bucket}/*", {"Bucket": !If [ HasFreezerBucket, !Ref FreezerBucket, {"Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket"} ]}]}
+              - {"Fn::Sub": ["arn:aws:s3:::${Bucket}", {"Bucket": !If [ HasFreezerBucket, !Ref FreezerBucket, {"Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket"} ]}]}
             Effect: Allow
           - Action:
               - cloudwatch:PutMetricData
@@ -697,6 +699,16 @@ Resources:
                 echo "5,20,35,50 * * * * /usr/bin/sh -c 'for x in \$(ls /dev/sd*) ; do echo resizing \$(readlink -f \$x) if needed; /usr/sbin/resize2fs \$(readlink -f \$x) ; done'" >> newcrontab
                 crontab newcrontab
 
+                printf "KafkaHostname=${KafkaHostname}
+                KafkaTopic=${KafkaTopic}
+                NetworkId=${NetworkId}
+                infraName=${InfrastructureStack}
+                baseInfraName=${BaseInfrastructure}
+                network=${NetworkId}
+                AWS_REGION=${AWS::Region}
+                LOG_BLOCK_LIMIT=10000
+                FLUME_URL=${FlumeURL}" > /etc/systemd/system/ethcattle-vars
+
                 printf "[Unit]
                 Description=Ethereum go client
                 After=syslog.target network.target
@@ -771,7 +783,7 @@ Resources:
                 BaseInfrastructure:
                   "Fn::ImportValue": !Sub "${InfrastructureStack}-BaseInfrastructure"
                 EventsTopicFlag: !If [ HasEventsTopic, !Sub "--kafka.event.topic ${EventsTopic}", ""]
-                FreezerFlags: !If [ EnabledFreezerBucket, {"Fn::Sub": ["--datadir.ancient='s3://${Bucket}/${NetworkId}'", {Bucket: !If [ HasFreezerBucket, !Ref FreezerBucket, {"Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket"} ]} ]}, ""]
+                FreezerFlags: !If [ EnabledFreezerBucket, {"Fn::Sub": ["--datadir.ancient=s3://${Bucket}/${NetworkId}", {Bucket: !If [ HasFreezerBucket, !Ref FreezerBucket, {"Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket"} ]} ]}, ""]
 
   MasterAutoScalingGroup:
     Type: AWS::AutoScaling::AutoScalingGroup
@@ -1491,7 +1503,9 @@ Resources:
               - s3:GetBucketPolicy
               - s3:GetObjectTagging
               - s3:GetBucketLocation
-            Resource: {"Fn::Sub": ["arn:aws:s3:::${Bucket}/*", {"Bucket": !If [ HasFreezerBucket, !Ref FreezerBucket, {"Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket"} ]}]}
+            Resource:
+              - {"Fn::Sub": ["arn:aws:s3:::${Bucket}/*", {"Bucket": !If [ HasFreezerBucket, !Ref FreezerBucket, {"Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket"} ]}]}
+              - {"Fn::Sub": ["arn:aws:s3:::${Bucket}", {"Bucket": !If [ HasFreezerBucket, !Ref FreezerBucket, {"Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket"} ]}]}
             Effect: Allow
           - Action:
               - cloudwatch:PutMetricData
@@ -1706,7 +1720,7 @@ Resources:
                     !If [HasReplicaWebsockets, "--ws --wsaddr 0.0.0.0 --wsport 8546", ""]
                 BaseInfrastructure:
                   "Fn::ImportValue": !Sub "${InfrastructureStack}-BaseInfrastructure"
-                FreezerFlags: !If [ EnabledFreezerBucket, {"Fn::Sub": ["--datadir.ancient='s3://${Bucket}/${NetworkId}'", {Bucket: !If [ HasFreezerBucket, !Ref FreezerBucket, {"Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket"} ]} ]}, ""]
+                FreezerFlags: !If [ EnabledFreezerBucket, {"Fn::Sub": ["--datadir.ancient=s3://${Bucket}/${NetworkId}", {Bucket: !If [ HasFreezerBucket, !Ref FreezerBucket, {"Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket"} ]} ]}, ""]
 
   ReplicaAutoScalingPolicy:
     Type: AWS::AutoScaling::ScalingPolicy
@@ -1959,7 +1973,7 @@ Resources:
                   "Fn::ImportValue": !Sub "${InfrastructureStack}-KafkaBrokerURL"
                 ClusterId:
                   "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
-                FreezerFlags: !If [ EnabledFreezerBucket, {"Fn::Sub": ["--datadir.ancient='s3://${Bucket}/${NetworkId}'", {Bucket: !If [ HasFreezerBucket, !Ref FreezerBucket, {"Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket"} ]} ]}, ""]
+                FreezerFlags: !If [ EnabledFreezerBucket, {"Fn::Sub": ["--datadir.ancient=s3://${Bucket}/${NetworkId}", {Bucket: !If [ HasFreezerBucket, !Ref FreezerBucket, {"Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket"} ]} ]}, ""]
   # PrunerLaunchTemplate:
   #   Type: AWS::EC2::LaunchTemplate
   #   Properties:
@@ -2166,7 +2180,7 @@ Resources:
   #                 "Fn::ImportValue": !Sub "${InfrastructureStack}-KafkaBrokerURL"
   #               ClusterId:
   #                 "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
-  #               FreezerFlags: !If [ EnabledFreezerBucket, {"Fn::Sub": ["--datadir.ancient='s3://${Bucket}/${NetworkId}'", {Bucket: !If [ HasFreezerBucket, !Ref FreezerBucket, {"Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket"} ]} ]}, ""]
+  #               FreezerFlags: !If [ EnabledFreezerBucket, {"Fn::Sub": ["--datadir.ancient=s3://${Bucket}/${NetworkId}", {Bucket: !If [ HasFreezerBucket, !Ref FreezerBucket, {"Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket"} ]} ]}, ""]
   FallBackLG:
     Type: AWS::Logs::LogGroup
     Properties:
@@ -2362,7 +2376,7 @@ Resources:
                     !If [HasReplicaWebsockets, "--ws --wsaddr 0.0.0.0 --wsport 8546", ""]
                 BaseInfrastructure:
                   "Fn::ImportValue": !Sub "${InfrastructureStack}-BaseInfrastructure"
-                FreezerFlags: !If [ EnabledFreezerBucket, {"Fn::Sub": ["--datadir.ancient='s3://${Bucket}/${NetworkId}'", {Bucket: !If [ HasFreezerBucket, !Ref FreezerBucket, {"Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket"} ]} ]}, ""]
+                FreezerFlags: !If [ EnabledFreezerBucket, {"Fn::Sub": ["--datadir.ancient=s3://${Bucket}/${NetworkId}", {Bucket: !If [ HasFreezerBucket, !Ref FreezerBucket, {"Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket"} ]} ]}, ""]
 
   FallbackAutoScalingPolicy:
     Type: AWS::AutoScaling::ScalingPolicy
@@ -2448,7 +2462,9 @@ Resources:
               - s3:GetBucketPolicy
               - s3:GetObjectTagging
               - s3:GetBucketLocation
-            Resource: {"Fn::Sub": ["arn:aws:s3:::${Bucket}/*", {"Bucket": !If [ HasFreezerBucket, !Ref FreezerBucket, {"Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket"} ]}]}
+            Resource:
+              - {"Fn::Sub": ["arn:aws:s3:::${Bucket}/*", {"Bucket": !If [ HasFreezerBucket, !Ref FreezerBucket, {"Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket"} ]}]}
+              - {"Fn::Sub": ["arn:aws:s3:::${Bucket}", {"Bucket": !If [ HasFreezerBucket, !Ref FreezerBucket, {"Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket"} ]}]}
             Effect: Allow
           - Action:
               - cloudformation:UpdateStack
