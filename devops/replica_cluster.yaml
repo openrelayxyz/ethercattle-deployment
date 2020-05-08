@@ -585,6 +585,15 @@ Resources:
             Resource: !Sub arn:aws:s3:::${S3GethBucketName}/*
             Effect: Allow
           - Action:
+              - s3:GetObject
+              - s3:PutObject
+              - s3:ListBucket
+              - s3:GetBucketPolicy
+              - s3:GetObjectTagging
+              - s3:GetBucketLocation
+            Resource: "Fn::Sub": ["arn:aws:s3:::${Bucket}/*", {"Bucket": !If [ HasFreezerBucket, !Ref FreezerBucket, {"Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket"} ]}]
+            Effect: Allow
+          - Action:
               - cloudwatch:PutMetricData
               - ec2:DescribeTags
               - logs:PutLogEvents
@@ -1473,6 +1482,15 @@ Resources:
               - s3:GetObjectTagging
               - s3:GetBucketLocation
             Resource: !Sub arn:aws:s3:::${S3GethBucketName}/*
+            Effect: Allow
+          - Action:
+              - s3:GetObject
+              - s3:PutObject
+              - s3:ListBucket
+              - s3:GetBucketPolicy
+              - s3:GetObjectTagging
+              - s3:GetBucketLocation
+            Resource: "Fn::Sub": ["arn:aws:s3:::${Bucket}/*", {"Bucket": !If [ HasFreezerBucket, !Ref FreezerBucket, {"Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket"} ]}]
             Effect: Allow
           - Action:
               - cloudwatch:PutMetricData
@@ -2419,6 +2437,15 @@ Resources:
           - Action:
               - s3:GetObject
             Resource: !Sub arn:aws:s3:::${S3GethBucketName}/*
+            Effect: Allow
+          - Action:
+              - s3:GetObject
+              - s3:PutObject
+              - s3:ListBucket
+              - s3:GetBucketPolicy
+              - s3:GetObjectTagging
+              - s3:GetBucketLocation
+            Resource: "Fn::Sub": ["arn:aws:s3:::${Bucket}/*", {"Bucket": !If [ HasFreezerBucket, !Ref FreezerBucket, {"Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket"} ]}]
             Effect: Allow
           - Action:
               - cloudformation:UpdateStack
