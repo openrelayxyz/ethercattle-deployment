@@ -770,7 +770,7 @@ Resources:
                 BaseInfrastructure:
                   "Fn::ImportValue": !Sub "${InfrastructureStack}-BaseInfrastructure"
                 EventsTopicFlag: !If [ HasEventsTopic, !Sub "--kafka.event.topic ${EventsTopic}", ""]
-                FreezerFlags: !If [ EnabledFreezerBucket, {"Fn::Sub": ["--datadir.ancient='s3://${Bucket}/${NetworkId}'", {Bucket: !If [ HasFreezerBucket, !Ref FreezerBucket, {"Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket"} ]} ]}]
+                FreezerFlags: !If [ EnabledFreezerBucket, {"Fn::Sub": ["--datadir.ancient='s3://${Bucket}/${NetworkId}'", {Bucket: !If [ HasFreezerBucket, !Ref FreezerBucket, {"Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket"} ]} ]}, ""]
 
   MasterAutoScalingGroup:
     Type: AWS::AutoScaling::AutoScalingGroup
@@ -1704,7 +1704,7 @@ Resources:
                     !If [HasReplicaWebsockets, "--ws --wsaddr 0.0.0.0 --wsport 8546", ""]
                 BaseInfrastructure:
                   "Fn::ImportValue": !Sub "${InfrastructureStack}-BaseInfrastructure"
-                FreezerFlags: !If [ EnabledFreezerBucket, {"Fn::Sub": ["--datadir.ancient='s3://${Bucket}/${NetworkId}'", {Bucket: !If [ HasFreezerBucket, !Ref FreezerBucket, {"Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket"} ]} ]}]
+                FreezerFlags: !If [ EnabledFreezerBucket, {"Fn::Sub": ["--datadir.ancient='s3://${Bucket}/${NetworkId}'", {Bucket: !If [ HasFreezerBucket, !Ref FreezerBucket, {"Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket"} ]} ]}, ""]
 
   ReplicaAutoScalingPolicy:
     Type: AWS::AutoScaling::ScalingPolicy
@@ -1957,7 +1957,7 @@ Resources:
                   "Fn::ImportValue": !Sub "${InfrastructureStack}-KafkaBrokerURL"
                 ClusterId:
                   "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
-                FreezerFlags: !If [ EnabledFreezerBucket, {"Fn::Sub": ["--datadir.ancient='s3://${Bucket}/${NetworkId}'", {Bucket: !If [ HasFreezerBucket, !Ref FreezerBucket, {"Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket"} ]} ]}]
+                FreezerFlags: !If [ EnabledFreezerBucket, {"Fn::Sub": ["--datadir.ancient='s3://${Bucket}/${NetworkId}'", {Bucket: !If [ HasFreezerBucket, !Ref FreezerBucket, {"Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket"} ]} ]}, ""]
   PrunerLaunchTemplate:
     Type: AWS::EC2::LaunchTemplate
     Properties:
@@ -2164,7 +2164,7 @@ Resources:
                   "Fn::ImportValue": !Sub "${InfrastructureStack}-KafkaBrokerURL"
                 ClusterId:
                   "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
-                FreezerFlags: !If [ EnabledFreezerBucket, {"Fn::Sub": ["--datadir.ancient='s3://${Bucket}/${NetworkId}'", {Bucket: !If [ HasFreezerBucket, !Ref FreezerBucket, {"Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket"} ]} ]}]
+                FreezerFlags: !If [ EnabledFreezerBucket, {"Fn::Sub": ["--datadir.ancient='s3://${Bucket}/${NetworkId}'", {Bucket: !If [ HasFreezerBucket, !Ref FreezerBucket, {"Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket"} ]} ]}, ""]
   FallBackLG:
     Type: AWS::Logs::LogGroup
     Properties:
@@ -2359,7 +2359,7 @@ Resources:
                     !If [HasReplicaWebsockets, "--ws --wsaddr 0.0.0.0 --wsport 8546", ""]
                 BaseInfrastructure:
                   "Fn::ImportValue": !Sub "${InfrastructureStack}-BaseInfrastructure"
-                FreezerFlags: !If [ EnabledFreezerBucket, {"Fn::Sub": ["--datadir.ancient='s3://${Bucket}/${NetworkId}'", {Bucket: !If [ HasFreezerBucket, !Ref FreezerBucket, {"Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket"} ]} ]}]
+                FreezerFlags: !If [ EnabledFreezerBucket, {"Fn::Sub": ["--datadir.ancient='s3://${Bucket}/${NetworkId}'", {Bucket: !If [ HasFreezerBucket, !Ref FreezerBucket, {"Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket"} ]} ]}, ""]
 
   FallbackAutoScalingPolicy:
     Type: AWS::AutoScaling::ScalingPolicy
