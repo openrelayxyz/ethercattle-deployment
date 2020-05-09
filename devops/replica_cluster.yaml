@@ -1885,7 +1885,7 @@ Resources:
                   then
                     aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - Bad State Trie" --message="State trie verification failed while taking snapshot for cluster '${KafkaTopic}'. No snapshot will be taken. This is probably unrecoverable, and you will need to deploy a new cluster from your last good snapshot (probably '${SnapshotId}')"
                   fi
-                  exit poweroff
+                  poweroff
                 fi
 
                 # If this process doesn't commplete in 6 hours, something has gone
@@ -1904,7 +1904,7 @@ Resources:
                   then
                     aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - Volume Identification Failed" --message="The snapshotting process for ${KafkaTopic} failed to identify the attached volume. Could not take a snapshot."
                   fi
-                  exit poweroff
+                  poweroff
                 fi
 
                 SNAPSHOT_ID=`aws ec2 create-snapshot --volume-id $VOLUME_ID --tag-specification="ResourceType=snapshot,Tags=[{Key=cluster,Value=${KafkaTopic}},{Key=Name,Value=${KafkaTopic}-chaindata-$(date -Isecond -u)}]" | jq '.SnapshotId' -cr`
@@ -1918,7 +1918,7 @@ Resources:
                   then
                     aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - Snapshotting Volume Failed" --message="The snapshotting process for ${KafkaTopic} failed to take a snapshot."
                   fi
-                  exit poweroff
+                  poweroff
                 fi
                 echo "Waiting for snapshot to complete"
                 while [ `aws ec2 describe-snapshots --filters=Name=snapshot-id,Values=$SNAPSHOT_ID | jq '.Snapshots[0].State' -cr` != "completed" ];
@@ -1931,7 +1931,7 @@ Resources:
                 # check on the snapshot, as it requires it to be able to validate blocks.
                 # We don't want this to end up in our final snapshot, but if we can't sync from
                 # the network we don't want to present this snapshot to the cluster.
-                if ! sudo -u geth /usr/bin/geth ${ReplicaExtraFlags} ${FreezerFlags} --datadir=/var/lib/ethereum --exitwhensynced
+                if ! sudo -Eu geth /usr/bin/geth ${ReplicaExtraFlags} ${FreezerFlags} --datadir=/var/lib/ethereum --exitwhensynced
                 then
                   if [ "${AggregatedNotifications}" != "" ]
                   then
@@ -1941,7 +1941,7 @@ Resources:
                   then
                     aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - Snapshotting Volume Failed" --message="The snapshotting process for ${KafkaTopic} took a snapshot, but Geth could not sync. Not updating CloudFormation"
                   fi
-                  exit poweroff
+                  poweroff
                 fi
 
                 # CFN will set any parameters we don't provide back to their default values,
@@ -2055,8 +2055,8 @@ Resources:
   #               ulimit -n 20000000
   #
   #               SEP=$(echo "${KafkaHostname}" | grep -q "?" && echo "&" || echo "?")
-  #               sudo -u geth /usr/bin/geth replica ${ReplicaExtraFlags} ${FreezerFlags} --kafka.broker=$(printf "${KafkaHostname}")""$SEP""fetch.default=8388608\&max.waittime=25 --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown
-  #               if ! sudo -u geth /usr/bin/geth verifystatetrie --datadir=/var/lib/ethereum ${SnapshotValidationThreshold}
+  #               sudo -Eu geth /usr/bin/geth replica ${ReplicaExtraFlags} ${FreezerFlags} --kafka.broker=$(printf "${KafkaHostname}")""$SEP""fetch.default=8388608\&max.waittime=25 --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown
+  #               if ! sudo -Eu geth /usr/bin/geth verifystatetrie --datadir=/var/lib/ethereum ${SnapshotValidationThreshold}
   #               then
   #                 if [ "${AggregatedNotifications}" != "" ]
   #                 then
@@ -2066,7 +2066,7 @@ Resources:
   #                 then
   #                   aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - Bad State Trie" --message="State trie verification failed while pruning snapshot for cluster '${KafkaTopic}'. No snapshot will be taken. This is probably unrecoverable, and you will need to deploy a new cluster from your last good snapshot (probably '${SnapshotId}')"
   #                 fi
-  #                 exit poweroff
+  #                 poweroff
   #               fi
   #
   #               cp -r /var/lib/ethereum/* /tmp/oldfast
@@ -2081,7 +2081,7 @@ Resources:
   #                 then
   #                   aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - State Migration Failed" --message="State migration failed for cluster ${KafkaTopic}"
   #                 fi
-  #                 exit poweroff
+  #                 poweroff
   #               fi
   #
   #               cp -r /tmp/oldfast/geth/ethash /tmp/new/geth/ethash
@@ -2091,7 +2091,7 @@ Resources:
   #               sudo chown geth.geth /tmp/new -R
   #
   #               # Verify the state trie immediately following the state trie sync
-  #               if ! sudo -u geth /usr/bin/geth verifystatetrie --datadir=/tmp/new ${SnapshotValidationThreshold}
+  #               if ! sudo -Eu geth /usr/bin/geth verifystatetrie --datadir=/tmp/new ${SnapshotValidationThreshold}
   #               then
   #                 if [ "${AggregatedNotifications}" != "" ]
   #                 then
@@ -2101,12 +2101,12 @@ Resources:
   #                 then
   #                   aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - Bad State Trie" --message="State trie verification failed while pruning snapshot for cluster '${KafkaTopic}'. No snapshot will be taken. This is probably unrecoverable, and you will need to deploy a new cluster from your last good snapshot (probably '${SnapshotId}')"
   #                 fi
-  #                 exit poweroff
+  #                 poweroff
   #               fi
   #
   #               # Sync from Kafka, then verify again. This should catch any reorgs from the block we pruned
-  #               sudo -u geth /usr/bin/geth replica ${ReplicaExtraFlags} ${FreezerFlags} --kafka.broker=$(printf "${KafkaHostname}")""$SEP""fetch.default=8388608\&max.waittime=25 --datadir=/tmp/new --kafka.topic=${KafkaTopic} --replica.syncshutdown
-  #               if ! sudo -u geth /usr/bin/geth verifystatetrie --datadir=/tmp/new ${SnapshotValidationThreshold}
+  #               sudo -Eu geth /usr/bin/geth replica ${ReplicaExtraFlags} ${FreezerFlags} --kafka.broker=$(printf "${KafkaHostname}")""$SEP""fetch.default=8388608\&max.waittime=25 --datadir=/tmp/new --kafka.topic=${KafkaTopic} --replica.syncshutdown
+  #               if ! sudo -Eu geth /usr/bin/geth verifystatetrie --datadir=/tmp/new ${SnapshotValidationThreshold}
   #               then
   #                 if [ "${AggregatedNotifications}" != "" ]
   #                 then
@@ -2116,7 +2116,7 @@ Resources:
   #                 then
   #                   aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - Bad State Trie" --message="State trie verification failed while pruning snapshot for cluster '${KafkaTopic}'. No snapshot will be taken. This probably means that the block we pruned got reorged out, and pruning will need to be repated."
   #                 fi
-  #                 exit poweroff
+  #                 poweroff
   #               fi
   #
   #               VOLUME_ID=$(aws ec2 describe-volumes --filters Name=attachment.instance-id,Values="$(curl http://169.254.169.254/latest/meta-data/instance-id)" | jq '.Volumes[] | select(. | .Attachments[0].Device == "/dev/sdg") | .VolumeId' -cr)
@@ -2131,7 +2131,7 @@ Resources:
   #                 then
   #                   aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - Volume Identification Failed" --message="The snapshotting process for ${KafkaTopic} failed to identify the attached volume. Could not take a snapshot."
   #                 fi
-  #                 exit poweroff
+  #                 poweroff
   #               fi
   #
   #               SNAPSHOT_ID=`aws ec2 create-snapshot --volume-id $VOLUME_ID --tag-specification="ResourceType=snapshot,Tags=[{Key=cluster,Value=${KafkaTopic}},{Key=Name,Value=${KafkaTopic}-chaindata-$(date -Isecond -u)}]" | jq '.SnapshotId' -cr`
@@ -2145,7 +2145,7 @@ Resources:
   #                 then
   #                   aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - Snapshotting Volume Failed" --message="The snapshotting process for ${KafkaTopic} failed to take a snapshot."
   #                 fi
-  #                 exit poweroff
+  #                 poweroff
   #               fi
   #               echo "Waiting for snapshot to complete"
   #               while [ `aws ec2 describe-snapshots --filters=Name=snapshot-id,Values=$SNAPSHOT_ID | jq '.Snapshots[0].State' -cr` != "completed" ];
@@ -2157,7 +2157,7 @@ Resources:
   #               # If it can do this, the state trie is in good shape. We do this after taking the snapshot but
   #               # before updating cloudformation so that this won't change the content of the snapshot, but if it
   #               # doesn't work we don't impose a bad snapshot on our cluster.
-  #               if ! sudo -u geth /usr/bin/geth ${ReplicaExtraFlags} ${FreezerFlags} --datadir=/tmp/new --exitwhensynced
+  #               if ! sudo -Eu geth /usr/bin/geth ${ReplicaExtraFlags} ${FreezerFlags} --datadir=/tmp/new --exitwhensynced
   #               then
   #                 if [ "${AggregatedNotifications}" != "" ]
   #                 then
@@ -2167,7 +2167,7 @@ Resources:
   #                 then
   #                   aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - Snapshotting Volume Failed" --message="The snapshotting process for ${KafkaTopic} took a snapshot, but Geth could not start. Not updating CloudFormation"
   #                 fi
-  #                 exit poweroff
+  #                 poweroff
   #               fi
   #
   #               # CFN will set any parameters we don't provide back to their default values,
