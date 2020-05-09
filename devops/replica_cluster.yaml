@@ -1861,6 +1861,7 @@ Resources:
                 yum install -y jq
 
                 export AWS_DEFAULT_REGION=${AWS::Region}
+                export AWS_REGION=${AWS::Region}
                 printf "KafkaHostname=${KafkaHostname}\nKafkaTopic=${KafkaTopic}\nNetworkId=${NetworkId}\ninfraName=${InfrastructureStack}\nAWS_REGION=${AWS::Region}\n" > /etc/systemd/system/ethcattle-vars
 
                 if [ -f /usr/bin/replica-snapshot-hook ]

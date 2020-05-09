@@ -377,6 +377,9 @@ Resources:
   FreezerBucket:
     Type: AWS::S3::Bucket
     Condition: CreateFreezerBucket
+    Properties:
+      VersioningConfiguration:
+        Status: Enabled
 
 
 Outputs:
