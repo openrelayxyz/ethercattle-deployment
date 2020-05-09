@@ -1931,7 +1931,7 @@ Resources:
                 # check on the snapshot, as it requires it to be able to validate blocks.
                 # We don't want this to end up in our final snapshot, but if we can't sync from
                 # the network we don't want to present this snapshot to the cluster.
-                if ! sudo -u geth /usr/bin/geth replica ${ReplicaExtraFlags} ${FreezerFlags} --datadir=/var/lib/ethereum --exitwhensynced
+                if ! sudo -u geth /usr/bin/geth ${ReplicaExtraFlags} ${FreezerFlags} --datadir=/var/lib/ethereum --exitwhensynced
                 then
                   if [ "${AggregatedNotifications}" != "" ]
                   then
@@ -2157,7 +2157,7 @@ Resources:
   #               # If it can do this, the state trie is in good shape. We do this after taking the snapshot but
   #               # before updating cloudformation so that this won't change the content of the snapshot, but if it
   #               # doesn't work we don't impose a bad snapshot on our cluster.
-  #               if ! sudo -u geth /usr/bin/geth replica ${ReplicaExtraFlags} ${FreezerFlags} --datadir=/tmp/new --exitwhensynced
+  #               if ! sudo -u geth /usr/bin/geth ${ReplicaExtraFlags} ${FreezerFlags} --datadir=/tmp/new --exitwhensynced
   #               then
   #                 if [ "${AggregatedNotifications}" != "" ]
   #                 then
