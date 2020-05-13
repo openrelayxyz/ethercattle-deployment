@@ -1875,7 +1875,7 @@ Resources:
 
                 SEP=$(echo "${KafkaHostname}" | grep -q "?" && echo "&" || echo "?")
                 sudo -Eu geth /usr/bin/geth replica ${ReplicaExtraFlags} ${FreezerFlags} --kafka.broker=$(printf "${KafkaHostname}")""$SEP""fetch.default=8388608\&max.waittime=25 --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown
-                if ! sudo -Eu geth /usr/bin/geth verifystatetrie --datadir=/var/lib/ethereum ${SnapshotValidationThreshold}
+                if ! sudo -Eu geth /usr/bin/geth verifystatetrie ${FreezerFlags} --datadir=/var/lib/ethereum ${SnapshotValidationThreshold}
                 then
                   if [ "${AggregatedNotifications}" != "" ]
                   then
@@ -1952,7 +1952,7 @@ Resources:
 
                 # IF Day of week is Sunday, compact DB and re-update everything, after taking a new snapshot.
                 if [ $(date +%u) = 7 ]; then
-                  geth compactdb --datadir=/var/lib/ethereum
+                  geth compactdb --datadir=/var/lib/ethereum ${FreezerFlags}
                   NEW_SNAPSHOT_ID=`aws ec2 create-snapshot --volume-id $VOLUME_ID --tag-specification="ResourceType=snapshot,Tags=[{Key=cluster,Value=${KafkaTopic}},{Key=Name,Value=${KafkaTopic}-chaindata-$(date -Isecond -u)}]" | jq '.SnapshotId' -cr`
                   echo "Waiting for snapshot to complete"
                   while [ `aws ec2 describe-snapshots --filters=Name=snapshot-id,Values=$NEW_SNAPSHOT_ID | jq '.Snapshots[0].State' -cr` != "completed" ];
