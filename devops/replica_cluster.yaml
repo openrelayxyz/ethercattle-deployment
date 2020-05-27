@@ -1426,6 +1426,50 @@ Resources:
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
       Threshold: 1
       TreatMissingData: breaching
+  FlumeBlockNumberComparisonAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: HasFlume
+    Properties:
+      AlarmActions:
+        - !Ref MasterBlockNumberSNS
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+      AlarmDescription: "Alarms when the block number is missing"
+      ComparisonOperator: "GreaterThanThreshold"
+      EvaluationPeriods: 2
+      Metrics:
+        - Id: flume
+          MetricStat:
+            Metric:
+              MetricName: "block"
+              Namespace: FlumeData
+              Dimensions:
+                - Name: clusterid
+                  Value : !Ref NetworkId
+            Period: 60
+            Stat: Maximum
+          Label: Remote Block Number
+          ReturnData: false
+        - Id: cluster
+          MetricStat:
+            Metric:
+              MetricName: "number"
+              Namespace: BlockData
+              Dimensions:
+                - Name: clusterId
+                  Value : !Ref KafkaTopic
+            Period: 60
+            Stat: Maximum
+          Label: Cluster Block Number
+          ReturnData: false
+        - Id: delta
+          Expression: "(flume - cluster)"
+      OKActions:
+        - !Ref MasterBlockNumberSNS
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+      Threshold: 2
+      TreatMissingData: breaching
 
   ReplicaLG:
     Type: AWS::Logs::LogGroup
