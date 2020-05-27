@@ -126,6 +126,12 @@ Parameters:
   NotificationEmail:
     Type: String
     Description: An optional e-mail address to receive notifications when the snapshot completes
+  FreezerBucket:
+    Type: String
+    Description: (optional) An s3 bucket to use for storing Geth Freezer data. If not provided, the InfrastructureStack's bucket will be used
+  NetworkId:
+    Type: String
+    Description: (use with freezer bucket) - The name of the network
 
 Metadata:
   AWS::CloudFormation::Interface:
@@ -228,6 +234,7 @@ Conditions:
   HasSnapshot: !Not [!Equals [!Ref SnapshotId, '']]
   HasNotificationEmail: !Not [!Equals [ !Ref NotificationEmail, "" ]]
   HasSnapshotImageAMI: !Not [!Equals [ !Ref SnapshotImageAMI, "" ]]
+  HasFreezerBucket: !And [!Not [!Equals [!Ref FreezerBucket, "" ]], !Not [!Equals [!Ref NetworkId, "" ]]]
 
 Resources:
 
@@ -304,6 +311,17 @@ Resources:
               - ec2:CreateSnapshot
             Resource: "*"
             Effect: Allow
+          - Action:
+              - s3:GetObject
+              - s3:PutObject
+              - s3:ListBucket
+              - s3:GetBucketPolicy
+              - s3:GetObjectTagging
+              - s3:GetBucketLocation
+            Resource:
+              - !Sub "arn:aws:s3:::${FreezerBucket}/*"
+              - !Sub "arn:aws:s3:::${FreezerBucket}"
+            Effect: Allow
   NodeInstanceProfile:
     Type: "AWS::IAM::InstanceProfile"
     Properties:
@@ -359,10 +377,10 @@ Resources:
                 mkdir -p /var/lib/ethereum
                 if [ "${SnapshotId}" == "" ]
                 then
-                  mkfs.ext4 /dev/nvme1n1
+                  mkfs.ext4 /dev/sdf
                 fi
-                mount /dev/nvme1n1 /var/lib/ethereum
-                resize2fs /dev/nvme1n1
+                mount /dev/sdf /var/lib/ethereum
+                resize2fs /dev/sdf
                 useradd -r geth
                 chown -R geth /var/lib/ethereum
 
@@ -373,7 +391,7 @@ Resources:
                 while [ $SUCCESS -eq 0 ]; do
                   # On our first pass, or if Geth crashes without having a current block,
                   # start geth
-                  sudo -u geth /usr/bin/geth  ${NodeExtraFlags} --datadir=/var/lib/ethereum &
+                  sudo -u geth /usr/bin/geth  ${NodeExtraFlags} --datadir=/var/lib/ethereum ${FreezerFlags} &
                   SUDO_PID=$!
                   sleep 1
                   GETH_PID=$(ps --ppid $SUDO_PID -o pid=)
@@ -428,7 +446,7 @@ Resources:
 
                 # Now that we think we have a synced chiandata folder, take a snapshot
                 export AWS_DEFAULT_REGION=${AWS::Region}
-                VOLUME_ID=$(aws ec2 describe-volumes --filters Name=attachment.instance-id,Values="$(curl http://169.254.169.254/latest/meta-data/instance-id)" | jq '.Volumes[] | select(. | .Size >= 50) | .VolumeId' -cr)
+                VOLUME_ID=$(aws ec2 describe-volumes --filters Name=attachment.instance-id,Values="$(curl http://169.254.169.254/latest/meta-data/instance-id)" | jq '.Volumes[] | select(. | .Attachments[0].Device == "/dev/sdf") | .VolumeId' -cr)
 
                 SNAPSHOT_ID=`aws ec2 create-snapshot --volume-id $VOLUME_ID --tag-specification="ResourceType=snapshot,Tags=[{Key=cluster,Value=Snapshotter},{Key=Name,Value=Snapshotter-chaindata-$(date -Isecond -u)}]" | jq '.SnapshotId' -cr`
                 echo "Waiting for snapshot to complete"
@@ -441,7 +459,7 @@ Resources:
 
                 # Terminate this instance
                 poweroff
-              - {}
+              - FreezerFlags: !If [ HasFreezerBucket, !Sub "--datadir.ancient=s3://${FreezerBucket}/${NetworkId}", "" ]
 
 
   NodeInstance:
