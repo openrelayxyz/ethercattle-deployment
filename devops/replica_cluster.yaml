@@ -1444,7 +1444,7 @@ Resources:
               MetricName: "block"
               Namespace: FlumeData
               Dimensions:
-                - Name: clusterid
+                - Name: clusterId
                   Value : !Ref NetworkId
             Period: 60
             Stat: Maximum
