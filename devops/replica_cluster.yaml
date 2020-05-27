@@ -1426,7 +1426,7 @@ Resources:
           Label: Cluster Block Number
           ReturnData: false
         - Id: delta
-          Expression: "(flume - cluster)"
+          Expression: "(cluster - flume)"
       OKActions:
         - !Ref MasterBlockNumberSNS
         - !Ref AggregatedNotifications
