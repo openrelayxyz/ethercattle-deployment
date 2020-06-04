@@ -1,3 +1,4 @@
+
 **Contents**
 
 - [JSON RPC API](#json-rpc-api)
@@ -2128,10 +2129,10 @@ Subscribing to newPendingTransactions provides the transaction hash of every new
 
 ### Parameters
 * criteria
-  ** hash: A list of transaction hashes you want to be notified when it is introduced the the transaction pool
-  ** from: A list of addresses you wish to be notified when they send transactions to the pool
-  ** to: A list of addresses you wish to be notified when a new transaction is sent to them
-  ** nonce: A list of nonces for transactions. This would usually be used in conjunction with 'to', perhaps to watch for replacement transactions
+  * hash: A list of transaction hashes you want to be notified when it is introduced the the transaction pool
+  * from: A list of addresses you wish to be notified when they send transactions to the pool
+  * to: A list of addresses you wish to be notified when a new transaction is sent to them
+  * nonce: A list of nonces for transactions. This would usually be used in conjunction with 'to', perhaps to watch for replacement transactions
 
 ### Example
 
