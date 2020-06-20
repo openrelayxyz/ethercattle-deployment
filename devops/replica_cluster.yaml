@@ -695,6 +695,7 @@ Resources:
 
                 /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -c ssm:${MetricsConfigParameter} -s
 
+                SEP=$(echo "${KafkaHostname}" | grep -q "?" && echo "&" || echo "?")
                 crontab -l >  newcrontab || true
                 echo "5,20,35,50 * * * * /usr/bin/sh -c 'for x in \$(ls /dev/sd*) ; do echo resizing \$(readlink -f \$x) if needed; /usr/sbin/resize2fs \$(readlink -f \$x) ; done'" >> newcrontab
                 crontab newcrontab
@@ -720,7 +721,7 @@ Resources:
                 EnvironmentFile=/etc/systemd/system/ethcattle-vars
                 Type=simple
                 LimitNOFILE=655360
-                ExecStartPre=/usr/bin/geth replica ${ReplicaExtraFlags} ${FreezerFlags} --kafka.broker=${KafkaHostname}  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown
+                ExecStartPre=/usr/bin/geth replica ${ReplicaExtraFlags} ${FreezerFlags} --kafka.broker=${KafkaHostname}""$SEP""fetch.default=8388608&max.waittime=25&avoid_leader=1  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown
                 ExecStart=/usr/bin/geth ${MasterExtraFlags} ${FreezerFlags} --light.maxpeers 0 --maxpeers 25 --gcmode=archive --kafka.broker=${KafkaHostname}&net.maxopenrequests=1&message.send.max.retries=20000  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --kafka.txpool.topic=${InfrastructureStack}-txpool ${EventsTopicFlag}
                 KillMode=process
                 KillSignal=SIGINT
@@ -1691,7 +1692,7 @@ Resources:
                 EnvironmentFile=/etc/systemd/system/ethcattle-vars
                 Type=simple
                 LimitNOFILE=655360
-                ExecStartPre=/usr/bin/geth replica ${ReplicaExtraFlags} ${FreezerFlags} $OVERLAY_FLAG --kafka.broker=${KafkaHostname}""$SEP""fetch.default=8388608&max.waittime=25 --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown
+                ExecStartPre=/usr/bin/geth replica ${ReplicaExtraFlags} ${FreezerFlags} $OVERLAY_FLAG --kafka.broker=${KafkaHostname}""$SEP""fetch.default=8388608&max.waittime=25&avoid_leader=1 --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown
                 ExecStart=/usr/bin/bash -c '/usr/bin/geth replica ${ReplicaExtraFlags} ${FreezerFlags} $OVERLAY_FLAG --kafka.broker=\$KafkaHostname --datadir=/var/lib/ethereum --kafka.topic=\$KafkaTopic --kafka.txpool.topic=\$infraName-txpool  --kafka.tx.topic=\$NetworkId-tx --replica.startup.age=45  ${ReplicaHTTPFlag} ${ReplicaGraphQLFlag} ${ReplicaWebsocketsFlag}'
                 CPUSchedulingPolicy=fifo
                 CPUSchedulingPriority=20
@@ -1918,7 +1919,7 @@ Resources:
                 ulimit -n 20000000
 
                 SEP=$(echo "${KafkaHostname}" | grep -q "?" && echo "&" || echo "?")
-                sudo -Eu geth /usr/bin/geth replica ${ReplicaExtraFlags} ${FreezerFlags} --kafka.broker=$(printf "${KafkaHostname}")""$SEP""fetch.default=8388608\&max.waittime=25 --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown
+                sudo -Eu geth /usr/bin/geth replica ${ReplicaExtraFlags} ${FreezerFlags} --kafka.broker=$(printf "${KafkaHostname}")""$SEP""avoid_leader=1 --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown
                 if ! sudo -Eu geth /usr/bin/geth verifystatetrie ${FreezerFlags} --datadir=/var/lib/ethereum ${SnapshotValidationThreshold}
                 then
                   if [ "${AggregatedNotifications}" != "" ]
@@ -2349,7 +2350,7 @@ Resources:
                 EnvironmentFile=/etc/systemd/system/ethcattle-vars
                 Type=simple
                 LimitNOFILE=655360
-                ExecStartPre=/usr/bin/geth replica ${FreezerFlags} --kafka.broker=${KafkaHostname}""$SEP""fetch.default=8388608&max.waittime=25 --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown || true
+                ExecStartPre=/usr/bin/geth replica ${FreezerFlags} --kafka.broker=${KafkaHostname}""$SEP""fetch.default=8388608&max.waittime=25&avoid_leader=1 --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown || true
                 ExecStart=/usr/bin/bash -c '/usr/bin/geth ${FreezerFlags} --datadir=/var/lib/ethereum --light.maxpeers 0 --maxpeers 25 ${ReplicaHTTPFlag} ${ReplicaGraphQLFlag} ${ReplicaWebsocketsFlag}'
                 CPUSchedulingPolicy=fifo
                 CPUSchedulingPriority=20
