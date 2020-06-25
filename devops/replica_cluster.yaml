@@ -2078,7 +2078,7 @@ Resources:
   #               mkfs.ext4 /dev/sdg
   #               mkfs.ext4 /dev/nvme2n1
   #               mount -o barrier=0,data=writeback /dev/sdg /tmp/new
-  #               mount -o barrier=0,data=writeback /dev/nvme2n1 /tmp/oldfast
+  #               mount -o barrier=0,data=writeback /dev/nvme3n1 /tmp/oldfast
   #
   #
   #               resize2fs /dev/sdf
