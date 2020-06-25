@@ -459,3 +459,9 @@ Outputs:
       "Fn::ImportValue": !Sub "${InfrastructureStack}-BaseInfrastructure"
     Export:
       Name: !Sub "${AWS::StackName}-BaseInfrastructure"
+  FreezerBucket:
+    Description: The base infrastructure stack identifier
+    Value:
+      "Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket"
+    Export:
+      Name: !Sub "${AWS::StackName}-FreezerBucket"
