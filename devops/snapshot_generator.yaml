@@ -387,11 +387,13 @@ Resources:
                 yum install -y jq nmap-ncat || true
 
                 SUCCESS=0
+                export AWS_DEFAULT_REGION=${AWS::Region}
+                export AWS_REGION=${AWS::Region}
 
                 while [ $SUCCESS -eq 0 ]; do
                   # On our first pass, or if Geth crashes without having a current block,
                   # start geth
-                  sudo -u geth /usr/bin/geth  ${NodeExtraFlags} --datadir=/var/lib/ethereum ${FreezerFlags} &
+                  sudo -Eu geth /usr/bin/geth  ${NodeExtraFlags} --datadir=/var/lib/ethereum ${FreezerFlags} &
                   SUDO_PID=$!
                   sleep 1
                   GETH_PID=$(ps --ppid $SUDO_PID -o pid=)
@@ -445,7 +447,6 @@ Resources:
                 done
 
                 # Now that we think we have a synced chiandata folder, take a snapshot
-                export AWS_DEFAULT_REGION=${AWS::Region}
                 VOLUME_ID=$(aws ec2 describe-volumes --filters Name=attachment.instance-id,Values="$(curl http://169.254.169.254/latest/meta-data/instance-id)" | jq '.Volumes[] | select(. | .Attachments[0].Device == "/dev/sdf") | .VolumeId' -cr)
 
                 SNAPSHOT_ID=`aws ec2 create-snapshot --volume-id $VOLUME_ID --tag-specification="ResourceType=snapshot,Tags=[{Key=cluster,Value=Snapshotter},{Key=Name,Value=Snapshotter-chaindata-$(date -Isecond -u)}]" | jq '.SnapshotId' -cr`
