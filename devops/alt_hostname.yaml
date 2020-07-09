@@ -33,10 +33,17 @@ Parameters:
     MinValue: 1
     Default: 8545
     Description: Port to use for replica health checks. Enables you to use more advanced healtchecks if needed for RPC.
-
+  EnableWildcardDNS:
+    Type: String
+    Description: Whether or not to enable *.$ServiceName.rpc.$HostedZone, or just $ServiceName.rpc.$HostedZone
+    AllowedValues:
+      - true
+      - false
+    Default: true
 
 Conditions:
   HasSNSTopic: !Not [!Equals [ !Ref AlarmSNSTopic, "" ]]
+  EnableWildcard: !Equals [ !Ref EnableWildcardDNS, "true" ]
 
 
 Resources:
@@ -88,6 +95,7 @@ Resources:
       Weight: 1
       SetIdentifier: !Sub "${AWS::StackName}"
   RPCALBWildcardDNS:
+    Condition: EnableWildcard
     Type: "AWS::Route53::RecordSet"
     Properties:
       AliasTarget:
@@ -132,6 +140,7 @@ Resources:
       Weight: 1
       SetIdentifier: !Sub "${AWS::StackName}"
   GraphQLALBWildcardDNS:
+    Condition: EnableWildcard
     Type: "AWS::Route53::RecordSet"
     Properties:
       AliasTarget:
@@ -188,6 +197,7 @@ Resources:
       Weight: 1
       SetIdentifier: !Sub "${AWS::StackName}"
   WebsocketsALBWildcardDNS:
+    Condition: EnableWildcard
     Type: "AWS::Route53::RecordSet"
     Properties:
       AliasTarget:

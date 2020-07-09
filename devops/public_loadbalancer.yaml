@@ -29,10 +29,18 @@ Parameters:
     MinValue: 1
     Default: 8545
     Description: Port to use for websocket health checks. AWS load balancers don't handle health checks on websockets, so we need to tie this to a different port.
+  EnableWildcardDNS:
+    Type: String
+    Description: Whether or not to enable *.$ServiceName.rpc.$HostedZone, or just $ServiceName.rpc.$HostedZone
+    AllowedValues:
+      - true
+      - false
+    Default: true
 
 Conditions:
   HasSNSTopic: !Not [!Equals [ !Ref AlarmSNSTopic, "" ]]
   HasSNI: !Not [ !Equals [ !Ref SNICertificateArns, ""  ]]
+  EnableWildcard: !Equals [ !Ref EnableWildcardDNS, "true" ]
 
 
 Resources:
@@ -164,6 +172,7 @@ Resources:
       Weight: 1
       SetIdentifier: !Sub "${AWS::StackName}"
   RPCALBWildcardDNS:
+    Condition: EnableWildcard
     Type: "AWS::Route53::RecordSet"
     Properties:
       AliasTarget:
@@ -204,6 +213,7 @@ Resources:
       Weight: 1
       SetIdentifier: !Sub "${AWS::StackName}"
   GraphQLALBWildcardDNS:
+    Condition: EnableWildcard
     Type: "AWS::Route53::RecordSet"
     Properties:
       AliasTarget:
@@ -256,6 +266,7 @@ Resources:
       Weight: 1
       SetIdentifier: !Sub "${AWS::StackName}"
   WebsocketsALBWildcardDNS:
+    Condition: EnableWildcard
     Type: "AWS::Route53::RecordSet"
     Properties:
       AliasTarget:

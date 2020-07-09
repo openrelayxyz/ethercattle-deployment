@@ -181,7 +181,6 @@ Mappings:
 
 
 Conditions:
-  IsProd: !Equals [!Ref ClusterId, "prod"]
   HasNotificationEmail: !Not [!Equals [ !Ref NotificationEmail, "" ]]
   HasSNSTopic: !Not [!Equals [ !Ref AlarmSNSTopic, "" ]]
   HasKafkaBrokerEndpoint: !Not [!Equals [ !Ref KafkaBrokerEndpoint, "" ]]
