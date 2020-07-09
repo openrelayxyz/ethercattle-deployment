@@ -534,7 +534,7 @@ Resources:
       - IpProtocol: tcp
         FromPort: '22'
         ToPort: '22'
-        CidrIp: !Join ["", ["Fn::ImportValue": !Sub "${InfrastructureStack}-VpcBaseIp", ".0.0/16"]]
+        CidrIp: !Join ["", ["Fn::ImportValue": !Sub "${InfrastructureStack}-VpcBaseIp", ".0.0/", "Fn::ImportValue": !Sub "${InfrastructureStack}-CidrBlockRange"]]
       - IpProtocol: udp
         FromPort: '30303'
         ToPort: '30303'
@@ -1491,19 +1491,19 @@ Resources:
       - IpProtocol: tcp
         FromPort: '22'
         ToPort: '22'
-        CidrIp: !Join ["", ["Fn::ImportValue": !Sub "${InfrastructureStack}-VpcBaseIp", ".0.0/16"]]
+        CidrIp: !Join ["", ["Fn::ImportValue": !Sub "${InfrastructureStack}-VpcBaseIp", ".0.0/", "Fn::ImportValue": !Sub "${InfrastructureStack}-CidrBlockRange"]]
       - IpProtocol: tcp
         FromPort: '8545'
         ToPort: '8545'
-        CidrIp: !Join ["", ["Fn::ImportValue": !Sub "${InfrastructureStack}-VpcBaseIp", ".0.0/16"]]
+        CidrIp: !Join ["", ["Fn::ImportValue": !Sub "${InfrastructureStack}-VpcBaseIp", ".0.0/", "Fn::ImportValue": !Sub "${InfrastructureStack}-CidrBlockRange"]]
       - IpProtocol: tcp
         FromPort: '8546'
         ToPort: '8546'
-        CidrIp: !Join ["", ["Fn::ImportValue": !Sub "${InfrastructureStack}-VpcBaseIp", ".0.0/16"]]
+        CidrIp: !Join ["", ["Fn::ImportValue": !Sub "${InfrastructureStack}-VpcBaseIp", ".0.0/", "Fn::ImportValue": !Sub "${InfrastructureStack}-CidrBlockRange"]]
       - IpProtocol: tcp
         FromPort: '8547'
         ToPort: '8547'
-        CidrIp: !Join ["", ["Fn::ImportValue": !Sub "${InfrastructureStack}-VpcBaseIp", ".0.0/16"]]
+        CidrIp: !Join ["", ["Fn::ImportValue": !Sub "${InfrastructureStack}-VpcBaseIp", ".0.0/", "Fn::ImportValue": !Sub "${InfrastructureStack}-CidrBlockRange"]]
   ReplicaNodeRole:
     Type: "AWS::IAM::Role"
     Properties:

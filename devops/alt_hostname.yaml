@@ -422,3 +422,9 @@ Outputs:
       "Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket"
     Export:
       Name: !Sub "${AWS::StackName}-FreezerBucket"
+  CidrBlockRange:
+    Description: The CIDR Block for allowing in-network connections for certain resources
+    Value:
+      "Fn::ImportValue": !Sub "${InfrastructureStack}-CidrBlockRange"
+    Export:
+      Name: !Sub "${AWS::StackName}-CidrBlockRange"

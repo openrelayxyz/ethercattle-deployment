@@ -70,6 +70,10 @@ Parameters:
   FreezerBucketInput:
     Type: String
     Description: An optional S3 Bucket (bucket name only) for storing the Geth freezer. If not specified, a bucket will be created
+  CidrBlockRange:
+    Type: Number
+    Default: "16"
+    Description: The range of the cidr block to allow SSH access to hosts
 
 
 
@@ -502,3 +506,8 @@ Outputs:
     Value: !If [CreateFreezerBucket, !Ref FreezerBucket, !Ref FreezerBucketInput]
     Export:
       Name: !Sub "${AWS::StackName}-FreezerBucket"
+  CidrBlockRange:
+    Description: The CIDR Block for allowing in-network connections for certain resources
+    Value: !Ref CidrBlockRange
+    Export:
+      Name: !Sub "${AWS::StackName}-CidrBlockRange"
