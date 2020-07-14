@@ -2234,7 +2234,7 @@ Resources:
   #               ClusterId:
   #                 "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
   #               FreezerFlags: !If [ EnabledFreezerBucket, {"Fn::Sub": ["--datadir.ancient=s3://${Bucket}/${NetworkId}", {Bucket: !If [ HasFreezerBucket, !Ref FreezerBucket, {"Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket"} ]} ]}, ""]
-  AWSFreezerRegion: !If [ HasFreezerRegion, !Ref FreezerRegion, !Sub "${AWS::Region}" ]
+  #               AWSFreezerRegion: !If [ HasFreezerRegion, !Ref FreezerRegion, !Sub "${AWS::Region}" ]
   FallBackLG:
     Type: AWS::Logs::LogGroup
     Properties:
