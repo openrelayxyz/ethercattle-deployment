@@ -181,6 +181,9 @@ Parameters:
   FreezerBucket:
     Type: String
     Description: (optional) An s3 bucket to use for storing Geth Freezer data. If not provided, the InfrastructureStack's bucket will be used
+  FreezerRegion:
+    Type: String
+    Description: The AWS Region to use for the freezer bucket
   EnableS3Freezer:
     Type: String
     Default: "false"
@@ -458,6 +461,7 @@ Conditions:
   MasterSpotLowestPrice: !Equals [!Ref MasterSpotAllocationStrategy, "lowest-price"]
   ReplicaSpotLowestPrice: !Equals [!Ref ReplicaSpotAllocationStrategy, "lowest-price"]
   HasFreezerBucket: !Not [ !Equals [ !Ref FreezerBucket, "" ] ]
+  HasFreezerRegion: !Not [ !Equals [ !Ref FreezerRegion, "" ]]
   EnabledFreezerBucket: !Equals [ !Ref EnableS3Freezer, "true" ]
 
 Resources:
@@ -706,7 +710,7 @@ Resources:
                 infraName=${InfrastructureStack}
                 baseInfraName=${BaseInfrastructure}
                 network=${NetworkId}
-                AWS_REGION=${AWS::Region}
+                AWS_REGION=${AWSFreezerRegion}
                 LOG_BLOCK_LIMIT=10000
                 FLUME_URL=${FlumeURL}" > /etc/systemd/system/ethcattle-vars
 
@@ -785,6 +789,7 @@ Resources:
                   "Fn::ImportValue": !Sub "${InfrastructureStack}-BaseInfrastructure"
                 EventsTopicFlag: !If [ HasEventsTopic, !Sub "--kafka.event.topic ${EventsTopic}", ""]
                 FreezerFlags: !If [ EnabledFreezerBucket, {"Fn::Sub": ["--datadir.ancient=s3://${Bucket}/${NetworkId}", {Bucket: !If [ HasFreezerBucket, !Ref FreezerBucket, {"Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket"} ]} ]}, ""]
+                AWSFreezerRegion: !If [ HasFreezerRegion, !Ref FreezerRegion, !Sub ${AWS::Region} ]
 
   MasterAutoScalingGroup:
     Type: AWS::AutoScaling::AutoScalingGroup
@@ -1677,7 +1682,7 @@ Resources:
                 infraName=${InfrastructureStack}
                 baseInfraName=${BaseInfrastructure}
                 network=${NetworkId}
-                AWS_REGION=${AWS::Region}
+                AWS_REGION=${AWSFreezerRegion}
                 LOG_BLOCK_LIMIT=10000
                 FLUME_URL=${FlumeURL}" > /etc/systemd/system/ethcattle-vars
 
@@ -1766,6 +1771,7 @@ Resources:
                 BaseInfrastructure:
                   "Fn::ImportValue": !Sub "${InfrastructureStack}-BaseInfrastructure"
                 FreezerFlags: !If [ EnabledFreezerBucket, {"Fn::Sub": ["--datadir.ancient=s3://${Bucket}/${NetworkId}", {Bucket: !If [ HasFreezerBucket, !Ref FreezerBucket, {"Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket"} ]} ]}, ""]
+                AWSFreezerRegion: !If [ HasFreezerRegion, !Ref FreezerRegion, !Sub ${AWS::Region} ]
 
   ReplicaAutoScalingPolicy:
     Type: AWS::AutoScaling::ScalingPolicy
@@ -1906,8 +1912,8 @@ Resources:
                 yum install -y jq
 
                 export AWS_DEFAULT_REGION=${AWS::Region}
-                export AWS_REGION=${AWS::Region}
-                printf "KafkaHostname=${KafkaHostname}\nKafkaTopic=${KafkaTopic}\nNetworkId=${NetworkId}\ninfraName=${InfrastructureStack}\nAWS_REGION=${AWS::Region}\n" > /etc/systemd/system/ethcattle-vars
+                export AWS_REGION=${AWSFreezerRegion}
+                printf "KafkaHostname=${KafkaHostname}\nKafkaTopic=${KafkaTopic}\nNetworkId=${NetworkId}\ninfraName=${InfrastructureStack}\nAWS_REGION=${AWSFreezerRegion}\n" > /etc/systemd/system/ethcattle-vars
 
                 if [ -f /usr/bin/replica-snapshot-hook ]
                 then
@@ -2020,6 +2026,7 @@ Resources:
                 ClusterId:
                   "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
                 FreezerFlags: !If [ EnabledFreezerBucket, {"Fn::Sub": ["--datadir.ancient=s3://${Bucket}/${NetworkId}", {Bucket: !If [ HasFreezerBucket, !Ref FreezerBucket, {"Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket"} ]} ]}, ""]
+                AWSFreezerRegion: !If [ HasFreezerRegion, !Ref FreezerRegion, !Sub ${AWS::Region} ]
   # PrunerLaunchTemplate:
   #   Type: AWS::EC2::LaunchTemplate
   #   Properties:
@@ -2088,7 +2095,7 @@ Resources:
   #               yum install -y jq
   #
   #               export AWS_DEFAULT_REGION=${AWS::Region}
-  #               printf "KafkaHostname=${KafkaHostname}\nKafkaTopic=${KafkaTopic}\nNetworkId=${NetworkId}\ninfraName=${InfrastructureStack}\nAWS_REGION=${AWS::Region}\n" > /etc/systemd/system/ethcattle-vars
+  #               printf "KafkaHostname=${KafkaHostname}\nKafkaTopic=${KafkaTopic}\nNetworkId=${NetworkId}\ninfraName=${InfrastructureStack}\nAWS_REGION=${AWSFreezerRegion}\n" > /etc/systemd/system/ethcattle-vars
   #
   #               if [ -f /usr/bin/replica-snapshot-hook ]
   #               then
@@ -2227,6 +2234,7 @@ Resources:
   #               ClusterId:
   #                 "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
   #               FreezerFlags: !If [ EnabledFreezerBucket, {"Fn::Sub": ["--datadir.ancient=s3://${Bucket}/${NetworkId}", {Bucket: !If [ HasFreezerBucket, !Ref FreezerBucket, {"Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket"} ]} ]}, ""]
+  AWSFreezerRegion: !If [ HasFreezerRegion, !Ref FreezerRegion, !Sub ${AWS::Region} ]
   FallBackLG:
     Type: AWS::Logs::LogGroup
     Properties:
@@ -2336,7 +2344,7 @@ Resources:
                 infraName=${InfrastructureStack}
                 baseInfraName=${BaseInfrastructure}
                 network=${NetworkId}
-                AWS_REGION=${AWS::Region}
+                AWS_REGION=${AWSFreezerRegion}
                 LOG_BLOCK_LIMIT=10000" > /etc/systemd/system/ethcattle-vars
 
                 SEP=$(echo "${KafkaHostname}" | grep -q "?" && echo "&" || echo "?")
@@ -2423,6 +2431,7 @@ Resources:
                 BaseInfrastructure:
                   "Fn::ImportValue": !Sub "${InfrastructureStack}-BaseInfrastructure"
                 FreezerFlags: !If [ EnabledFreezerBucket, {"Fn::Sub": ["--datadir.ancient=s3://${Bucket}/${NetworkId}", {Bucket: !If [ HasFreezerBucket, !Ref FreezerBucket, {"Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket"} ]} ]}, ""]
+                AWSFreezerRegion: !If [ HasFreezerRegion, !Ref FreezerRegion, !Sub ${AWS::Region} ]
 
   FallbackAutoScalingPolicy:
     Type: AWS::AutoScaling::ScalingPolicy
