@@ -37,9 +37,9 @@ Parameters:
     Type: String
     Description: Whether or not to enable *.$ServiceName.rpc.$HostedZone, or just $ServiceName.rpc.$HostedZone
     AllowedValues:
-      - true
-      - false
-    Default: true
+      - "true"
+      - "false"
+    Default: "true"
 
 Conditions:
   HasSNSTopic: !Not [!Equals [ !Ref AlarmSNSTopic, "" ]]
