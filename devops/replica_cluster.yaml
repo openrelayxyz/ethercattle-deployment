@@ -1997,10 +1997,38 @@ Resources:
                   poweroff
                 fi
 
+
+                # Resize Disks
+                ORIGINAL_DISK_SIZE=`aws ec2 describe-volumes --volume-ids "vol-05daadf78651aa123" | jq '.Volumes[] | .Size' -cr`
+                NEW_DISK_SIZE=$((ORIGINAL_DISK_SIZE*115/100))
+                DISK_RESIZE=""
+
+                ## manually grepping for sdf (mount direcotry above) because we don't really need to worry about the others.
+                df -H | grep -vE '^Filesystem|tmpfs|cdrom' | grep /dev/sdf | awk '{ print $5 " " $1 }' | while read output;
+                do
+                  echo $output
+                  usep=$(echo $output | awk '{ print $1}' | cut -d'%' -f1  )
+                  partition=$(echo $output | awk '{ print $2 }' )
+                  if [ $usep -ge 90 ]; then
+                    echo "Running out of space \"$partition ($usep%)\" on $(hostname) as on $(date)" |
+                     mail -s "Alert: Almost out of disk space $usep%" you@somewhere.com
+
+                    DISK_RESIZE="true"
+                  fi
+                done
+
                 # CFN will set any parameters we don't provide back to their default values,
                 # so get all of the parameters, update SnapshotID, and update the stack with
                 # the new parameters.
                 PARAMETERS=$(aws cloudformation describe-stacks --stack-name ${AWS::StackName} | jq '.Stacks[0].Parameters | map(if .ParameterKey == "SnapshotId" then .ParameterValue="'$SNAPSHOT_ID'" else . end)' -c)
+                if [ $DISK_RESIZE -eq true ] ; then
+                 PARAMETERS=$(aws cloudformation describe-stacks --stack-name ${AWS::StackName} | jq '.Stacks[0].Parameters | map(if .ParameterKey == "DiskSize" then .ParameterValue="'$NEW_DISK_SIZE'" else . end)' -c)
+
+                 for vol in `aws ec2 describe-volumes --filters Name=tag:Name,Values=${KafkaTopic}-Master Name=attachment.device,Values=/dev/sdf | jq '.Volumes[] | select(. | .Attachments[0].Device == "/dev/sdf") | .VolumeId' -cr` ;  do
+                  aws ec2 modify-volume --size $NEW_DISK_SIZE --volume-id $vol ;
+                 done
+                 
+                fi
                 aws cloudformation update-stack --stack-name ${AWS::StackName} --use-previous-template --capabilities CAPABILITY_IAM --parameters="$PARAMETERS"
 
                 # IF Day of week is Sunday, compact DB and re-update everything, after taking a new snapshot.
