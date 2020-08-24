@@ -1303,7 +1303,7 @@ Resources:
     Properties:
       Code:
         S3Bucket: !Ref S3GethBucketName
-        S3Key: lambdaPackage-17.zip
+        S3Key: lambdaPackage-18.zip
       Description: "A lambda function to process Geth logs into metrics"
       Environment:
         Variables:
@@ -1828,7 +1828,7 @@ Resources:
     Properties:
       Code:
         S3Bucket: !Ref S3GethBucketName
-        S3Key: lambdaPackage-17.zip
+        S3Key: lambdaPackage-18.zip
       Description: "A lambda function to process Geth logs into metrics"
       Environment:
         Variables:
@@ -1999,7 +1999,7 @@ Resources:
 
 
                 # Resize Disks
-                ORIGINAL_DISK_SIZE=`aws ec2 describe-volumes --volume-ids "vol-05daadf78651aa123" | jq '.Volumes[] | .Size' -cr`
+                ORIGINAL_DISK_SIZE=`aws ec2 describe-volumes --volume-ids "$VOLUME_ID" | jq '.Volumes[] | .Size' -cr`
                 NEW_DISK_SIZE=$((ORIGINAL_DISK_SIZE*115/100))
                 DISK_RESIZE=""
 
@@ -2010,9 +2010,10 @@ Resources:
                   usep=$(echo $output | awk '{ print $1}' | cut -d'%' -f1  )
                   partition=$(echo $output | awk '{ print $2 }' )
                   if [ $usep -ge 90 ]; then
-                    echo "Running out of space \"$partition ($usep%)\" on $(hostname) as on $(date)" |
-                     mail -s "Alert: Almost out of disk space $usep%" you@somewhere.com
-
+                    if [ "${AggregatedNotifications}" != "" ]
+                    then
+                      aws sns publish --topic-arn=${AggregatedNotifications} --subject="${AWS::StackName} - Upsizing Snapshot Size" --message="The snapshot for ${AWS::StackName} has reached $usep%. Resizing to $NEW_DISK_SIZE GB."
+                    fi
                     DISK_RESIZE="true"
                   fi
                 done
@@ -2023,11 +2024,6 @@ Resources:
                 PARAMETERS=$(aws cloudformation describe-stacks --stack-name ${AWS::StackName} | jq '.Stacks[0].Parameters | map(if .ParameterKey == "SnapshotId" then .ParameterValue="'$SNAPSHOT_ID'" else . end)' -c)
                 if [ $DISK_RESIZE -eq true ] ; then
                  PARAMETERS=$(aws cloudformation describe-stacks --stack-name ${AWS::StackName} | jq '.Stacks[0].Parameters | map(if .ParameterKey == "DiskSize" then .ParameterValue="'$NEW_DISK_SIZE'" else . end)' -c)
-
-                 for vol in `aws ec2 describe-volumes --filters Name=tag:Name,Values=${KafkaTopic}-Master Name=attachment.device,Values=/dev/sdf | jq '.Volumes[] | select(. | .Attachments[0].Device == "/dev/sdf") | .VolumeId' -cr` ;  do
-                  aws ec2 modify-volume --size $NEW_DISK_SIZE --volume-id $vol ;
-                 done
-                 
                 fi
                 aws cloudformation update-stack --stack-name ${AWS::StackName} --use-previous-template --capabilities CAPABILITY_IAM --parameters="$PARAMETERS"
 
@@ -2681,7 +2677,7 @@ Resources:
     Properties:
       Code:
         S3Bucket: !Ref S3GethBucketName
-        S3Key: lambdaPackage-17.zip
+        S3Key: lambdaPackage-18.zip
       Description: "Launch instances to snapshot chaindata"
       Environment:
         Variables:
@@ -2712,6 +2708,55 @@ Resources:
       Principal: events.amazonaws.com
       SourceArn: !Sub ${SnapshotSchedulerRule.Arn}
 
+
+  DiskSizeLambdaRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Action:
+          - sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service:
+            - lambda.amazonaws.com
+        Version: '2012-10-17'
+  DiskSizeLambdaPolicy:
+    Type: "AWS::IAM::Policy"
+    Properties:
+      Roles:
+        - !Ref DiskSizeLambdaRole
+      PolicyName: !Sub "DiskSizeLambdaPolicy${AWS::StackName}"
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - ec2:DescribeVolumes
+              - ec2:ModifyVolume
+            Resource: "*"
+  DiskSizeLambdaFunction:
+    Type: "AWS::Lambda::Function"
+    Properties:
+      Code:
+        S3Bucket: !Ref S3GethBucketName
+        S3Key: lambdaPackage-18.zip
+      Description: "Align master volume sizes with CloudFormation parameters"
+      Environment:
+        Variables:
+          VOLUME_SIZE: !Ref DiskSize
+          KAFKA_TOPIC: !Ref KafkaTopic
+      Handler: "masterVolumeManager.sizeHandler"
+      Role: !Sub ${DiskSizeLambdaRole.Arn}
+      Runtime: python3.7
+  DiskManagerSchedulerRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: Disk Size manager
+      ScheduleExpression: "rate(15 minutes)"
+      Targets:
+        - Arn: !Sub ${DiskSizeLambdaFunction.Arn}
+          Id: !Sub "disk-size-${KafkaTopic}"
 
   SnapshotGCLambdaRole:
     Type: "AWS::IAM::Role"
@@ -2746,7 +2791,7 @@ Resources:
     Properties:
       Code:
         S3Bucket: !Ref S3GethBucketName
-        S3Key: lambdaPackage-17.zip
+        S3Key: lambdaPackage-18.zip
       Description: "Cleanup old chaindata snapshots"
       Environment:
         Variables:
@@ -2780,7 +2825,7 @@ Resources:
     Properties:
       Code:
         S3Bucket: !Ref S3GethBucketName
-        S3Key: lambdaPackage-17.zip
+        S3Key: lambdaPackage-18.zip
       Description: "Collect metrics for remote RPC URLs"
       Environment:
         Variables:
