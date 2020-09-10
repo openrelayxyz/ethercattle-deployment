@@ -667,6 +667,10 @@ Resources:
                 then
                   ARCH="arm64"
                 fi
+
+                totalm=$(free -m | awk '/^Mem:/{print $2}') ; echo $totalm
+                allocatesafe=$((totalm * 75 / 100))
+
                 GETH_BIN="geth-linux-$ARCH"
                 LOGS_BIN="journald-cloudwatch-logs-$ARCH"
                 aws s3 cp s3://${S3GethBucketName}/${ECGethVersion}/$GETH_BIN /usr/bin/geth
@@ -717,7 +721,7 @@ Resources:
                 EnvironmentFile=/etc/systemd/system/ethcattle-vars
                 Type=simple
                 LimitNOFILE=655360
-                ExecStartPre=/usr/bin/geth replica ${ReplicaExtraFlags} ${FreezerFlags} --kafka.broker=${KafkaHostname}""$SEP""fetch.default=8388608&max.waittime=25&avoid_leader=1  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown
+                ExecStartPre=/usr/bin/geth replica --cache=$allocatesafe ${ReplicaExtraFlags} ${FreezerFlags} --kafka.broker=${KafkaHostname}""$SEP""fetch.default=8388608&max.waittime=25&avoid_leader=1  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown
                 ExecStart=/usr/bin/geth ${MasterExtraFlags} ${FreezerFlags} --light.maxpeers 0 --maxpeers 25 --gcmode=archive --kafka.broker=${KafkaHostname}&net.maxopenrequests=1&message.send.max.retries=20000  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --kafka.txpool.topic=${InfrastructureStack}-txpool ${EventsTopicFlag}
                 KillMode=process
                 KillSignal=SIGINT
@@ -1299,7 +1303,7 @@ Resources:
     Properties:
       Code:
         S3Bucket: !Ref S3GethBucketName
-        S3Key: lambdaPackage-17.zip
+        S3Key: lambdaPackage-18.zip
       Description: "A lambda function to process Geth logs into metrics"
       Environment:
         Variables:
@@ -1621,6 +1625,10 @@ Resources:
                 then
                   ARCH="arm64"
                 fi
+
+                totalm=$(free -m | awk '/^Mem:/{print $2}') ; echo $totalm
+                allocatesafe=$((totalm * 75 / 100))
+
                 GETH_BIN="geth-linux-$ARCH"
                 LOGS_BIN="journald-cloudwatch-logs-$ARCH"
                 aws s3 cp s3://${S3GethBucketName}/${ECGethVersion}/$GETH_BIN /usr/bin/geth
@@ -1688,8 +1696,8 @@ Resources:
                 EnvironmentFile=/etc/systemd/system/ethcattle-vars
                 Type=simple
                 LimitNOFILE=655360
-                ExecStartPre=/usr/bin/geth replica ${ReplicaExtraFlags} ${FreezerFlags} $OVERLAY_FLAG --kafka.broker=${KafkaHostname}""$SEP""fetch.default=8388608&max.waittime=25&avoid_leader=1 --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown
-                ExecStart=/usr/bin/bash -c '/usr/bin/geth replica ${ReplicaExtraFlags} ${FreezerFlags} $OVERLAY_FLAG --kafka.broker=\$KafkaHostname --datadir=/var/lib/ethereum --kafka.topic=\$KafkaTopic --kafka.txpool.topic=\$infraName-txpool  --kafka.tx.topic=\$NetworkId-tx --replica.startup.age=45  ${ReplicaHTTPFlag} ${ReplicaGraphQLFlag} ${ReplicaWebsocketsFlag}'
+                ExecStartPre=/usr/bin/geth replica --cache=$allocatesafe ${ReplicaExtraFlags} ${FreezerFlags} $OVERLAY_FLAG --kafka.broker=${KafkaHostname}""$SEP""fetch.default=8388608&max.waittime=25&avoid_leader=1 --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown
+                ExecStart=/usr/bin/bash -c '/usr/bin/geth replica --cache=$allocatesafe ${ReplicaExtraFlags} ${FreezerFlags} $OVERLAY_FLAG --kafka.broker=\$KafkaHostname --datadir=/var/lib/ethereum --kafka.topic=\$KafkaTopic --kafka.txpool.topic=\$infraName-txpool  --kafka.tx.topic=\$NetworkId-tx --replica.startup.age=45  ${ReplicaHTTPFlag} ${ReplicaGraphQLFlag} ${ReplicaWebsocketsFlag}'
                 CPUSchedulingPolicy=fifo
                 CPUSchedulingPriority=20
                 KillMode=process
@@ -1758,7 +1766,7 @@ Resources:
                     # Wow that's a lot of escaping!
                     !If [HasReplicaGraphQL, "--graphql --graphql.addr 0.0.0.0 --graphql.port 8547 --graphql.vhosts \\\\\\'*\\\\\\'", ""]
                 ReplicaWebsocketsFlag:
-                    !If [HasReplicaWebsockets, "--ws --wsaddr 0.0.0.0 --wsport 8546", ""]
+                    !If [HasReplicaWebsockets, "--ws --ws.addr 0.0.0.0 --ws.port 8546", ""]
                 BaseInfrastructure:
                   "Fn::ImportValue": !Sub "${InfrastructureStack}-BaseInfrastructure"
                 FreezerFlags: !If [ EnabledFreezerBucket, {"Fn::Sub": ["--datadir.ancient=s3://${Bucket}/${NetworkId}", {Bucket: !If [ HasFreezerBucket, !Ref FreezerBucket, {"Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket"} ]} ]}, ""]
@@ -1820,7 +1828,7 @@ Resources:
     Properties:
       Code:
         S3Bucket: !Ref S3GethBucketName
-        S3Key: lambdaPackage-17.zip
+        S3Key: lambdaPackage-18.zip
       Description: "A lambda function to process Geth logs into metrics"
       Environment:
         Variables:
@@ -1890,6 +1898,10 @@ Resources:
                 then
                   ARCH="arm64"
                 fi
+
+                totalm=$(free -m | awk '/^Mem:/{print $2}') ; echo $totalm
+                allocatesafe=$((totalm * 75 / 100))
+
                 GETH_BIN="geth-linux-$ARCH"
                 aws s3 cp s3://${S3GethBucketName}/${ECGethVersion}/$GETH_BIN /usr/bin/geth
                 chmod +x /usr/bin/geth
@@ -1915,7 +1927,7 @@ Resources:
                 ulimit -n 20000000
 
                 SEP=$(echo "${KafkaHostname}" | grep -q "?" && echo "&" || echo "?")
-                sudo -Eu geth /usr/bin/geth replica ${ReplicaExtraFlags} ${FreezerFlags} --kafka.broker=$(printf "${KafkaHostname}")""$SEP""avoid_leader=1 --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown
+                sudo -Eu geth /usr/bin/geth replica --cache=$allocatesafe ${ReplicaExtraFlags} ${FreezerFlags} --kafka.broker=$(printf "${KafkaHostname}")""$SEP""avoid_leader=1 --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown
                 if ! sudo -Eu geth /usr/bin/geth verifystatetrie ${FreezerFlags} --datadir=/var/lib/ethereum ${SnapshotValidationThreshold}
                 then
                   if [ "${AggregatedNotifications}" != "" ]
@@ -1972,7 +1984,7 @@ Resources:
                 # check on the snapshot, as it requires it to be able to validate blocks.
                 # We don't want this to end up in our final snapshot, but if we can't sync from
                 # the network we don't want to present this snapshot to the cluster.
-                if ! sudo -Eu geth /usr/bin/geth ${ReplicaExtraFlags} ${FreezerFlags} --datadir=/var/lib/ethereum --exitwhensynced
+                if ! sudo -Eu geth /usr/bin/geth --cache=$allocatesafe ${ReplicaExtraFlags} ${FreezerFlags} --datadir=/var/lib/ethereum --exitwhensynced
                 then
                   if [ "${AggregatedNotifications}" != "" ]
                   then
@@ -1985,10 +1997,34 @@ Resources:
                   poweroff
                 fi
 
+
+                # Resize Disks
+                ORIGINAL_DISK_SIZE=`aws ec2 describe-volumes --volume-ids "$VOLUME_ID" | jq '.Volumes[] | .Size' -cr`
+                NEW_DISK_SIZE=$((ORIGINAL_DISK_SIZE*115/100))
+                DISK_RESIZE=""
+
+                ## manually grepping for sdf (mount direcotry above) because we don't really need to worry about the others.
+                df -H | grep -vE '^Filesystem|tmpfs|cdrom' | grep /dev/sdf | awk '{ print $5 " " $1 }' | while read output;
+                do
+                  echo $output
+                  usep=$(echo $output | awk '{ print $1}' | cut -d'%' -f1  )
+                  partition=$(echo $output | awk '{ print $2 }' )
+                  if [ $usep -ge 90 ]; then
+                    if [ "${AggregatedNotifications}" != "" ]
+                    then
+                      aws sns publish --topic-arn=${AggregatedNotifications} --subject="${AWS::StackName} - Upsizing Snapshot Size" --message="The snapshot for ${AWS::StackName} has reached $usep%. Resizing to $NEW_DISK_SIZE GB."
+                    fi
+                    DISK_RESIZE="true"
+                  fi
+                done
+
                 # CFN will set any parameters we don't provide back to their default values,
                 # so get all of the parameters, update SnapshotID, and update the stack with
                 # the new parameters.
                 PARAMETERS=$(aws cloudformation describe-stacks --stack-name ${AWS::StackName} | jq '.Stacks[0].Parameters | map(if .ParameterKey == "SnapshotId" then .ParameterValue="'$SNAPSHOT_ID'" else . end)' -c)
+                if [ $DISK_RESIZE -eq true ] ; then
+                 PARAMETERS=$(aws cloudformation describe-stacks --stack-name ${AWS::StackName} | jq '.Stacks[0].Parameters | map(if .ParameterKey == "DiskSize" then .ParameterValue="'$NEW_DISK_SIZE'" else . end)' -c)
+                fi
                 aws cloudformation update-stack --stack-name ${AWS::StackName} --use-previous-template --capabilities CAPABILITY_IAM --parameters="$PARAMETERS"
 
                 # IF Day of week is Sunday, compact DB and re-update everything, after taking a new snapshot.
@@ -2064,6 +2100,8 @@ Resources:
   #               then
   #                 ARCH="arm64"
   #               fi
+  #               totalm=$(free -m | awk '/^Mem:/{print $2}') ; echo $totalm
+  #               allocatesafe=$((totalm * 75 / 100))
   #               GETH_BIN="geth-linux-$ARCH"
   #               aws s3 cp s3://${S3GethBucketName}/${ECGethVersion}/$GETH_BIN /usr/bin/geth
   #               chmod +x /usr/bin/geth
@@ -2096,7 +2134,7 @@ Resources:
   #               ulimit -n 20000000
   #
   #               SEP=$(echo "${KafkaHostname}" | grep -q "?" && echo "&" || echo "?")
-  #               sudo -Eu geth /usr/bin/geth replica ${ReplicaExtraFlags} ${FreezerFlags} --kafka.broker=$(printf "${KafkaHostname}")""$SEP""fetch.default=8388608\&max.waittime=25 --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown
+  #               sudo -Eu geth /usr/bin/geth replica --cache=$allocatesafe ${ReplicaExtraFlags} ${FreezerFlags} --kafka.broker=$(printf "${KafkaHostname}")""$SEP""fetch.default=8388608\&max.waittime=25 --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown
   #               if ! sudo -Eu geth /usr/bin/geth verifystatetrie --datadir=/var/lib/ethereum ${SnapshotValidationThreshold}
   #               then
   #                 if [ "${AggregatedNotifications}" != "" ]
@@ -2146,7 +2184,7 @@ Resources:
   #               fi
   #
   #               # Sync from Kafka, then verify again. This should catch any reorgs from the block we pruned
-  #               sudo -Eu geth /usr/bin/geth replica ${ReplicaExtraFlags} ${FreezerFlags} --kafka.broker=$(printf "${KafkaHostname}")""$SEP""fetch.default=8388608\&max.waittime=25 --datadir=/tmp/new --kafka.topic=${KafkaTopic} --replica.syncshutdown
+  #               sudo -Eu geth /usr/bin/geth replica --cache=$allocatesafe ${ReplicaExtraFlags} ${FreezerFlags} --kafka.broker=$(printf "${KafkaHostname}")""$SEP""fetch.default=8388608\&max.waittime=25 --datadir=/tmp/new --kafka.topic=${KafkaTopic} --replica.syncshutdown
   #               if ! sudo -Eu geth /usr/bin/geth verifystatetrie --datadir=/tmp/new ${SnapshotValidationThreshold}
   #               then
   #                 if [ "${AggregatedNotifications}" != "" ]
@@ -2198,7 +2236,7 @@ Resources:
   #               # If it can do this, the state trie is in good shape. We do this after taking the snapshot but
   #               # before updating cloudformation so that this won't change the content of the snapshot, but if it
   #               # doesn't work we don't impose a bad snapshot on our cluster.
-  #               if ! sudo -Eu geth /usr/bin/geth ${ReplicaExtraFlags} ${FreezerFlags} --datadir=/tmp/new --exitwhensynced
+  #               if ! sudo -Eu geth /usr/bin/geth --cache=$allocatesafe ${ReplicaExtraFlags} ${FreezerFlags} --datadir=/tmp/new --exitwhensynced
   #               then
   #                 if [ "${AggregatedNotifications}" != "" ]
   #                 then
@@ -2279,6 +2317,10 @@ Resources:
                 then
                   ARCH="arm64"
                 fi
+
+                totalm=$(free -m | awk '/^Mem:/{print $2}') ; echo $totalm
+                allocatesafe=$((totalm * 75 / 100))
+
                 GETH_BIN="geth-linux-$ARCH"
                 LOGS_BIN="journald-cloudwatch-logs-$ARCH"
                 aws s3 cp s3://${S3GethBucketName}/${ECGethVersion}/$GETH_BIN /usr/bin/geth
@@ -2415,7 +2457,7 @@ Resources:
                     # Wow that's a lot of escaping!
                     !If [HasReplicaGraphQL, "--graphql --graphql.addr 0.0.0.0 --graphql.port 8547 --graphql.vhosts \\\\\\'*\\\\\\'", ""]
                 ReplicaWebsocketsFlag:
-                    !If [HasReplicaWebsockets, "--ws --wsaddr 0.0.0.0 --wsport 8546", ""]
+                    !If [HasReplicaWebsockets, "--ws --ws.addr 0.0.0.0 --ws.port 8546", ""]
                 BaseInfrastructure:
                   "Fn::ImportValue": !Sub "${InfrastructureStack}-BaseInfrastructure"
                 FreezerFlags: !If [ EnabledFreezerBucket, {"Fn::Sub": ["--datadir.ancient=s3://${Bucket}/${NetworkId}", {Bucket: !If [ HasFreezerBucket, !Ref FreezerBucket, {"Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket"} ]} ]}, ""]
@@ -2635,7 +2677,7 @@ Resources:
     Properties:
       Code:
         S3Bucket: !Ref S3GethBucketName
-        S3Key: lambdaPackage-17.zip
+        S3Key: lambdaPackage-18.zip
       Description: "Launch instances to snapshot chaindata"
       Environment:
         Variables:
@@ -2666,6 +2708,55 @@ Resources:
       Principal: events.amazonaws.com
       SourceArn: !Sub ${SnapshotSchedulerRule.Arn}
 
+
+  DiskSizeLambdaRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Action:
+          - sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service:
+            - lambda.amazonaws.com
+        Version: '2012-10-17'
+  DiskSizeLambdaPolicy:
+    Type: "AWS::IAM::Policy"
+    Properties:
+      Roles:
+        - !Ref DiskSizeLambdaRole
+      PolicyName: !Sub "DiskSizeLambdaPolicy${AWS::StackName}"
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - ec2:DescribeVolumes
+              - ec2:ModifyVolume
+            Resource: "*"
+  DiskSizeLambdaFunction:
+    Type: "AWS::Lambda::Function"
+    Properties:
+      Code:
+        S3Bucket: !Ref S3GethBucketName
+        S3Key: lambdaPackage-18.zip
+      Description: "Align master volume sizes with CloudFormation parameters"
+      Environment:
+        Variables:
+          VOLUME_SIZE: !Ref DiskSize
+          KAFKA_TOPIC: !Ref KafkaTopic
+      Handler: "masterVolumeManager.sizeHandler"
+      Role: !Sub ${DiskSizeLambdaRole.Arn}
+      Runtime: python3.7
+  DiskManagerSchedulerRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: Disk Size manager
+      ScheduleExpression: "rate(15 minutes)"
+      Targets:
+        - Arn: !Sub ${DiskSizeLambdaFunction.Arn}
+          Id: !Sub "disk-size-${KafkaTopic}"
 
   SnapshotGCLambdaRole:
     Type: "AWS::IAM::Role"
@@ -2700,7 +2791,7 @@ Resources:
     Properties:
       Code:
         S3Bucket: !Ref S3GethBucketName
-        S3Key: lambdaPackage-17.zip
+        S3Key: lambdaPackage-18.zip
       Description: "Cleanup old chaindata snapshots"
       Environment:
         Variables:
@@ -2734,7 +2825,7 @@ Resources:
     Properties:
       Code:
         S3Bucket: !Ref S3GethBucketName
-        S3Key: lambdaPackage-17.zip
+        S3Key: lambdaPackage-18.zip
       Description: "Collect metrics for remote RPC URLs"
       Environment:
         Variables:
