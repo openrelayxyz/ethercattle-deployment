@@ -1008,6 +1008,65 @@ Resources:
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
       Threshold: 95
       TreatMissingData: missing
+  MasterDiskAlarmEmergency:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmActions:
+        - !Ref MasterDiskSNS
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+      AlarmDescription: "Alarms when the master data directory > 98% full"
+      ComparisonOperator: "GreaterThanThreshold"
+      Metrics:
+        - Id: xvdf
+          MetricStat:
+            Metric:
+              MetricName: "disk_used_percent"
+              Namespace: CWAgent
+              Dimensions:
+                - Name: AutoScalingGroupName
+                  Value : !Ref MasterAutoScalingGroup
+                - Name: device
+                  Value : "xvdf"
+                - Name: fstype
+                  Value : "ext4"
+                - Name: path
+                  Value : "/var/lib/ethereum"
+            Period: 60
+            Stat: Maximum
+          Label: NVME Overlay Volume Disk Usage
+          ReturnData: false
+        - Id: nvme1n1
+          MetricStat:
+            Metric:
+              MetricName: "disk_used_percent"
+              Namespace: CWAgent
+              Dimensions:
+                - Name: AutoScalingGroupName
+                  Value : !Ref MasterAutoScalingGroup
+                - Name: device
+                  Value : "nvme1n1"
+                - Name: fstype
+                  Value : "ext4"
+                - Name: path
+                  Value : "/var/lib/ethereum"
+            Period: 60
+            Stat: Maximum
+          Label: EBS Overlay Disk Usage
+          ReturnData: false
+        - Id: delta
+          Expression: "MAX(METRICS())"
+      InsufficientDataActions:
+        - !Ref MasterDiskSNS
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+      EvaluationPeriods: 5
+      OKActions:
+        - !Ref MasterDiskSNS
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+      Threshold: 98
+      TreatMissingData: missing
   MasterMemSNS:
     Type: AWS::SNS::Topic
     Properties:
@@ -2004,7 +2063,7 @@ Resources:
                 DISK_RESIZE=""
 
                 ## manually grepping for sdf (mount direcotry above) because we don't really need to worry about the others.
-                df -H | grep -vE '^Filesystem|tmpfs|cdrom' | grep /dev/sdf | awk '{ print $5 " " $1 }' | while read output;
+                df -H | grep -vE '^Filesystem|tmpfs|cdrom' | grep $(readlink -f /dev/sdf) | awk '{ print $5 " " $1 }' | while read output;
                 do
                   echo $output
                   usep=$(echo $output | awk '{ print $1}' | cut -d'%' -f1  )
