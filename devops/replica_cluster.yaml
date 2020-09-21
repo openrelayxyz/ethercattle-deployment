@@ -2072,6 +2072,10 @@ Resources:
                     if [ "${AggregatedNotifications}" != "" ]
                     then
                       aws sns publish --topic-arn=${AggregatedNotifications} --subject="${AWS::StackName} - Upsizing Snapshot Size" --message="The snapshot for ${AWS::StackName} has reached $usep%. Resizing to $NEW_DISK_SIZE GB."
+                      if [ "${AlarmSNSTopic}" != "" ]
+                      then
+                        aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - Upsizing Snapshot Size" --message="The snapshot for ${AWS::StackName} has reached $usep%. Resizing to $NEW_DISK_SIZE GB."
+                      fi
                     fi
                     DISK_RESIZE="true"
                   fi
