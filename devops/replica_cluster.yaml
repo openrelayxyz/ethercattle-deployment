@@ -2081,7 +2081,7 @@ Resources:
                 # so get all of the parameters, update SnapshotID, and update the stack with
                 # the new parameters.
                 PARAMETERS=$(aws cloudformation describe-stacks --stack-name ${AWS::StackName} | jq '.Stacks[0].Parameters | map(if .ParameterKey == "SnapshotId" then .ParameterValue="'$SNAPSHOT_ID'" else . end)' -c)
-                if [ $DISK_RESIZE -eq true ] ; then
+                if [ $DISK_RESIZE = true ] ; then
                  PARAMETERS=$(aws cloudformation describe-stacks --stack-name ${AWS::StackName} | jq '.Stacks[0].Parameters | map(if .ParameterKey == "DiskSize" then .ParameterValue="'$NEW_DISK_SIZE'" else . end)' -c)
                 fi
                 aws cloudformation update-stack --stack-name ${AWS::StackName} --use-previous-template --capabilities CAPABILITY_IAM --parameters="$PARAMETERS"
