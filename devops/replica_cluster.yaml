@@ -2601,6 +2601,20 @@ Resources:
             Resource: !Sub arn:aws:s3:::${S3GethBucketName}/*
             Effect: Allow
           - Action:
+              - lambda:GetFunctionConfiguration
+              - lambda:InvokeAsync
+              - lambda:InvokeFunction
+              - lambda:GetFunction
+              - iam:ListRoles
+              - iam:ListRolePolicies
+              - iam:GetRole
+              - iam:PassRole
+              - iam:GetRolePolicy
+              - iam:ListAttachedRolePolicies
+            Resource:
+              - "*"
+            Effect: Allow
+          - Action:
               - s3:GetObject
               - s3:PutObject
               - s3:ListBucket
@@ -2628,6 +2642,7 @@ Resources:
             Resource:
               - !Sub ${SnapshotterLambdaFunction.Arn}
               - !Sub ${SnapshotGCLambdaFunction.Arn}
+              - !Sub ${DiskSizeLambdaFunction.Arn}
             Effect: Allow
           - Action:
               - iam:PassRole
