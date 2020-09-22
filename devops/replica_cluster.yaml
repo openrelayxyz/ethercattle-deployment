@@ -1986,6 +1986,24 @@ Resources:
                 ulimit -n 20000000
 
                 SEP=$(echo "${KafkaHostname}" | grep -q "?" && echo "&" || echo "?")
+
+                sudo -Eu geth /usr/bin/geth --cache=$allocatesafe --light.maxpeers 0 --maxpeers 0 ${ReplicaHTTPFlag} ${ReplicaGraphQLFlag} ${ReplicaWebsocketsFlag} &
+                test_pass=0
+                while [ $test_pass -le 1 ]
+                do
+                  if curl -X POST --insecure -H "Content-Type: application/json" --data '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":64}' localhost:8545
+                  then
+                    test_pass=$(( $test_pass + 1 ))
+                  else
+                    test_pass=0
+                  fi
+                  sleep 30
+                done
+                START_BLOCK=curl -X POST --insecure -H "Content-Type: application/json" --data '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":64}' localhost:8545
+                kill -HUP %
+                sleep 10
+
+
                 sudo -Eu geth /usr/bin/geth replica --cache=$allocatesafe ${ReplicaExtraFlags} ${FreezerFlags} --kafka.broker=$(printf "${KafkaHostname}")""$SEP""avoid_leader=1 --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown
                 if ! sudo -Eu geth /usr/bin/geth verifystatetrie ${FreezerFlags} --datadir=/var/lib/ethereum ${SnapshotValidationThreshold}
                 then
@@ -2038,6 +2056,38 @@ Resources:
                     sleep 10
                 done
 
+                # Check and see if all blocks that were pulled down are actually there and not returning null.
+                sudo -Eu geth /usr/bin/geth --cache=$allocatesafe --light.maxpeers 0 --maxpeers 0 ${ReplicaHTTPFlag} ${ReplicaGraphQLFlag} ${ReplicaWebsocketsFlag} &
+                test_pass=0
+                while [ $test_pass -le 1 ]
+                do
+                  if curl -X POST --insecure -H "Content-Type: application/json" --data '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":64}' localhost:8545
+                  then
+                    test_pass=$(( $test_pass + 1 ))
+                  else
+                    test_pass=0
+                  fi
+                  sleep 30
+                done
+                END_BLOCK=curl -X POST --insecure -H "Content-Type: application/json" --data '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":64}' localhost:8545
+                for (( block=START_BLOCK; block<=END_BLOCK; block++)); do
+                  res=$(curl -s -X POST --data '{"jsonrpc":"2.0","method":"eth_getBlockByNumber","params":['"$block"', true],"id":1}' )
+                  if [ "$(echo $res | jq '.result')" = "null" ]
+                  then
+                    if [ "${AggregatedNotifications}" != "" ]
+                    then
+                      aws sns publish --topic-arn=${AggregatedNotifications} --subject="${AWS::StackName} - Snapshotting Failed" --message="The snapshotting process for ${KafkaTopic} could not validate all blocks from $START_BLOCK to $END_BLOCK, and failed on $block with $res"
+                    fi
+                    if [ "${AlarmSNSTopic}" != "" ]
+                    then
+                      aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - Snapshotting Failed" --message="The snapshotting process for ${KafkaTopic} could not validate all blocks from $START_BLOCK to $END_BLOCK, and failed on $block with $res"
+                    fi
+                    poweroff
+                  fi
+                done
+
+                kill -HUP %
+                sleep 10
 
                 # After the snapshot completes, sync from the network. This is an extra integrity
                 # check on the snapshot, as it requires it to be able to validate blocks.
