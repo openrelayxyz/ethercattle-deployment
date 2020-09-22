@@ -187,6 +187,10 @@ Parameters:
     AllowedValues:
       - "true"
       - "false"
+  S3BackupLogsBucket:
+    Type: String
+    Description: A bucket that has already been created to store logs in. Will create a subirectory flume folder.
+    Default: ""
 
 
 Metadata:
@@ -215,6 +219,7 @@ Metadata:
           - S3GethBucketName
           - ECGethVersion
           - SnapshotId
+          - S3BackupLogsBucket
       - Label:
           default: Master
         Parameters:
@@ -249,6 +254,8 @@ Metadata:
           - FallbackMaxCapacity
           - FallbackOnDemandPercentage
     ParameterLabels:
+      S3BackupLogsBucket:
+        default: S3 logs backup bucket
       MasterSize:
         default: Master Size
       DiskSize:
@@ -1997,11 +2004,19 @@ Resources:
                   then
                     aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - Bad State Trie" --message="State trie verification failed while taking snapshot for cluster '${KafkaTopic}'. No snapshot will be taken. This is probably unrecoverable, and you will need to deploy a new cluster from your last good snapshot (probably '${SnapshotId}')"
                   fi
+                  if [ "${S3BackupLogsBucket}" != "" ]
+                  then
+                    lz4 /var/log/cloud-init-output.log | aws s3 cp - s3://${S3BackupLogsBucket}/ethercattle/${NetworkId}/failure-$(date '+%Y%m%d-%H%M%S').log.lz4 || true
+                  fi
                   poweroff
                 fi
 
                 # If this process doesn't commplete in 6 hours, something has gone
                 # wrong and the next snapshotter is in progress, so shutdown
+                  if [ "${S3BackupLogsBucket}" != "" ]
+                  then
+                    lz4 /var/log/cloud-init-output.log | aws s3 cp - s3://${S3BackupLogsBucket}/ethercattle/${NetworkId}/failure-$(date '+%Y%m%d-%H%M%S').log.lz4 || true
+                  fi
                 sleep 21600 && poweroff &
 
                 VOLUME_ID=$(aws ec2 describe-volumes --filters Name=attachment.instance-id,Values="$(curl http://169.254.169.254/latest/meta-data/instance-id)" | jq '.Volumes[] | select(. | .Attachments[0].Device == "/dev/sdf") | .VolumeId' -cr)
@@ -2016,6 +2031,10 @@ Resources:
                   then
                     aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - Volume Identification Failed" --message="The snapshotting process for ${KafkaTopic} failed to identify the attached volume. Could not take a snapshot."
                   fi
+                  if [ "${S3BackupLogsBucket}" != "" ]
+                  then
+                    lz4 /var/log/cloud-init-output.log | aws s3 cp - s3://${S3BackupLogsBucket}/ethercattle/${NetworkId}/failure-$(date '+%Y%m%d-%H%M%S').log.lz4 || true
+                  fi
                   poweroff
                 fi
 
@@ -2029,6 +2048,10 @@ Resources:
                   if [ "${AlarmSNSTopic}" != "" ]
                   then
                     aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - Snapshotting Volume Failed" --message="The snapshotting process for ${KafkaTopic} failed to take a snapshot."
+                  fi
+                  if [ "${S3BackupLogsBucket}" != "" ]
+                  then
+                    lz4 /var/log/cloud-init-output.log | aws s3 cp - s3://${S3BackupLogsBucket}/ethercattle/${NetworkId}/failure-$(date '+%Y%m%d-%H%M%S').log.lz4 || true
                   fi
                   poweroff
                 fi
@@ -2052,6 +2075,10 @@ Resources:
                   if [ "${AlarmSNSTopic}" != "" ]
                   then
                     aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - Snapshotting Volume Failed" --message="The snapshotting process for ${KafkaTopic} took a snapshot, but Geth could not sync. Not updating CloudFormation"
+                  fi
+                  if [ "${S3BackupLogsBucket}" != "" ]
+                  then
+                    lz4 /var/log/cloud-init-output.log | aws s3 cp - s3://${S3BackupLogsBucket}/ethercattle/${NetworkId}/failure-$(date '+%Y%m%d-%H%M%S').log.lz4 || true
                   fi
                   poweroff
                 fi
@@ -2105,6 +2132,10 @@ Resources:
                   #DELETE OLD SNAPSHOT ONCE EVERYTHING UPDATED
                   aws ec2 delete-snapshot --snapshot-id $SNAPSHOT_ID
                 fi
+                  if [ "${S3BackupLogsBucket}" != "" ]
+                  then
+                    lz4 /var/log/cloud-init-output.log | aws s3 cp - s3://${S3BackupLogsBucket}/ethercattle/${NetworkId}/failure-$(date '+%Y%m%d-%H%M%S').log.lz4 || true
+                  fi
                 poweroff
               - KafkaHostname:
                   "Fn::ImportValue": !Sub "${InfrastructureStack}-KafkaBrokerURL"
@@ -2204,6 +2235,10 @@ Resources:
   #                 then
   #                   aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - Bad State Trie" --message="State trie verification failed while pruning snapshot for cluster '${KafkaTopic}'. No snapshot will be taken. This is probably unrecoverable, and you will need to deploy a new cluster from your last good snapshot (probably '${SnapshotId}')"
   #                 fi
+                  # if [ "${S3BackupLogsBucket}" != "" ]
+                  # then
+                  #   lz4 /var/log/cloud-init-output.log | aws s3 cp - s3://${S3BackupLogsBucket}/ethercattle/${NetworkId}/failure-$(date '+%Y%m%d-%H%M%S').log.lz4 || true
+                  # fi
   #                 poweroff
   #               fi
   #
@@ -2219,6 +2254,10 @@ Resources:
   #                 then
   #                   aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - State Migration Failed" --message="State migration failed for cluster ${KafkaTopic}"
   #                 fi
+                  # if [ "${S3BackupLogsBucket}" != "" ]
+                  # then
+                  #   lz4 /var/log/cloud-init-output.log | aws s3 cp - s3://${S3BackupLogsBucket}/ethercattle/${NetworkId}/failure-$(date '+%Y%m%d-%H%M%S').log.lz4 || true
+                  # fi
   #                 poweroff
   #               fi
   #
@@ -2239,6 +2278,10 @@ Resources:
   #                 then
   #                   aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - Bad State Trie" --message="State trie verification failed while pruning snapshot for cluster '${KafkaTopic}'. No snapshot will be taken. This is probably unrecoverable, and you will need to deploy a new cluster from your last good snapshot (probably '${SnapshotId}')"
   #                 fi
+                  # if [ "${S3BackupLogsBucket}" != "" ]
+                  # then
+                  #   lz4 /var/log/cloud-init-output.log | aws s3 cp - s3://${S3BackupLogsBucket}/ethercattle/${NetworkId}/failure-$(date '+%Y%m%d-%H%M%S').log.lz4 || true
+                  # fi
   #                 poweroff
   #               fi
   #
@@ -2254,6 +2297,10 @@ Resources:
   #                 then
   #                   aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - Bad State Trie" --message="State trie verification failed while pruning snapshot for cluster '${KafkaTopic}'. No snapshot will be taken. This probably means that the block we pruned got reorged out, and pruning will need to be repated."
   #                 fi
+                  # if [ "${S3BackupLogsBucket}" != "" ]
+                  # then
+                  #   lz4 /var/log/cloud-init-output.log | aws s3 cp - s3://${S3BackupLogsBucket}/ethercattle/${NetworkId}/failure-$(date '+%Y%m%d-%H%M%S').log.lz4 || true
+                  # fi
   #                 poweroff
   #               fi
   #
@@ -2269,6 +2316,10 @@ Resources:
   #                 then
   #                   aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - Volume Identification Failed" --message="The snapshotting process for ${KafkaTopic} failed to identify the attached volume. Could not take a snapshot."
   #                 fi
+                  # if [ "${S3BackupLogsBucket}" != "" ]
+                  # then
+                  #   lz4 /var/log/cloud-init-output.log | aws s3 cp - s3://${S3BackupLogsBucket}/ethercattle/${NetworkId}/failure-$(date '+%Y%m%d-%H%M%S').log.lz4 || true
+                  # fi
   #                 poweroff
   #               fi
   #
@@ -2283,6 +2334,10 @@ Resources:
   #                 then
   #                   aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - Snapshotting Volume Failed" --message="The snapshotting process for ${KafkaTopic} failed to take a snapshot."
   #                 fi
+                  # if [ "${S3BackupLogsBucket}" != "" ]
+                  # then
+                  #   lz4 /var/log/cloud-init-output.log | aws s3 cp - s3://${S3BackupLogsBucket}/ethercattle/${NetworkId}/failure-$(date '+%Y%m%d-%H%M%S').log.lz4 || true
+                  # fi
   #                 poweroff
   #               fi
   #               echo "Waiting for snapshot to complete"
@@ -2305,6 +2360,10 @@ Resources:
   #                 then
   #                   aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - Snapshotting Volume Failed" --message="The snapshotting process for ${KafkaTopic} took a snapshot, but Geth could not start. Not updating CloudFormation"
   #                 fi
+                  # if [ "${S3BackupLogsBucket}" != "" ]
+                  # then
+                  #   lz4 /var/log/cloud-init-output.log | aws s3 cp - s3://${S3BackupLogsBucket}/ethercattle/${NetworkId}/failure-$(date '+%Y%m%d-%H%M%S').log.lz4 || true
+                  # fi
   #                 poweroff
   #               fi
   #
@@ -2314,6 +2373,10 @@ Resources:
   #               PARAMETERS=$(aws cloudformation describe-stacks --stack-name ${AWS::StackName} | jq '.Stacks[0].Parameters | map(if .ParameterKey == "SnapshotId" then .ParameterValue="'$SNAPSHOT_ID'" else . end)' -c)
   #               aws cloudformation update-stack --stack-name ${AWS::StackName} --use-previous-template --capabilities CAPABILITY_IAM --parameters="$PARAMETERS"
   #
+                  # if [ "${S3BackupLogsBucket}" != "" ]
+                  # then
+                  #   lz4 /var/log/cloud-init-output.log | aws s3 cp - s3://${S3BackupLogsBucket}/ethercattle/${NetworkId}/failure-$(date '+%Y%m%d-%H%M%S').log.lz4 || true
+                  # fi
   #               poweroff
   #             - KafkaHostname:
   #                 "Fn::ImportValue": !Sub "${InfrastructureStack}-KafkaBrokerURL"
