@@ -1996,6 +1996,7 @@ Resources:
                 SEP=$(echo "${KafkaHostname}" | grep -q "?" && echo "&" || echo "?")
 
                 sudo -Eu geth /usr/bin/geth --cache=$allocatesafe --light.maxpeers 0 --maxpeers 0 ${ReplicaHTTPFlag} ${ReplicaGraphQLFlag} ${ReplicaWebsocketsFlag} &
+                pid=$!
                 test_pass=0
                 while [ $test_pass -le 1 ]
                 do
@@ -2008,8 +2009,8 @@ Resources:
                   sleep 30
                 done
                 START_BLOCK=curl -X POST --insecure -H "Content-Type: application/json" --data '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":64}' localhost:8545
-                kill -HUP %
-                sleep 10
+                sudo pkill -f geth
+                wait $pid
 
                 # Update from kafka
                 sudo -Eu geth /usr/bin/geth replica --cache=$allocatesafe ${ReplicaExtraFlags} ${FreezerFlags} --kafka.broker=$(printf "${KafkaHostname}")""$SEP""avoid_leader=1 --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown
@@ -2032,6 +2033,7 @@ Resources:
 
                 # Check and see if all blocks that were pulled down are actually there and not returning null.
                 sudo -Eu geth /usr/bin/geth --cache=$allocatesafe --light.maxpeers 0 --maxpeers 0 ${ReplicaHTTPFlag} ${ReplicaGraphQLFlag} ${ReplicaWebsocketsFlag} &
+                pid=$!
                 test_pass=0
                 while [ $test_pass -le 1 ]
                 do
@@ -2064,8 +2066,8 @@ Resources:
                   fi
                 done
 
-                kill -HUP %
-                sleep 10
+                sudo pkill -f geth
+                wait $pid
 
                 # If this process doesn't commplete in 6 hours, something has gone
                 # wrong and the next snapshotter is in progress, so shutdown
