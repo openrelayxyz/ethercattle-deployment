@@ -1369,7 +1369,7 @@ Resources:
     Properties:
       Code:
         S3Bucket: !Ref S3GethBucketName
-        S3Key: lambdaPackage-18.zip
+        S3Key: lambdaPackage-19.zip
       Description: "A lambda function to process Geth logs into metrics"
       Environment:
         Variables:
@@ -1894,7 +1894,7 @@ Resources:
     Properties:
       Code:
         S3Bucket: !Ref S3GethBucketName
-        S3Key: lambdaPackage-18.zip
+        S3Key: lambdaPackage-19.zip
       Description: "A lambda function to process Geth logs into metrics"
       Environment:
         Variables:
@@ -2877,7 +2877,7 @@ Resources:
     Properties:
       Code:
         S3Bucket: !Ref S3GethBucketName
-        S3Key: lambdaPackage-18.zip
+        S3Key: lambdaPackage-19.zip
       Description: "Launch instances to snapshot chaindata"
       Environment:
         Variables:
@@ -2940,7 +2940,7 @@ Resources:
     Properties:
       Code:
         S3Bucket: !Ref S3GethBucketName
-        S3Key: lambdaPackage-18.zip
+        S3Key: lambdaPackage-19.zip
       Description: "Align master volume sizes with CloudFormation parameters"
       Environment:
         Variables:
@@ -2991,7 +2991,7 @@ Resources:
     Properties:
       Code:
         S3Bucket: !Ref S3GethBucketName
-        S3Key: lambdaPackage-18.zip
+        S3Key: lambdaPackage-19.zip
       Description: "Cleanup old chaindata snapshots"
       Environment:
         Variables:
@@ -3025,7 +3025,7 @@ Resources:
     Properties:
       Code:
         S3Bucket: !Ref S3GethBucketName
-        S3Key: lambdaPackage-18.zip
+        S3Key: lambdaPackage-19.zip
       Description: "Collect metrics for remote RPC URLs"
       Environment:
         Variables:
