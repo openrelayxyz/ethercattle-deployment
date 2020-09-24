@@ -12,6 +12,6 @@ def sizeHandler(event, context):
     for volume in volumes:
         if volume["Size"] < target_size:
             client.modify_volume(
-                VolumeId: volume["VolumeId"],
-                Size: target_size,
+                VolumeId = volume["VolumeId"],
+                Size = target_size,
             )
