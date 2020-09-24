@@ -1995,7 +1995,7 @@ Resources:
 
                 SEP=$(echo "${KafkaHostname}" | grep -q "?" && echo "&" || echo "?")
 
-                sudo -Eu geth /usr/bin/geth --cache=$allocatesafe --light.maxpeers 0 --maxpeers 0 ${ReplicaHTTPFlag} ${ReplicaGraphQLFlag} ${ReplicaWebsocketsFlag} &
+                sudo -Eu geth /usr/bin/geth ${MasterExtraFlags} --cache=$allocatesafe --light.maxpeers 0 --maxpeers 0 --rpc --rpcaddr 0.0.0.0 --rpcport 8545 --datadir=/var/lib/ethereum ${FreezerFlags} &
                 pid=$!
                 test_pass=0
                 while [ $test_pass -le 1 ]
@@ -2008,7 +2008,7 @@ Resources:
                   fi
                   sleep 30
                 done
-                START_BLOCK=curl -X POST --insecure -H "Content-Type: application/json" --data '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":64}' localhost:8545
+                START_BLOCK=$(curl -X POST --insecure -H "Content-Type: application/json" --data '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":64}' localhost:8545 | jq -r '.result')
                 sudo pkill -f geth
                 wait $pid
 
@@ -2026,13 +2026,13 @@ Resources:
                   fi
                   if [ "${S3BackupLogsBucket}" != "" ]
                   then
-                    lz4 /var/log/cloud-init-output.log | aws s3 cp - s3://${S3BackupLogsBucket}/ethercattle/${NetworkId}/failure-$(date '+%Y%m%d-%H%M%S').log.lz4 || true
+                    cat /var/log/cloud-init-output.log | aws s3 cp - s3://${S3BackupLogsBucket}/ethercattle/${NetworkId}/failure-$(date '+%Y%m%d-%H%M%S').log || true
                   fi
                   poweroff
                 fi
 
                 # Check and see if all blocks that were pulled down are actually there and not returning null.
-                sudo -Eu geth /usr/bin/geth --cache=$allocatesafe --light.maxpeers 0 --maxpeers 0 ${ReplicaHTTPFlag} ${ReplicaGraphQLFlag} ${ReplicaWebsocketsFlag} &
+                sudo -Eu geth /usr/bin/geth ${MasterExtraFlags} --cache=$allocatesafe --light.maxpeers 0 --maxpeers 0 --rpc --rpcaddr 0.0.0.0 --rpcport 8545 --datadir=/var/lib/ethereum ${FreezerFlags} &
                 pid=$!
                 test_pass=0
                 while [ $test_pass -le 1 ]
@@ -2045,9 +2045,9 @@ Resources:
                   fi
                   sleep 30
                 done
-                END_BLOCK=curl -X POST --insecure -H "Content-Type: application/json" --data '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":64}' localhost:8545
+                END_BLOCK=$(curl -X POST --insecure -H "Content-Type: application/json" --data '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":64}' localhost:8545 | jq -r '.result')
                 for (( block=START_BLOCK; block<=END_BLOCK; block++)); do
-                  res=$(curl -s -X POST --data '{"jsonrpc":"2.0","method":"eth_getBlockByNumber","params":['"$block"', true],"id":1}' )
+                  res=$(curl -s -X POST --compressed --insecure --compressed -H "Content-Type: application/json" --data '{"jsonrpc":"2.0","method":"eth_getBlockByNumber","params":["'$(printf "%#x" $block)'", false],"id":1}' localhost:8545)
                   if [ "$(echo $res | jq '.result')" = "null" ]
                   then
                     if [ "${AggregatedNotifications}" != "" ]
