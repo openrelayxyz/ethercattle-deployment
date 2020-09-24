@@ -1964,6 +1964,7 @@ Resources:
                 then
                   ARCH="arm64"
                 fi
+                sleep 21600 && if [ "${S3BackupLogsBucket}" != "" ] ; then cat /var/log/cloud-init-output.log | aws s3 cp - s3://${S3BackupLogsBucket}/ethercattle/${NetworkId}/failure-$(date '+%Y%m%d-%H%M%S').log || true; fi && poweroff &
 
                 totalm=$(free -m | awk '/^Mem:/{print $2}') ; echo $totalm
                 allocatesafe=$((totalm * 75 / 100))
@@ -2057,7 +2058,7 @@ Resources:
                     fi
                     if [ "${S3BackupLogsBucket}" != "" ]
                     then
-                      lz4 /var/log/cloud-init-output.log | aws s3 cp - s3://${S3BackupLogsBucket}/ethercattle/${NetworkId}/failure-$(date '+%Y%m%d-%H%M%S').log.lz4 || true
+                      cat /var/log/cloud-init-output.log | aws s3 cp - s3://${S3BackupLogsBucket}/ethercattle/${NetworkId}/failure-$(date '+%Y%m%d-%H%M%S').log || true
                     fi
                     poweroff
                   fi
@@ -2068,8 +2069,6 @@ Resources:
 
                 # If this process doesn't commplete in 6 hours, something has gone
                 # wrong and the next snapshotter is in progress, so shutdown
-
-                sleep 21600 && if [ "${S3BackupLogsBucket}" != "" ] ; then lz4 /var/log/cloud-init-output.log | aws s3 cp - s3://${S3BackupLogsBucket}/ethercattle/${NetworkId}/failure-$(date '+%Y%m%d-%H%M%S').log.lz4 || true; fi && poweroff &
 
                 VOLUME_ID=$(aws ec2 describe-volumes --filters Name=attachment.instance-id,Values="$(curl http://169.254.169.254/latest/meta-data/instance-id)" | jq '.Volumes[] | select(. | .Attachments[0].Device == "/dev/sdf") | .VolumeId' -cr)
 
@@ -2085,7 +2084,7 @@ Resources:
                   fi
                   if [ "${S3BackupLogsBucket}" != "" ]
                   then
-                    lz4 /var/log/cloud-init-output.log | aws s3 cp - s3://${S3BackupLogsBucket}/ethercattle/${NetworkId}/failure-$(date '+%Y%m%d-%H%M%S').log.lz4 || true
+                    cat /var/log/cloud-init-output.log | aws s3 cp - s3://${S3BackupLogsBucket}/ethercattle/${NetworkId}/failure-$(date '+%Y%m%d-%H%M%S').log || true
                   fi
                   poweroff
                 fi
@@ -2103,7 +2102,7 @@ Resources:
                   fi
                   if [ "${S3BackupLogsBucket}" != "" ]
                   then
-                    lz4 /var/log/cloud-init-output.log | aws s3 cp - s3://${S3BackupLogsBucket}/ethercattle/${NetworkId}/failure-$(date '+%Y%m%d-%H%M%S').log.lz4 || true
+                    cat /var/log/cloud-init-output.log | aws s3 cp - s3://${S3BackupLogsBucket}/ethercattle/${NetworkId}/failure-$(date '+%Y%m%d-%H%M%S').log || true
                   fi
                   poweroff
                 fi
@@ -2129,7 +2128,7 @@ Resources:
                   fi
                   if [ "${S3BackupLogsBucket}" != "" ]
                   then
-                    lz4 /var/log/cloud-init-output.log | aws s3 cp - s3://${S3BackupLogsBucket}/ethercattle/${NetworkId}/failure-$(date '+%Y%m%d-%H%M%S').log.lz4 || true
+                    cat /var/log/cloud-init-output.log | aws s3 cp - s3://${S3BackupLogsBucket}/ethercattle/${NetworkId}/failure-$(date '+%Y%m%d-%H%M%S').log || true
                   fi
                   poweroff
                 fi
@@ -2187,7 +2186,7 @@ Resources:
                 fi
                   if [ "${S3BackupLogsBucket}" != "" ]
                   then
-                    lz4 /var/log/cloud-init-output.log | aws s3 cp - s3://${S3BackupLogsBucket}/ethercattle/${NetworkId}/failure-$(date '+%Y%m%d-%H%M%S').log.lz4 || true
+                    cat /var/log/cloud-init-output.log | aws s3 cp - s3://${S3BackupLogsBucket}/ethercattle/${NetworkId}/success-$(date '+%Y%m%d-%H%M%S').log || true
                   fi
                 poweroff
               - KafkaHostname:
@@ -2290,7 +2289,7 @@ Resources:
   #                 fi
                   # if [ "${S3BackupLogsBucket}" != "" ]
                   # then
-                  #   lz4 /var/log/cloud-init-output.log | aws s3 cp - s3://${S3BackupLogsBucket}/ethercattle/${NetworkId}/failure-$(date '+%Y%m%d-%H%M%S').log.lz4 || true
+                  #   cat /var/log/cloud-init-output.log | aws s3 cp - s3://${S3BackupLogsBucket}/ethercattle/${NetworkId}/failure-$(date '+%Y%m%d-%H%M%S').log || true
                   # fi
   #                 poweroff
   #               fi
@@ -2309,7 +2308,7 @@ Resources:
   #                 fi
                   # if [ "${S3BackupLogsBucket}" != "" ]
                   # then
-                  #   lz4 /var/log/cloud-init-output.log | aws s3 cp - s3://${S3BackupLogsBucket}/ethercattle/${NetworkId}/failure-$(date '+%Y%m%d-%H%M%S').log.lz4 || true
+                  #   cat /var/log/cloud-init-output.log | aws s3 cp - s3://${S3BackupLogsBucket}/ethercattle/${NetworkId}/failure-$(date '+%Y%m%d-%H%M%S').log || true
                   # fi
   #                 poweroff
   #               fi
@@ -2333,7 +2332,7 @@ Resources:
   #                 fi
                   # if [ "${S3BackupLogsBucket}" != "" ]
                   # then
-                  #   lz4 /var/log/cloud-init-output.log | aws s3 cp - s3://${S3BackupLogsBucket}/ethercattle/${NetworkId}/failure-$(date '+%Y%m%d-%H%M%S').log.lz4 || true
+                  #   cat /var/log/cloud-init-output.log | aws s3 cp - s3://${S3BackupLogsBucket}/ethercattle/${NetworkId}/failure-$(date '+%Y%m%d-%H%M%S').log || true
                   # fi
   #                 poweroff
   #               fi
@@ -2352,7 +2351,7 @@ Resources:
   #                 fi
                   # if [ "${S3BackupLogsBucket}" != "" ]
                   # then
-                  #   lz4 /var/log/cloud-init-output.log | aws s3 cp - s3://${S3BackupLogsBucket}/ethercattle/${NetworkId}/failure-$(date '+%Y%m%d-%H%M%S').log.lz4 || true
+                  #   cat /var/log/cloud-init-output.log | aws s3 cp - s3://${S3BackupLogsBucket}/ethercattle/${NetworkId}/failure-$(date '+%Y%m%d-%H%M%S').log || true
                   # fi
   #                 poweroff
   #               fi
@@ -2371,7 +2370,7 @@ Resources:
   #                 fi
                   # if [ "${S3BackupLogsBucket}" != "" ]
                   # then
-                  #   lz4 /var/log/cloud-init-output.log | aws s3 cp - s3://${S3BackupLogsBucket}/ethercattle/${NetworkId}/failure-$(date '+%Y%m%d-%H%M%S').log.lz4 || true
+                  #   cat /var/log/cloud-init-output.log | aws s3 cp - s3://${S3BackupLogsBucket}/ethercattle/${NetworkId}/failure-$(date '+%Y%m%d-%H%M%S').log || true
                   # fi
   #                 poweroff
   #               fi
@@ -2389,7 +2388,7 @@ Resources:
   #                 fi
                   # if [ "${S3BackupLogsBucket}" != "" ]
                   # then
-                  #   lz4 /var/log/cloud-init-output.log | aws s3 cp - s3://${S3BackupLogsBucket}/ethercattle/${NetworkId}/failure-$(date '+%Y%m%d-%H%M%S').log.lz4 || true
+                  #   cat /var/log/cloud-init-output.log | aws s3 cp - s3://${S3BackupLogsBucket}/ethercattle/${NetworkId}/failure-$(date '+%Y%m%d-%H%M%S').log || true
                   # fi
   #                 poweroff
   #               fi
@@ -2415,7 +2414,7 @@ Resources:
   #                 fi
                   # if [ "${S3BackupLogsBucket}" != "" ]
                   # then
-                  #   lz4 /var/log/cloud-init-output.log | aws s3 cp - s3://${S3BackupLogsBucket}/ethercattle/${NetworkId}/failure-$(date '+%Y%m%d-%H%M%S').log.lz4 || true
+                  #   cat /var/log/cloud-init-output.log | aws s3 cp - s3://${S3BackupLogsBucket}/ethercattle/${NetworkId}/failure-$(date '+%Y%m%d-%H%M%S').log || true
                   # fi
   #                 poweroff
   #               fi
@@ -2428,7 +2427,7 @@ Resources:
   #
                   # if [ "${S3BackupLogsBucket}" != "" ]
                   # then
-                  #   lz4 /var/log/cloud-init-output.log | aws s3 cp - s3://${S3BackupLogsBucket}/ethercattle/${NetworkId}/failure-$(date '+%Y%m%d-%H%M%S').log.lz4 || true
+                  #   cat /var/log/cloud-init-output.log | aws s3 cp - s3://${S3BackupLogsBucket}/ethercattle/${NetworkId}/failure-$(date '+%Y%m%d-%H%M%S').log || true
                   # fi
   #               poweroff
   #             - KafkaHostname:
@@ -2713,6 +2712,15 @@ Resources:
           - Action:
               - s3:GetObject
             Resource: !Sub arn:aws:s3:::${S3GethBucketName}/*
+            Effect: Allow
+          - Action:
+              - s3:GetObject
+              - s3:ListBucket
+              - s3:GetBucketPolicy
+              - s3:GetObjectTagging
+              - s3:GetBucketLocation
+              - s3:PutObject
+            Resource: !Sub arn:aws:s3:::${S3BackupLogsBucket}/*
             Effect: Allow
           - Action:
               - lambda:GetFunctionConfiguration
