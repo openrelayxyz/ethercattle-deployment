@@ -1369,7 +1369,7 @@ Resources:
     Properties:
       Code:
         S3Bucket: !Ref S3GethBucketName
-        S3Key: lambdaPackage-19.zip
+        S3Key: lambdaPackage-20.zip
       Description: "A lambda function to process Geth logs into metrics"
       Environment:
         Variables:
@@ -1894,7 +1894,7 @@ Resources:
     Properties:
       Code:
         S3Bucket: !Ref S3GethBucketName
-        S3Key: lambdaPackage-19.zip
+        S3Key: lambdaPackage-20.zip
       Description: "A lambda function to process Geth logs into metrics"
       Environment:
         Variables:
@@ -2877,19 +2877,29 @@ Resources:
     Properties:
       Code:
         S3Bucket: !Ref S3GethBucketName
-        S3Key: lambdaPackage-19.zip
+        S3Key: lambdaPackage-20.zip
       Description: "Launch instances to snapshot chaindata"
       Environment:
         Variables:
           LAUNCH_TEMPLATE_ID: !Ref SnapshotterLaunchTemplate
           LAUNCH_TEMPLATE_VERSION: !Sub "${SnapshotterLaunchTemplate.LatestVersionNumber}"
           SUBNET_ID:
-            "Fn::ImportValue":
-                !Sub "${InfrastructureStack}-PublicA"
+            "Fn::Sub":
+              - "${PublicA},${PublicB},${PublicC}"
+              - PublicA:
+                  "Fn::ImportValue":
+                      !Sub "${InfrastructureStack}-PublicA"
+                PublicB:
+                  "Fn::ImportValue":
+                      !Sub "${InfrastructureStack}-PublicB"
+                PublicC:
+                  "Fn::ImportValue":
+                      !Sub "${InfrastructureStack}-PublicC"
           VOLUME_SIZE: !Ref DiskSize
       Handler: "getSnapshot.handler"
       Role: !Sub ${SnapshotterLambdaRole.Arn}
       Runtime: python3.7
+      Timeout: 30
 
   SnapshotSchedulerRule:
     Type: AWS::Events::Rule
@@ -2940,7 +2950,7 @@ Resources:
     Properties:
       Code:
         S3Bucket: !Ref S3GethBucketName
-        S3Key: lambdaPackage-19.zip
+        S3Key: lambdaPackage-20.zip
       Description: "Align master volume sizes with CloudFormation parameters"
       Environment:
         Variables:
@@ -2991,7 +3001,7 @@ Resources:
     Properties:
       Code:
         S3Bucket: !Ref S3GethBucketName
-        S3Key: lambdaPackage-19.zip
+        S3Key: lambdaPackage-20.zip
       Description: "Cleanup old chaindata snapshots"
       Environment:
         Variables:
@@ -3025,7 +3035,7 @@ Resources:
     Properties:
       Code:
         S3Bucket: !Ref S3GethBucketName
-        S3Key: lambdaPackage-19.zip
+        S3Key: lambdaPackage-20.zip
       Description: "Collect metrics for remote RPC URLs"
       Environment:
         Variables:
