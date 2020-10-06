@@ -1725,7 +1725,7 @@ Resources:
                       "port": 8546,
                       "connect": {"sidecar_service": {}},
                       "check": {
-                        "args": ["curl", "http://localhost:9999"],
+                        "args": ["curl", "-f", "http://localhost:9999"],
                         "interval": "2s"
                       }
                     }
@@ -1743,7 +1743,7 @@ Resources:
                       "port": 7545,
                       "connect": {"sidecar_service": {}},
                       "check": {
-                        "args": ["curl", "http://localhost:9999"],
+                        "args": ["curl", "-f",  "http://localhost:9999"],
                         "interval": "2s"
                       }
                     }
