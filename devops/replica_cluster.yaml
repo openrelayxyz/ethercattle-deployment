@@ -1995,22 +1995,23 @@ Resources:
 
                 SEP=$(echo "${KafkaHostname}" | grep -q "?" && echo "&" || echo "?")
 
-                sudo -Eu geth /usr/bin/geth ${MasterExtraFlags} --cache=$allocatesafe --light.maxpeers 0 --maxpeers 0 --rpc --rpcaddr 0.0.0.0 --rpcport 8545 --datadir=/var/lib/ethereum ${FreezerFlags} &
-                pid=$!
-                test_pass=0
-                while [ $test_pass -le 1 ]
-                do
-                  if curl -X POST --insecure -H "Content-Type: application/json" --data '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":64}' localhost:8545
-                  then
-                    test_pass=$(( $test_pass + 1 ))
-                  else
-                    test_pass=0
-                  fi
-                  sleep 30
-                done
-                START_BLOCK=$(curl -X POST --insecure -H "Content-Type: application/json" --data '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":64}' localhost:8545 | jq -r '.result')
-                sudo pkill -f geth
-                wait $pid
+                # sudo -Eu geth /usr/bin/geth ${MasterExtraFlags} --cache=$allocatesafe --light.maxpeers 0 --maxpeers 0 --rpc --rpcaddr 0.0.0.0 --rpcport 8545 --datadir=/var/lib/ethereum ${FreezerFlags} &
+                # pid=$!
+                # test_pass=0
+                # while [ $test_pass -le 1 ]
+                # do
+                #   if curl -X POST --insecure -H "Content-Type: application/json" --data '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":64}' localhost:8545
+                #   then
+                #     test_pass=$(( $test_pass + 1 ))
+                #   else
+                #     test_pass=0
+                #   fi
+                #   sleep 30
+                # done
+                # START_BLOCK=$(curl -X POST --insecure -H "Content-Type: application/json" --data '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":64}' localhost:8545 | jq -r '.result')
+                # sudo pkill -f geth
+                # wait $pid
+                # sleep 10
 
                 # Update from kafka
                 sudo -Eu geth /usr/bin/geth replica --cache=$allocatesafe ${ReplicaExtraFlags} ${FreezerFlags} --kafka.broker=$(printf "${KafkaHostname}")""$SEP""avoid_leader=1 --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown
