@@ -709,7 +709,7 @@ Resources:
                 /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -c ssm:${MetricsConfigParameter} -s
 
                 SEP=$(echo "${KafkaBrokerURL}" | grep -q "?" && echo "&" || echo "?")
-                SEP2=$(echo "${KafkaBrokerURL}" | grep -q "?" && echo "\\&" || echo "?")
+                SEP_ESCAPED=$(echo "${KafkaBrokerURL}" | grep -q "?" && echo "\\&" || echo "?")
                 KAFKA_ESCAPED_URL="$(printf "${KafkaBrokerURL}"| sed 's^&^\\\\&^g')"
                 crontab -l >  newcrontab || true
                 echo "5,20,35,50 * * * * /usr/bin/sh -c 'for x in \$(ls /dev/sd*) ; do echo resizing \$(readlink -f \$x) if needed; /usr/sbin/resize2fs \$(readlink -f \$x) ; done'" >> newcrontab
@@ -736,7 +736,7 @@ Resources:
                 EnvironmentFile=/etc/systemd/system/ethcattle-vars
                 Type=simple
                 LimitNOFILE=655360
-                ExecStartPre=/usr/bin/bash -c '/usr/bin/geth replica --cache=$allocatesafe ${ReplicaExtraFlags} ${FreezerFlags} --kafka.broker=$KAFKA_ESCAPED_URL""$SEP2""fetch.default=8388608\\&max.waittime=25\\&avoid_leader=1  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown 2>>/tmp/geth-stderr'
+                ExecStartPre=/usr/bin/bash -c '/usr/bin/geth replica --cache=$allocatesafe ${ReplicaExtraFlags} ${FreezerFlags} --kafka.broker=$KAFKA_ESCAPED_URL""$SEP_ESCAPED""fetch.default=8388608\\&max.waittime=25\\&avoid_leader=1  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown 2>>/tmp/geth-stderr'
                 ExecStart=/usr/bin/geth ${MasterExtraFlags} ${FreezerFlags} --light.maxpeers 0 --maxpeers 25 --gcmode=archive --kafka.broker=${KafkaBrokerURL}""$SEP""net.maxopenrequests=1\&message.send.max.retries=20000  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --kafka.txpool.topic=${InfrastructureStack}-txpool ${EventsTopicFlag}
                 KillSignal=SIGINT
                 TimeoutStartSec=86400
@@ -1756,7 +1756,7 @@ Resources:
                 FLUME_URL=${FlumeURL}" > /etc/systemd/system/ethcattle-vars
 
                 SEP=$(echo "${KafkaBrokerURL}" | grep -q "?" && echo "&" || echo "?")
-                SEP2=$(echo "${KafkaBrokerURL}" | grep -q "?" && echo "\\&" || echo "?")
+                SEP_ESCAPED=$(echo "${KafkaBrokerURL}" | grep -q "?" && echo "\\&" || echo "?")
                 KAFKA_ESCAPED_URL="$(printf "${KafkaBrokerURL}"| sed 's^&^\\\\&^g')"
                 printf "[Unit]
                 Description=Ethereum go client replica
@@ -1768,7 +1768,7 @@ Resources:
                 EnvironmentFile=/etc/systemd/system/ethcattle-vars
                 Type=simple
                 LimitNOFILE=655360
-                ExecStartPre=/usr/bin/bash -c '/usr/bin/geth replica --cache=$allocatesafe ${ReplicaExtraFlags} ${FreezerFlags}  $OVERLAY_FLAG --kafka.broker=$KAFKA_ESCAPED_URL""$SEP2""fetch.default=8388608\\&max.waittime=25\\&avoid_leader=1  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown 2>>/tmp/geth-stderr'
+                ExecStartPre=/usr/bin/bash -c '/usr/bin/geth replica --cache=$allocatesafe ${ReplicaExtraFlags} ${FreezerFlags}  $OVERLAY_FLAG --kafka.broker=$KAFKA_ESCAPED_URL""$SEP_ESCAPED""fetch.default=8388608\\&max.waittime=25\\&avoid_leader=1  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown 2>>/tmp/geth-stderr'
                 ExecStart=/usr/bin/bash -c '/usr/bin/geth replica --cache=$allocatesafe ${ReplicaExtraFlags} ${FreezerFlags} $OVERLAY_FLAG --kafka.broker=$KAFKA_ESCAPED_URL --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --kafka.txpool.topic=\$infraName-txpool  --kafka.tx.topic=\$NetworkId-tx --replica.startup.age=45  ${ReplicaHTTPFlag} ${ReplicaGraphQLFlag} ${ReplicaWebsocketsFlag}'
                 CPUSchedulingPolicy=fifo
                 CPUSchedulingPriority=20
@@ -1997,7 +1997,7 @@ Resources:
                 ulimit -n 20000000
 
                 SEP=$(echo "${KafkaBrokerURL}" | grep -q "?" && echo "&" || echo "?")
-                SEP2=$(echo "${KafkaBrokerURL}" | grep -q "?" && echo "\\&" || echo "?")
+                SEP_ESCAPED=$(echo "${KafkaBrokerURL}" | grep -q "?" && echo "\\&" || echo "?")
                 KAFKA_ESCAPED_URL="$(printf "${KafkaBrokerURL}"| sed 's^&^\\&^g')"
 
                 sudo -Eu geth /usr/bin/geth ${MasterExtraFlags} --cache=$allocatesafe --light.maxpeers 0 --maxpeers 0 --rpc --rpcaddr 0.0.0.0 --rpcport 8545 --datadir=/var/lib/ethereum ${FreezerFlags} &
@@ -2286,7 +2286,7 @@ Resources:
   #               ulimit -n 20000000
   #
   #               SEP=$(echo "${KafkaBrokerURL}" | grep -q "?" && echo "&" || echo "?")
-  #               SEP2=$(echo "${KafkaBrokerURL}" | grep -q "?" && echo "\\&" || echo "?")
+  #               SEP_ESCAPED=$(echo "${KafkaBrokerURL}" | grep -q "?" && echo "\\&" || echo "?")
   #               sudo -Eu geth /usr/bin/geth replica --cache=$allocatesafe ${ReplicaExtraFlags} ${FreezerFlags} --kafka.broker=$(printf "${KafkaBrokerURL}")""$SEP""fetch.default=8388608\&max.waittime=25 --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown
   #               if ! sudo -Eu geth /usr/bin/geth verifystatetrie --datadir=/var/lib/ethereum ${SnapshotValidationThreshold}
   #               then
@@ -2563,7 +2563,7 @@ Resources:
                 LOG_BLOCK_LIMIT=10000" > /etc/systemd/system/ethcattle-vars
 
                 SEP=$(echo "${KafkaBrokerURL}" | grep -q "?" && echo "&" || echo "?")
-                SEP2=$(echo "${KafkaBrokerURL}" | grep -q "?" && echo "\\&" || echo "?")
+                SEP_ESCAPED=$(echo "${KafkaBrokerURL}" | grep -q "?" && echo "\\&" || echo "?")
                 printf "[Unit]
                 Description=Ethereum go client replica
                 After=syslog.target network.target
