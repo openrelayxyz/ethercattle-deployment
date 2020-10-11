@@ -736,7 +736,7 @@ Resources:
                 EnvironmentFile=/etc/systemd/system/ethcattle-vars
                 Type=simple
                 LimitNOFILE=655360
-                ExecStartPre=/usr/bin/bash -c '/usr/bin/geth replica --cache=$allocatesafe ${ReplicaExtraFlags} ${FreezerFlags} --kafka.broker=$KAFKA_ESCAPED_URL""$SEP2""fetch.default=8388608\\&max.waittime=25\\&avoid_leader=1  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown 2> /tmp/geth-stderr-$(date '+%s')'
+                ExecStartPre=/usr/bin/bash -c '/usr/bin/geth replica --cache=$allocatesafe ${ReplicaExtraFlags} ${FreezerFlags} --kafka.broker=$KAFKA_ESCAPED_URL""$SEP2""fetch.default=8388608\\&max.waittime=25\\&avoid_leader=1  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown 2>>/tmp/geth-stderr'
                 ExecStart=/usr/bin/geth ${MasterExtraFlags} ${FreezerFlags} --light.maxpeers 0 --maxpeers 25 --gcmode=archive --kafka.broker=${KafkaBrokerURL}""$SEP""net.maxopenrequests=1\&message.send.max.retries=20000  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --kafka.txpool.topic=${InfrastructureStack}-txpool ${EventsTopicFlag}
                 KillSignal=SIGINT
                 TimeoutStartSec=86400
@@ -780,10 +780,6 @@ Resources:
                 systemctl enable geth.service
                 systemctl enable geth-tx.service
                 systemctl enable geth-peer-data.service
-                # source /etc/systemd/system/ethcattle-vars
-                # export KafkaHostname  KafkaTopic NetworkId infraName baseInfraName network AWS_REGION LOG_BLOCK_LIMIT  FLUME_URL
-                # export cmd="/usr/bin/geth replica --cache=$allocatesafe ${ReplicaExtraFlags} ${FreezerFlags} --kafka.broker=${KafkaBrokerURL}""$SEP""fetch.default=8388608\&max.waittime=25\&avoid_leader=1  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown"
-                # sudo -E -u geth bash -c "HOME=/var/lib/ethereum $cmd > /tmp/geth-startup-stdout 2> /tmp/geth-startup-stderr &&  systemctl start geth.service || true &" &
                 systemctl start geth.service || true &
                 sleep 5
                 systemctl start geth-tx.service
@@ -794,8 +790,6 @@ Resources:
                 sleep 1800 && aws ec2 modify-volume --volume-id $VOLUME_ID --volume-type gp2 &
 
 
-              # - KafkaHostname:
-              #     "Fn::ImportValue": !Sub "${InfrastructureStack}-KafkaBrokerURL"
               - ClusterId:
                   "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
                 BaseInfrastructure:
@@ -1774,7 +1768,7 @@ Resources:
                 EnvironmentFile=/etc/systemd/system/ethcattle-vars
                 Type=simple
                 LimitNOFILE=655360
-                ExecStartPre=/usr/bin/bash -c '/usr/bin/geth replica --cache=$allocatesafe ${ReplicaExtraFlags} ${FreezerFlags}  $OVERLAY_FLAG --kafka.broker=$KAFKA_ESCAPED_URL""$SEP2""fetch.default=8388608\\&max.waittime=25\\&avoid_leader=1  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown 2> /tmp/geth-stderr-$(date '+%s')'
+                ExecStartPre=/usr/bin/bash -c '/usr/bin/geth replica --cache=$allocatesafe ${ReplicaExtraFlags} ${FreezerFlags}  $OVERLAY_FLAG --kafka.broker=$KAFKA_ESCAPED_URL""$SEP2""fetch.default=8388608\\&max.waittime=25\\&avoid_leader=1  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown 2>>/tmp/geth-stderr'
                 ExecStart=/usr/bin/bash -c '/usr/bin/geth replica --cache=$allocatesafe ${ReplicaExtraFlags} ${FreezerFlags} $OVERLAY_FLAG --kafka.broker=$KAFKA_ESCAPED_URL --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --kafka.txpool.topic=\$infraName-txpool  --kafka.tx.topic=\$NetworkId-tx --replica.startup.age=45  ${ReplicaHTTPFlag} ${ReplicaGraphQLFlag} ${ReplicaWebsocketsFlag}'
                 CPUSchedulingPolicy=fifo
                 CPUSchedulingPriority=20
@@ -1819,10 +1813,6 @@ Resources:
                 systemctl enable geth.service
                 sleep 5 #TODO- workaround for a deadlock on topic creation
                 rm /var/lib/ethereum/geth.ipc || true
-                # source /etc/systemd/system/ethcattle-vars
-                # export KafkaHostname  KafkaTopic NetworkId infraName baseInfraName network AWS_REGION LOG_BLOCK_LIMIT  FLUME_URL
-                # export cmd="/usr/bin/geth replica --cache=$allocatesafe ${ReplicaExtraFlags} ${FreezerFlags} --kafka.broker=${KafkaBrokerURL}""$SEP""fetch.default=8388608\&max.waittime=25\&avoid_leader=1  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown"
-                # sudo -E -u geth bash -c "HOME=/var/lib/ethereum $cmd > /tmp/geth-startup-stdout 2> /tmp/geth-startup-stderr &&  systemctl start geth.service || true &" &
                 systemctl start geth.service || true &
                 systemctl enable amazon-cloudwatch-agent.service
                 systemctl start amazon-cloudwatch-agent.service
@@ -1837,8 +1827,6 @@ Resources:
                 export AWS_DEFAULT_REGION=${AWS::Region}
                 VOLUME_ID=$(aws ec2 describe-volumes --filters Name=attachment.instance-id,Values="$(curl http://169.254.169.254/latest/meta-data/instance-id)" | jq '.Volumes[] | select(. | .Attachments[0].Device == "/dev/sdf") | .VolumeId' -cr)
                 aws ec2 modify-volume --volume-id $VOLUME_ID --volume-type gp2 &
-              # - KafkaHostname:
-              #     "Fn::ImportValue": !Sub "${InfrastructureStack}-KafkaBrokerURL"
               - ClusterId:
                   "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
                 ReplicaHTTPFlag:
@@ -2213,8 +2201,6 @@ Resources:
                     cat /var/log/cloud-init-output.log | aws s3 cp - s3://${S3BackupLogsBucket}/ethercattle/${NetworkId}/success-$(date '+%Y%m%d-%H%M%S').log || true
                   fi
                 poweroff
-              # - KafkaHostname:
-              #     "Fn::ImportValue": !Sub "${InfrastructureStack}-KafkaBrokerURL"
               - ClusterId:
                   "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
                 FreezerFlags: !If [ EnabledFreezerBucket, {"Fn::Sub": ["--datadir.ancient=s3://${Bucket}/${NetworkId}", {Bucket: !If [ HasFreezerBucket, !Ref FreezerBucket, {"Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket"} ]} ]}, ""]
@@ -2588,7 +2574,7 @@ Resources:
                 EnvironmentFile=/etc/systemd/system/ethcattle-vars
                 Type=simple
                 LimitNOFILE=655360
-                ExecStartPre=/usr/bin/geth replica ${FreezerFlags} --kafka.broker=${KafkaBrokerURL}""$SEP""fetch.default=8388608&max.waittime=25&avoid_leader=1 --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown 2> /tmp/geth-stderr || true
+                ExecStartPre=/usr/bin/geth replica ${FreezerFlags} --kafka.broker=${KafkaBrokerURL}""$SEP""fetch.default=8388608&max.waittime=25&avoid_leader=1 --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown 2>>/tmp/geth-stderr || true
                 ExecStart=/usr/bin/bash -c '/usr/bin/geth ${FreezerFlags} --datadir=/var/lib/ethereum --light.maxpeers 0 --maxpeers 25 ${ReplicaHTTPFlag} ${ReplicaGraphQLFlag} ${ReplicaWebsocketsFlag}'
                 CPUSchedulingPolicy=fifo
                 CPUSchedulingPriority=20
@@ -2632,10 +2618,6 @@ Resources:
                 systemctl enable geth.service
                 sleep 5 #TODO- workaround for a deadlock on topic creation
                 rm /var/lib/ethereum/geth.ipc || true
-                # source /etc/systemd/system/ethcattle-vars
-                # export KafkaHostname  KafkaTopic NetworkId infraName baseInfraName network AWS_REGION LOG_BLOCK_LIMIT  FLUME_URL
-                # export cmd="/usr/bin/geth replica --cache=$allocatesafe ${ReplicaExtraFlags} ${FreezerFlags} --kafka.broker=${KafkaBrokerURL}""$SEP""fetch.default=8388608\&max.waittime=25\&avoid_leader=1  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown"
-                # sudo -E -u geth bash -c "HOME=/var/lib/ethereum $cmd > /tmp/geth-startup-stdout 2> /tmp/geth-startup-stderr &&  systemctl start geth.service || true &" &
                 systemctl start geth.service || true &
                 systemctl enable amazon-cloudwatch-agent.service
                 systemctl start amazon-cloudwatch-agent.service
@@ -2650,8 +2632,6 @@ Resources:
                 export AWS_DEFAULT_REGION=${AWS::Region}
                 VOLUME_ID=$(aws ec2 describe-volumes --filters Name=attachment.instance-id,Values="$(curl http://169.254.169.254/latest/meta-data/instance-id)" | jq '.Volumes[] | select(. | .Attachments[0].Device == "/dev/sdf") | .VolumeId' -cr)
                 # aws ec2 modify-volume --volume-id $VOLUME_ID --volume-type gp2 &
-              # - KafkaHostname:
-              #     "Fn::ImportValue": !Sub "${InfrastructureStack}-KafkaBrokerURL"
               - ClusterId:
                   "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
                 ReplicaHTTPFlag:
