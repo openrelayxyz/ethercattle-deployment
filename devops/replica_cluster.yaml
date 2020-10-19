@@ -2969,6 +2969,14 @@ Resources:
         - Arn: !Sub ${DiskSizeLambdaFunction.Arn}
           Id: !Sub "disk-size-${KafkaTopic}"
 
+  DiskManagerInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Sub ${DiskSizeLambdaFunction.Arn}
+      Action: 'lambda:InvokeFunction'
+      Principal: events.amazonaws.com
+      SourceArn: !Sub ${DiskManagerSchedulerRule.Arn}
+
   SnapshotGCLambdaRole:
     Type: "AWS::IAM::Role"
     Properties:
