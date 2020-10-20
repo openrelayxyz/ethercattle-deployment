@@ -392,30 +392,6 @@ Outputs:
       "Fn::ImportValue": !Sub "${InfrastructureStack}-VpcBaseIp"
     Export:
       Name: !Sub "${AWS::StackName}-VpcBaseIp"
-  Kafka2HostnameA:
-    Description: The Kafka hostname for AZ 'a'
-    Value:
-      "Fn::ImportValue": !Sub "${InfrastructureStack}-Kafka2HostnameA"
-    Export:
-      Name: !Sub "${AWS::StackName}-Kafka2HostnameA"
-  Kafka2HostnameB:
-    Description: The Kafka hostname for AZ 'b'
-    Value:
-      "Fn::ImportValue": !Sub "${InfrastructureStack}-Kafka2HostnameB"
-    Export:
-      Name: !Sub "${AWS::StackName}-Kafka2HostnameB"
-  Kafka2HostnameC:
-    Description: The Kafka hostname for AZ 'c'
-    Value:
-      "Fn::ImportValue": !Sub "${InfrastructureStack}-Kafka2HostnameC"
-    Export:
-      Name: !Sub "${AWS::StackName}-Kafka2HostnameC"
-  KafkaBrokerURL:
-    Description: The Kafka Broker URL
-    Value:
-      "Fn::ImportValue": !Sub "${InfrastructureStack}-KafkaBrokerURL"
-    Export:
-      Name: !Sub "${AWS::StackName}-KafkaBrokerURL"
 
   PublicA:
     Description: The Subnet in availability zone 'a'
