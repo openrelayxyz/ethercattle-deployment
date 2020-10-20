@@ -167,7 +167,7 @@ maintaining API compatibility, it should be transparent to the replicas. It is
 also possible that Go Ethereum changes their APIs in a way that breaks
 compatibility, but in that case we should find ourselves unable to compile the
 replica without fixing the dependency, and shouldn't see surprises on a running
-systme.
+system.
 
 Finally, by building the replica service in Go as an extension to the existing
 Go Ethereum codebase, there is a reasonable chance that we could get the
