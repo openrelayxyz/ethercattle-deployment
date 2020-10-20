@@ -1,12 +1,7 @@
 Description: Ether Cattle infrastructure (Internal Load Balancers, Kafka external)
 
 Parameters:
-  KafkaBrokerEndpoint:
-    Description: MSK Endpoint for Kafka
-    Type: String
-  KafkaBrokerURL:
-    Description: URL of Kafka servers, of the form [username[:password]@]host:port[,host2:port2...][?tls=1]
-    Type: String
+
   ClusterId:
     Type: String
     Description: An identifier for this ethercattle cluster.
@@ -81,10 +76,6 @@ Metadata:
         Parameters:
           - ClusterId
       - Label:
-          default: Kafka
-        Parameters:
-          - KafkaBrokerEndpoint
-      - Label:
           default: Network
         Parameters:
           - VpcId
@@ -103,8 +94,6 @@ Metadata:
           - NotificationEmail
           - AlarmSNSTopic
     ParameterLabels:
-      KafkaBrokerEndpoint:
-        default: Kafka Broker Endpoint
       ClusterId:
         default: Cluster ID
       ClusterAmi:
@@ -184,7 +173,6 @@ Conditions:
   IsProd: !Equals [!Ref ClusterId, "prod"]
   HasNotificationEmail: !Not [!Equals [ !Ref NotificationEmail, "" ]]
   HasSNSTopic: !Not [!Equals [ !Ref AlarmSNSTopic, "" ]]
-  HasKafkaBrokerEndpoint: !Not [!Equals [ !Ref KafkaBrokerEndpoint, "" ]]
   CreateFreezerBucket: !Equals [ !Ref FreezerBucketInput, "" ]
 
 Resources:
@@ -443,26 +431,6 @@ Outputs:
     Value: !Ref VpcBaseIp
     Export:
       Name: !Sub "${AWS::StackName}-VpcBaseIp"
-  Kafka2HostnameA:
-    Description: The Kafka hostname for AZ 'a'
-    Value: !If [ HasKafkaBrokerEndpoint, !Select [0, !Split [',', !Ref KafkaBrokerEndpoint]], "placeholder" ]
-    Export:
-      Name: !Sub "${AWS::StackName}-Kafka2HostnameA"
-  Kafka2HostnameB:
-    Description: The Kafka hostname for AZ 'b'
-    Value: !If [ HasKafkaBrokerEndpoint, !Select [1, !Split [',', !Ref KafkaBrokerEndpoint]], "placeholder" ]
-    Export:
-      Name: !Sub "${AWS::StackName}-Kafka2HostnameB"
-  Kafka2HostnameC:
-    Description: The Kafka hostname for AZ 'c'
-    Value: !If [ HasKafkaBrokerEndpoint, !Select [2, !Split [',', !Ref KafkaBrokerEndpoint]], "placeholder" ]
-    Export:
-      Name: !Sub "${AWS::StackName}-Kafka2HostnameC"
-  KafkaBrokerURL:
-    Description: The Kafka Broker URL
-    Value: !Ref KafkaBrokerURL
-    Export:
-      Name: !Sub "${AWS::StackName}-KafkaBrokerURL"
   PublicA:
     Description: The Subnet in availability zone 'a'
     Value: !Ref PublicA
