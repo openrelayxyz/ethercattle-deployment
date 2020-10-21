@@ -1584,7 +1584,7 @@ Resources:
         CidrIp: !Join ["", ["Fn::ImportValue": !Sub "${InfrastructureStack}-VpcBaseIp", ".0.0/16"]]
       - IpProtocol: tcp
         FromPort: '21000'
-        ToPort: '21001'
+        ToPort: '21002'
         CidrIp: !Join ["", ["Fn::ImportValue": !Sub "${InfrastructureStack}-VpcBaseIp", ".0.0/16"]]
       - IpProtocol: tcp
         FromPort: '8546'
@@ -2007,10 +2007,12 @@ Resources:
                 command: systemctl enable proxy-sidecar
               07_enable_websocket_sidecar:
                 command: systemctl enable websocket-sidecar
-              08_start_replica_sidecar:
+              08_enable_graphql_sidecar:
+                command: systemctl enable graphql-sidecar
+              09_start_replica_sidecar:
                 command: systemctl start proxy-sidecar
-              09_start_websocket_sidecar:
-                command: systemctl start websocket-sidecar
+              10_start_graphql_sidecar:
+                command: systemctl start graphql-sidecar
     Properties:
       LaunchTemplateData:
         ImageId: !If [HasReplicaImageAMI, !Ref ReplicaImageAMI, !FindInMap [RegionMap, !Ref "AWS::Region", AL2AMI]]
@@ -3159,10 +3161,12 @@ Resources:
                 command: systemctl enable proxy-sidecar
               07_enable_websocket_sidecar:
                 command: systemctl enable websocket-sidecar
-              08_start_replica_sidecar:
+              08_enable_graphql_sidecar:
+                command: systemctl enable graphql-sidecar
+              09_start_replica_sidecar:
                 command: systemctl start proxy-sidecar
-              09_start_websocket_sidecar:
-                command: systemctl start websocket-sidecar
+              10_start_graphql_sidecar:
+                command: systemctl start graphql-sidecar
     Properties:
       LaunchTemplateData:
         ImageId: !If [HasReplicaImageAMI, !Ref ReplicaImageAMI, !FindInMap [RegionMap, !Ref "AWS::Region", AL2AMI]]
