@@ -2826,343 +2826,343 @@ Resources:
 
   FallbackLaunchTemplate:
     Type: AWS::EC2::LaunchTemplate
-        Metadata:
-          AWS::CloudFormation::Init:
-              configSets:
-                cs_install:
-                  - install_and_enable_cfn_hup
-                  - create_consul_group_user_dir
-                  - install_consul
-                  - install_consul_template
-                  - consul_bootstrap
-              install_and_enable_cfn_hup:
-                files:
-                  /etc/cfn/cfn-hup.conf:
-                    content: !Join
-                      - ""
-                      - - |
-                          [main]
-                        - stack=
-                        - !Ref "AWS::StackId"
-                        - |+
+    Metadata:
+      AWS::CloudFormation::Init:
+          configSets:
+            cs_install:
+              - install_and_enable_cfn_hup
+              - create_consul_group_user_dir
+              - install_consul
+              - install_consul_template
+              - consul_bootstrap
+          install_and_enable_cfn_hup:
+            files:
+              /etc/cfn/cfn-hup.conf:
+                content: !Join
+                  - ""
+                  - - |
+                      [main]
+                    - stack=
+                    - !Ref "AWS::StackId"
+                    - |+
 
-                        - region=
-                        - !Ref "AWS::Region"
-                        - |+
-                    mode: "000400"
-                    owner: root
-                    group: root
-                  /etc/cfn/hooks.d/cfn-auto-reloader.conf:
-                    content: !Join
-                      - ""
-                      - - |
-                          [cfn-auto-reloader-hook]
-                        - |
-                          triggers=post.update
-                        - >
-                          path=Resources.ReplicaLaunchTemplate.Metadata.AWS::CloudFormation::Init
-                        - "action=/usr/local/bin/cfn-init -v "
-                        - "         --stack "
-                        - !Ref "AWS::StackName"
-                        - "         --resource ReplicaLaunchTemplate "
-                        - "         --configsets cs_install "
-                        - "         --region "
-                        - !Ref "AWS::Region"
-                        - |+
+                    - region=
+                    - !Ref "AWS::Region"
+                    - |+
+                mode: "000400"
+                owner: root
+                group: root
+              /etc/cfn/hooks.d/cfn-auto-reloader.conf:
+                content: !Join
+                  - ""
+                  - - |
+                      [cfn-auto-reloader-hook]
+                    - |
+                      triggers=post.update
+                    - >
+                      path=Resources.ReplicaLaunchTemplate.Metadata.AWS::CloudFormation::Init
+                    - "action=/usr/local/bin/cfn-init -v "
+                    - "         --stack "
+                    - !Ref "AWS::StackName"
+                    - "         --resource ReplicaLaunchTemplate "
+                    - "         --configsets cs_install "
+                    - "         --region "
+                    - !Ref "AWS::Region"
+                    - |+
 
-                        - |
-                          runas=root
-                  /lib/systemd/system/cfn-hup.service:
-                    content: !Join
-                      - ""
-                      - - |
-                          [Unit]
-                        - |+
-                          Description=cfn-hup daemon
+                    - |
+                      runas=root
+              /lib/systemd/system/cfn-hup.service:
+                content: !Join
+                  - ""
+                  - - |
+                      [Unit]
+                    - |+
+                      Description=cfn-hup daemon
 
-                        - |
-                          [Service]
-                        - |
-                          Type=simple
-                        - |
-                          ExecStart=/usr/local/bin/cfn-hup
-                        - |+
-                          Restart=always
-                        - |
-                          [Install]
-                        - WantedBy=multi-user.target
-                commands:
-                  01enable_cfn_hup:
-                    command: systemctl enable cfn-hup.service
-                  02start_cfn_hup:
-                    command: systemctl start cfn-hup.service
-              create_consul_group_user_dir:
-                users:
-                  consul:
-                    homeDir: /srv/consul
-                commands:
-                  01_create_data_dir:
-                    command: mkdir -p /opt/consul/data
-              install_consul:
-                sources:
-                  /usr/bin/: https://releases.hashicorp.com/consul/1.7.0/consul_1.7.0_linux_amd64.zip
-              install_consul_template:
-                sources:
-                  /usr/bin/: https://releases.hashicorp.com/consul-template/0.24.0/consul-template_0.24.0_linux_amd64.zip
-              consul_bootstrap:
-                files:
-                  /opt/consul/config/client.json:
-                    content: !Sub |
-                      {
-                        "advertise_addr": "PrivateIpAddress",
-                        "bind_addr": "PrivateIpAddress",
-                        "node_name": "InstanceId",
-                        "datacenter": "${AWS::Region}",
-                        "server": false,
-                        "ui" : false,
-                        "leave_on_terminate" : true,
-                        "skip_leave_on_interrupt" : false,
-                        "disable_update_check": true,
-                        "log_level": "warn",
-                        "enable_local_script_checks": true,
-                        "data_dir": "/opt/consul/data",
-                        "client_addr": "0.0.0.0",
-                        "retry_join": ["provider=aws region=${AWS::Region} tag_key=${ConsulEc2RetryTagKey} tag_value=${ConsulEc2RetryTagValue}"],
-                        "addresses": {
-                          "http": "0.0.0.0"
-                        },
-                        "connect": {
-                          "enabled": true
-                        }
+                    - |
+                      [Service]
+                    - |
+                      Type=simple
+                    - |
+                      ExecStart=/usr/local/bin/cfn-hup
+                    - |+
+                      Restart=always
+                    - |
+                      [Install]
+                    - WantedBy=multi-user.target
+            commands:
+              01enable_cfn_hup:
+                command: systemctl enable cfn-hup.service
+              02start_cfn_hup:
+                command: systemctl start cfn-hup.service
+          create_consul_group_user_dir:
+            users:
+              consul:
+                homeDir: /srv/consul
+            commands:
+              01_create_data_dir:
+                command: mkdir -p /opt/consul/data
+          install_consul:
+            sources:
+              /usr/bin/: https://releases.hashicorp.com/consul/1.7.0/consul_1.7.0_linux_amd64.zip
+          install_consul_template:
+            sources:
+              /usr/bin/: https://releases.hashicorp.com/consul-template/0.24.0/consul-template_0.24.0_linux_amd64.zip
+          consul_bootstrap:
+            files:
+              /opt/consul/config/client.json:
+                content: !Sub |
+                  {
+                    "advertise_addr": "PrivateIpAddress",
+                    "bind_addr": "PrivateIpAddress",
+                    "node_name": "InstanceId",
+                    "datacenter": "${AWS::Region}",
+                    "server": false,
+                    "ui" : false,
+                    "leave_on_terminate" : true,
+                    "skip_leave_on_interrupt" : false,
+                    "disable_update_check": true,
+                    "log_level": "warn",
+                    "enable_local_script_checks": true,
+                    "data_dir": "/opt/consul/data",
+                    "client_addr": "0.0.0.0",
+                    "retry_join": ["provider=aws region=${AWS::Region} tag_key=${ConsulEc2RetryTagKey} tag_value=${ConsulEc2RetryTagValue}"],
+                    "addresses": {
+                      "http": "0.0.0.0"
+                    },
+                    "connect": {
+                      "enabled": true
+                    }
+                  }
+                mode: 000644
+              /opt/consul/config/replica-ws.json:
+                content: !Sub |
+                  {
+                    "service": {
+                      "name": "${NetworkId}-replica-ws",
+                      "tags": [
+                        "${NetworkId}",
+                        "replica-ws"
+                      ],
+                      "port": 8546,
+                      "connect": {"sidecar_service": {}},
+                      "check": {
+                        "args": ["curl", "-f", "http://localhost:9999"],
+                        "interval": "2s"
                       }
-                    mode: 000644
-                  /opt/consul/config/replica-ws.json:
-                    content: !Sub |
-                      {
-                        "service": {
-                          "name": "${NetworkId}-replica-ws",
-                          "tags": [
-                            "${NetworkId}",
-                            "replica-ws"
-                          ],
-                          "port": 8546,
-                          "connect": {"sidecar_service": {}},
-                          "check": {
-                            "args": ["curl", "-f", "http://localhost:9999"],
-                            "interval": "2s"
-                          }
-                        }
+                    }
+                  }
+                mode: 000644
+              /opt/consul/config/replica-proxy.json:
+                content: !Sub |
+                  {
+                    "service": {
+                      "name": "${NetworkId}-replica-proxy",
+                      "tags": [
+                        "${NetworkId}",
+                        "replica-proxy"
+                      ],
+                      "port": 7545,
+                      "connect": {"sidecar_service": {}},
+                      "check": {
+                        "args": ["curl", "-f",  "http://localhost:9999"],
+                        "interval": "2s"
                       }
-                    mode: 000644
-                  /opt/consul/config/replica-proxy.json:
-                    content: !Sub |
-                      {
-                        "service": {
-                          "name": "${NetworkId}-replica-proxy",
-                          "tags": [
-                            "${NetworkId}",
-                            "replica-proxy"
-                          ],
-                          "port": 7545,
-                          "connect": {"sidecar_service": {}},
-                          "check": {
-                            "args": ["curl", "-f",  "http://localhost:9999"],
-                            "interval": "2s"
-                          }
-                        }
+                    }
+                  }
+                mode: 000644
+              /opt/consul/config/replica-graphql.json:
+                content: !Sub |
+                  {
+                    "service": {
+                      "name": "${NetworkId}-replica-graphql",
+                      "tags": [
+                        "${NetworkId}",
+                        "replica-graphql"
+                      ],
+                      "port": 8547,
+                      "connect": {"sidecar_service": {}},
+                      "check": {
+                        "args": ["curl", "-f",  "http://localhost:9999"],
+                        "interval": "2s"
                       }
-                    mode: 000644
-                  /opt/consul/config/replica-graphql.json:
-                    content: !Sub |
-                      {
-                        "service": {
-                          "name": "${NetworkId}-replica-graphql",
-                          "tags": [
-                            "${NetworkId}",
-                            "replica-graphql"
-                          ],
-                          "port": 8547,
-                          "connect": {"sidecar_service": {}},
-                          "check": {
-                            "args": ["curl", "-f",  "http://localhost:9999"],
-                            "interval": "2s"
-                          }
-                        }
-                      }
-                    mode: 000644
-                  /etc/systemd/system/consul.service:
-                    content: !Join
-                      - ""
-                      - - |
-                          [Unit]
-                        - |
-                          Description="HashiCorp Consul - A service mesh solution"
-                        - |
-                          Documentation=https://www.consul.io/
-                        - |
-                          Requires=network-online.target
-                        - |
-                          After=network-online.target
-                        - |
-                          ConditionFileNotEmpty=/opt/consul/config/client.json
-                        - |+
-                          [Service]
-                        - |
-                          Type=notify
-                        - |
-                          User=consul
-                        - |
-                          Group=consul
-                        - |
-                          ExecStart=/usr/bin/consul agent -config-dir /opt/consul/config -data-dir /opt/consul/data
-                        - |
-                          ExecReload=/usr/bin/consul reload
-                        - |
-                          KillMode=process
-                        - |
-                          Restart=on-failure
-                        - |
-                          TimeoutSec=300s
-                        - |
-                          LimitNOFILE=65536
-                        - |+
-                          [Install]
-                        - WantedBy=multi-user.target
-                  /etc/systemd/system/proxy-sidecar.service:
-                    content: !Join
-                      - ""
-                      - - |
-                          [Unit]
-                        - |
-                          Description="Proxy Sidecar Service"
-                        - |
-                          Documentation=https://www.consul.io/
-                        - |
-                          Requires=consul.service
-                        - |
-                          After=network-online.target
-                        - |
-                          ConditionFileNotEmpty=/opt/consul/config/replica-proxy.json
-                        - |+
-                          [Service]
-                        - |
-                          Type=simple
-                        - |
-                          User=consul
-                        - |
-                          Group=consul
-                        - !Sub |
-                          ExecStart=/usr/bin/consul connect proxy -sidecar-for ${NetworkId}-replica-proxy
-                        - |
-                          ExecReload=/usr/bin/consul reload
-                        - |
-                          KillMode=process
-                        - |
-                          Restart=on-failure
-                        - |
-                          TimeoutSec=300s
-                        - |
-                          LimitNOFILE=65536
-                        - |+
-                          [Install]
-                        - WantedBy=multi-user.target
-                  /etc/systemd/system/websocket-sidecar.service:
-                    content: !Join
-                      - ""
-                      - - |
-                          [Unit]
-                        - |
-                          Description="Proxy Sidecar Service"
-                        - |
-                          Documentation=https://www.consul.io/
-                        - |
-                          Requires=consul.service
-                        - |
-                          After=network-online.target
-                        - |
-                          ConditionFileNotEmpty=/opt/consul/config/replica-ws.json
-                        - |+
-                          [Service]
-                        - |
-                          Type=simple
-                        - |
-                          User=consul
-                        - |
-                          Group=consul
-                        - !Sub |
-                          ExecStart=/usr/bin/consul connect proxy -sidecar-for ${NetworkId}-replica-ws
-                        - |
-                          ExecReload=/usr/bin/consul reload
-                        - |
-                          KillMode=process
-                        - |
-                          Restart=on-failure
-                        - |
-                          TimeoutSec=300s
-                        - |
-                          LimitNOFILE=65536
-                        - |+
-                          [Install]
-                        - WantedBy=multi-user.target
-                  /etc/systemd/system/graphql-sidecar.service:
-                    content: !Join
-                      - ""
-                      - - |
-                          [Unit]
-                        - |
-                          Description="Graphql Sidecar Service"
-                        - |
-                          Documentation=https://www.consul.io/
-                        - |
-                          Requires=consul.service
-                        - |
-                          After=network-online.target
-                        - |
-                          ConditionFileNotEmpty=/opt/consul/config/replica-graphql.json
-                        - |+
-                          [Service]
-                        - |
-                          Type=simple
-                        - |
-                          User=consul
-                        - |
-                          Group=consul
-                        - !Sub |
-                          ExecStart=/usr/bin/consul connect proxy -sidecar-for ${NetworkId}-replica-graphql
-                        - |
-                          ExecReload=/usr/bin/consul reload
-                        - |
-                          KillMode=process
-                        - |
-                          Restart=on-failure
-                        - |
-                          TimeoutSec=300s
-                        - |
-                          LimitNOFILE=65536
-                        - |+
-                          [Install]
-                        - WantedBy=multi-user.target
-                commands:
-                  00_fill_consul_config_ip:
-                    command: myip=`echo $(curl -s http://169.254.169.254/latest/meta-data/local-ipv4)` && sed -i "s/PrivateIpAddress/${myip}/g" /opt/consul/config/client.json
-                  01_fill_consul_config_instance_id:
-                    command: myid=`echo $(curl -s http://169.254.169.254/latest/meta-data/instance-id)` && sed -i "s/InstanceId/${myid}/g" /opt/consul/config/client.json
-                  02_change_ownership:
-                    command: chown -R consul:consul /opt/consul
-                  03_reload_systemd:
-                    command: systemctl daemon-reload
-                  04_enable_consul:
-                    command: systemctl enable consul
-                  05_start_consul:
-                    command: systemctl start consul
-                  06_enable_replica_sidecar:
-                    command: systemctl enable proxy-sidecar
-                  07_enable_websocket_sidecar:
-                    command: systemctl enable websocket-sidecar
-                  08_start_replica_sidecar:
-                    command: systemctl start proxy-sidecar
-                  09_start_websocket_sidecar:
-                    command: systemctl start websocket-sidecar
+                    }
+                  }
+                mode: 000644
+              /etc/systemd/system/consul.service:
+                content: !Join
+                  - ""
+                  - - |
+                      [Unit]
+                    - |
+                      Description="HashiCorp Consul - A service mesh solution"
+                    - |
+                      Documentation=https://www.consul.io/
+                    - |
+                      Requires=network-online.target
+                    - |
+                      After=network-online.target
+                    - |
+                      ConditionFileNotEmpty=/opt/consul/config/client.json
+                    - |+
+                      [Service]
+                    - |
+                      Type=notify
+                    - |
+                      User=consul
+                    - |
+                      Group=consul
+                    - |
+                      ExecStart=/usr/bin/consul agent -config-dir /opt/consul/config -data-dir /opt/consul/data
+                    - |
+                      ExecReload=/usr/bin/consul reload
+                    - |
+                      KillMode=process
+                    - |
+                      Restart=on-failure
+                    - |
+                      TimeoutSec=300s
+                    - |
+                      LimitNOFILE=65536
+                    - |+
+                      [Install]
+                    - WantedBy=multi-user.target
+              /etc/systemd/system/proxy-sidecar.service:
+                content: !Join
+                  - ""
+                  - - |
+                      [Unit]
+                    - |
+                      Description="Proxy Sidecar Service"
+                    - |
+                      Documentation=https://www.consul.io/
+                    - |
+                      Requires=consul.service
+                    - |
+                      After=network-online.target
+                    - |
+                      ConditionFileNotEmpty=/opt/consul/config/replica-proxy.json
+                    - |+
+                      [Service]
+                    - |
+                      Type=simple
+                    - |
+                      User=consul
+                    - |
+                      Group=consul
+                    - !Sub |
+                      ExecStart=/usr/bin/consul connect proxy -sidecar-for ${NetworkId}-replica-proxy
+                    - |
+                      ExecReload=/usr/bin/consul reload
+                    - |
+                      KillMode=process
+                    - |
+                      Restart=on-failure
+                    - |
+                      TimeoutSec=300s
+                    - |
+                      LimitNOFILE=65536
+                    - |+
+                      [Install]
+                    - WantedBy=multi-user.target
+              /etc/systemd/system/websocket-sidecar.service:
+                content: !Join
+                  - ""
+                  - - |
+                      [Unit]
+                    - |
+                      Description="Proxy Sidecar Service"
+                    - |
+                      Documentation=https://www.consul.io/
+                    - |
+                      Requires=consul.service
+                    - |
+                      After=network-online.target
+                    - |
+                      ConditionFileNotEmpty=/opt/consul/config/replica-ws.json
+                    - |+
+                      [Service]
+                    - |
+                      Type=simple
+                    - |
+                      User=consul
+                    - |
+                      Group=consul
+                    - !Sub |
+                      ExecStart=/usr/bin/consul connect proxy -sidecar-for ${NetworkId}-replica-ws
+                    - |
+                      ExecReload=/usr/bin/consul reload
+                    - |
+                      KillMode=process
+                    - |
+                      Restart=on-failure
+                    - |
+                      TimeoutSec=300s
+                    - |
+                      LimitNOFILE=65536
+                    - |+
+                      [Install]
+                    - WantedBy=multi-user.target
+              /etc/systemd/system/graphql-sidecar.service:
+                content: !Join
+                  - ""
+                  - - |
+                      [Unit]
+                    - |
+                      Description="Graphql Sidecar Service"
+                    - |
+                      Documentation=https://www.consul.io/
+                    - |
+                      Requires=consul.service
+                    - |
+                      After=network-online.target
+                    - |
+                      ConditionFileNotEmpty=/opt/consul/config/replica-graphql.json
+                    - |+
+                      [Service]
+                    - |
+                      Type=simple
+                    - |
+                      User=consul
+                    - |
+                      Group=consul
+                    - !Sub |
+                      ExecStart=/usr/bin/consul connect proxy -sidecar-for ${NetworkId}-replica-graphql
+                    - |
+                      ExecReload=/usr/bin/consul reload
+                    - |
+                      KillMode=process
+                    - |
+                      Restart=on-failure
+                    - |
+                      TimeoutSec=300s
+                    - |
+                      LimitNOFILE=65536
+                    - |+
+                      [Install]
+                    - WantedBy=multi-user.target
+            commands:
+              00_fill_consul_config_ip:
+                command: myip=`echo $(curl -s http://169.254.169.254/latest/meta-data/local-ipv4)` && sed -i "s/PrivateIpAddress/${myip}/g" /opt/consul/config/client.json
+              01_fill_consul_config_instance_id:
+                command: myid=`echo $(curl -s http://169.254.169.254/latest/meta-data/instance-id)` && sed -i "s/InstanceId/${myid}/g" /opt/consul/config/client.json
+              02_change_ownership:
+                command: chown -R consul:consul /opt/consul
+              03_reload_systemd:
+                command: systemctl daemon-reload
+              04_enable_consul:
+                command: systemctl enable consul
+              05_start_consul:
+                command: systemctl start consul
+              06_enable_replica_sidecar:
+                command: systemctl enable proxy-sidecar
+              07_enable_websocket_sidecar:
+                command: systemctl enable websocket-sidecar
+              08_start_replica_sidecar:
+                command: systemctl start proxy-sidecar
+              09_start_websocket_sidecar:
+                command: systemctl start websocket-sidecar
     Properties:
       LaunchTemplateData:
         ImageId: !If [HasReplicaImageAMI, !Ref ReplicaImageAMI, !FindInMap [RegionMap, !Ref "AWS::Region", AL2AMI]]
