@@ -1796,10 +1796,10 @@ Resources:
                       "port": 8546,
                       "connect": {"sidecar_service": {}},
                       "check": {
-                        "id": replica-wsapi",
-                        "name": Proxy healthcheck",
+                        "id": "replica-wsapi",
+                        "name": "Proxy healthcheck",
                         "http":"http://localhost:9999?queryChecks=0",
-                        "method: "GET",
+                        "method": "GET",
                         "interval": "2s",
                         "timeout": "1s"
                       }
@@ -3022,10 +3022,10 @@ Resources:
                       "port": 8546,
                       "connect": {"sidecar_service": {}},
                       "check": {
-                        "id": replica-wsapi",
-                        "name": Proxy healthcheck",
+                        "id": "replica-wsapi",
+                        "name": "Proxy healthcheck",
                         "http":"http://localhost:9999?queryChecks=0",
-                        "method: "GET",
+                        "method": "GET",
                         "interval": "2s",
                         "timeout": "1s"
                       }
