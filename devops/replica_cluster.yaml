@@ -1832,7 +1832,7 @@ Resources:
                 content: !Sub |
                   {
                     "service": {
-                      "name": "${NetworkId}-replica-proxy",
+                      "name": "${NetworkId}-replica-proxy-heavy",
                       "tags": [
                         "${NetworkId}",
                         "replica-proxy"
@@ -1948,7 +1948,7 @@ Resources:
                     - |+
                       [Install]
                     - WantedBy=multi-user.target
-              /etc/systemd/system/proxy-heavy-sidecar.service:
+              /etc/systemd/system/proxy-sidecar-heavy.service:
                 content: !Join
                   - ""
                   - - |
@@ -2077,14 +2077,20 @@ Resources:
                 command: systemctl start consul
               06_enable_replica_sidecar:
                 command: systemctl enable proxy-sidecar
-              07_enable_websocket_sidecar:
+              07_enable_replica_heavy_sidecar:
+                command: systemctl enable proxy-sidecar-heavy
+              08_enable_websocket_sidecar:
                 command: systemctl enable websocket-sidecar
-              08_enable_graphql_sidecar:
+              09_enable_graphql_sidecar:
                 command: systemctl enable graphql-sidecar
-              09_start_replica_sidecar:
+              10_start_replica_sidecar:
                 command: systemctl start proxy-sidecar
-              10_start_graphql_sidecar:
+              11_start_graphql_sidecar:
                 command: systemctl start graphql-sidecar
+              12_start_websocket_sidecar:
+                command: systemctl start websocket-sidecar
+              12_start_websocket_sidecar:
+                command: systemctl start proxy-sidecar-heavy
     Properties:
       LaunchTemplateData:
         ImageId: !If [HasReplicaImageAMI, !Ref ReplicaImageAMI, !FindInMap [RegionMap, !Ref "AWS::Region", AL2AMI]]
@@ -3058,7 +3064,7 @@ Resources:
                 content: !Sub |
                   {
                     "service": {
-                      "name": "${NetworkId}-replica-proxy",
+                      "name": "${NetworkId}-replica-proxy-heavy",
                       "tags": [
                         "${NetworkId}",
                         "replica-proxy"
@@ -3174,7 +3180,7 @@ Resources:
                     - |+
                       [Install]
                     - WantedBy=multi-user.target
-              /etc/systemd/system/proxy-heavy-sidecar.service:
+              /etc/systemd/system/proxy-sidecar-heavy.service:
                 content: !Join
                   - ""
                   - - |
@@ -3303,14 +3309,20 @@ Resources:
                 command: systemctl start consul
               06_enable_replica_sidecar:
                 command: systemctl enable proxy-sidecar
-              07_enable_websocket_sidecar:
+              07_enable_replica_heavy_sidecar:
+                command: systemctl enable proxy-sidecar-heavy
+              08_enable_websocket_sidecar:
                 command: systemctl enable websocket-sidecar
-              08_enable_graphql_sidecar:
+              09_enable_graphql_sidecar:
                 command: systemctl enable graphql-sidecar
-              09_start_replica_sidecar:
+              10_start_replica_sidecar:
                 command: systemctl start proxy-sidecar
-              10_start_graphql_sidecar:
+              11_start_graphql_sidecar:
                 command: systemctl start graphql-sidecar
+              12_start_websocket_sidecar:
+                command: systemctl start websocket-sidecar
+              12_start_websocket_sidecar:
+                command: systemctl start proxy-sidecar-heavy
     Properties:
       LaunchTemplateData:
         ImageId: !If [HasReplicaImageAMI, !Ref ReplicaImageAMI, !FindInMap [RegionMap, !Ref "AWS::Region", AL2AMI]]
