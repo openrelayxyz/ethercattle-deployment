@@ -1584,7 +1584,7 @@ Resources:
         CidrIp: !Join ["", ["Fn::ImportValue": !Sub "${InfrastructureStack}-VpcBaseIp", ".0.0/16"]]
       - IpProtocol: tcp
         FromPort: '21000'
-        ToPort: '21002'
+        ToPort: '21005'
         CidrIp: !Join ["", ["Fn::ImportValue": !Sub "${InfrastructureStack}-VpcBaseIp", ".0.0/16"]]
       - IpProtocol: tcp
         FromPort: '8546'
