@@ -1583,8 +1583,9 @@ Resources:
         ToPort: '8545'
         CidrIp: !Join ["", ["Fn::ImportValue": !Sub "${InfrastructureStack}-VpcBaseIp", ".0.0/16"]]
       - IpProtocol: tcp
+        # Consul sidecar proxy ports
         FromPort: '21000'
-        ToPort: '21005'
+        ToPort: '21016'
         CidrIp: !Join ["", ["Fn::ImportValue": !Sub "${InfrastructureStack}-VpcBaseIp", ".0.0/16"]]
       - IpProtocol: tcp
         FromPort: '8546'
