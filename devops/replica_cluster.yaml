@@ -1780,6 +1780,7 @@ Resources:
                     "addresses": {
                       "http": "0.0.0.0"
                     },
+                    "ports": { "grpc": 8502 },
                     "connect": {
                       "enabled": true
                     }
@@ -1935,7 +1936,7 @@ Resources:
                     - |
                       Group=consul
                     - !Sub |
-                      ExecStart=/usr/bin/consul connect proxy -sidecar-for ${NetworkId}-replica-proxy
+                      ExecStart=/usr/bin/consul connect envoy -sidecar-for ${NetworkId}-replica-proxy -admin-bind localhost:19001
                     - |
                       ExecReload=/usr/bin/consul reload
                     - |
@@ -1973,7 +1974,7 @@ Resources:
                     - |
                       Group=consul
                     - !Sub |
-                      ExecStart=/usr/bin/consul connect proxy -sidecar-for ${NetworkId}-replica-proxy-heavy
+                      ExecStart=/usr/bin/consul connect envoy -sidecar-for ${NetworkId}-replica-proxy-heavy -admin-bind localhost:19002
                     - |
                       ExecReload=/usr/bin/consul reload
                     - |
@@ -2011,7 +2012,7 @@ Resources:
                     - |
                       Group=consul
                     - !Sub |
-                      ExecStart=/usr/bin/consul connect proxy -sidecar-for ${NetworkId}-replica-ws
+                      ExecStart=/usr/bin/consul connect envoy -sidecar-for ${NetworkId}-replica-ws -admin-bind localhost:19003
                     - |
                       ExecReload=/usr/bin/consul reload
                     - |
@@ -2049,7 +2050,7 @@ Resources:
                     - |
                       Group=consul
                     - !Sub |
-                      ExecStart=/usr/bin/consul connect proxy -sidecar-for ${NetworkId}-replica-graphql
+                      ExecStart=/usr/bin/consul connect envoy -sidecar-for ${NetworkId}-replica-graphql -admin-bind localhost:19004
                     - |
                       ExecReload=/usr/bin/consul reload
                     - |
@@ -2076,21 +2077,27 @@ Resources:
                 command: systemctl enable consul
               05_start_consul:
                 command: systemctl start consul
-              06_enable_replica_sidecar:
+              06_get_envoy:
+                command: curl -L https://getenvoy.io/cli | bash -s -- -b /usr/local/bin
+              07_fetch_envoy:
+                command: /usr/local/bin/getenvoy fetch standard:1.13.1
+              08_install_envoy:
+                command: mv /root/.getenvoy/builds/standard/1.13.1/linux_glibc/bin/envoy /usr/bin/envoy
+              09_enable_replica_sidecar:
                 command: systemctl enable proxy-sidecar
-              07_enable_replica_heavy_sidecar:
+              10_enable_replica_heavy_sidecar:
                 command: systemctl enable proxy-sidecar-heavy
-              08_enable_websocket_sidecar:
+              11_enable_websocket_sidecar:
                 command: systemctl enable websocket-sidecar
-              09_enable_graphql_sidecar:
+              12_enable_graphql_sidecar:
                 command: systemctl enable graphql-sidecar
-              10_start_replica_sidecar:
+              13_start_replica_sidecar:
                 command: systemctl start proxy-sidecar
-              11_start_graphql_sidecar:
+              14_start_graphql_sidecar:
                 command: systemctl start graphql-sidecar
-              12_start_websocket_sidecar:
+              15_start_websocket_sidecar:
                 command: systemctl start websocket-sidecar
-              12_start_websocket_sidecar:
+              16_start_websocket_sidecar:
                 command: systemctl start proxy-sidecar-heavy
     Properties:
       LaunchTemplateData:
@@ -3012,6 +3019,7 @@ Resources:
                     "addresses": {
                       "http": "0.0.0.0"
                     },
+                    "ports": { "grpc": 8502 },
                     "connect": {
                       "enabled": true
                     }
@@ -3167,7 +3175,7 @@ Resources:
                     - |
                       Group=consul
                     - !Sub |
-                      ExecStart=/usr/bin/consul connect proxy -sidecar-for ${NetworkId}-replica-proxy
+                      ExecStart=/usr/bin/consul connect envoy -sidecar-for ${NetworkId}-replica-proxy -admin-bind localhost:19001
                     - |
                       ExecReload=/usr/bin/consul reload
                     - |
@@ -3205,7 +3213,7 @@ Resources:
                     - |
                       Group=consul
                     - !Sub |
-                      ExecStart=/usr/bin/consul connect proxy -sidecar-for ${NetworkId}-replica-proxy-heavy
+                      ExecStart=/usr/bin/consul connect envoy -sidecar-for ${NetworkId}-replica-proxy-heavy -admin-bind localhost:19002
                     - |
                       ExecReload=/usr/bin/consul reload
                     - |
@@ -3243,7 +3251,7 @@ Resources:
                     - |
                       Group=consul
                     - !Sub |
-                      ExecStart=/usr/bin/consul connect proxy -sidecar-for ${NetworkId}-replica-ws
+                      ExecStart=/usr/bin/consul connect envoy -sidecar-for ${NetworkId}-replica-ws -admin-bind localhost:19003
                     - |
                       ExecReload=/usr/bin/consul reload
                     - |
@@ -3281,7 +3289,7 @@ Resources:
                     - |
                       Group=consul
                     - !Sub |
-                      ExecStart=/usr/bin/consul connect proxy -sidecar-for ${NetworkId}-replica-graphql
+                      ExecStart=/usr/bin/consul connect envoy -sidecar-for ${NetworkId}-replica-graphql -admin-bind localhost:19004
                     - |
                       ExecReload=/usr/bin/consul reload
                     - |
@@ -3308,21 +3316,27 @@ Resources:
                 command: systemctl enable consul
               05_start_consul:
                 command: systemctl start consul
-              06_enable_replica_sidecar:
+              06_get_envoy:
+                command: curl -L https://getenvoy.io/cli | bash -s -- -b /usr/local/bin
+              07_fetch_envoy:
+                command: /usr/local/bin/getenvoy fetch standard:1.13.1
+              08_install_envoy:
+                command: mv /root/.getenvoy/builds/standard/1.13.1/linux_glibc/bin/envoy /usr/bin/envoy
+              09_enable_replica_sidecar:
                 command: systemctl enable proxy-sidecar
-              07_enable_replica_heavy_sidecar:
+              10_enable_replica_heavy_sidecar:
                 command: systemctl enable proxy-sidecar-heavy
-              08_enable_websocket_sidecar:
+              11_enable_websocket_sidecar:
                 command: systemctl enable websocket-sidecar
-              09_enable_graphql_sidecar:
+              12_enable_graphql_sidecar:
                 command: systemctl enable graphql-sidecar
-              10_start_replica_sidecar:
+              13_start_replica_sidecar:
                 command: systemctl start proxy-sidecar
-              11_start_graphql_sidecar:
+              14_start_graphql_sidecar:
                 command: systemctl start graphql-sidecar
-              12_start_websocket_sidecar:
+              15_start_websocket_sidecar:
                 command: systemctl start websocket-sidecar
-              12_start_websocket_sidecar:
+              16_start_websocket_sidecar:
                 command: systemctl start proxy-sidecar-heavy
     Properties:
       LaunchTemplateData:
