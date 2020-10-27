@@ -1796,6 +1796,7 @@ Resources:
                         "replica-ws"
                       ],
                       "port": 8546,
+                      "weights": { "passing": 1, "warning": 0 },
                       "connect": {"sidecar_service": {}},
                       "check": {
                         "id": "replica-wsapi",
@@ -1818,6 +1819,7 @@ Resources:
                         "replica-proxy"
                       ],
                       "port": 7545,
+                      "weights": { "passing": 1, "warning": 0 },
                       "connect": {"sidecar_service": {}},
                       "check": {
                          "id": "replica-proxy",
@@ -1840,6 +1842,7 @@ Resources:
                         "replica-proxy"
                       ],
                       "port": 7545,
+                      "weights": { "passing": 1, "warning": 0 },
                       "connect": {"sidecar_service": {}},
                       "check": {
                          "id": "replica-proxy",
@@ -1862,6 +1865,7 @@ Resources:
                         "replica-graphql"
                       ],
                       "port": 8547,
+                      "weights": { "passing": 1, "warning": 0 },
                       "connect": {"sidecar_service": {}},
                       "check": {
                          "id": "replica-graphql",
