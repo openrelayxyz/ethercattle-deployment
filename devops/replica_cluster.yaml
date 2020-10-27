@@ -777,6 +777,7 @@ Resources:
                 systemctl start amazon-cloudwatch-agent.service
                 systemctl enable journald-cloudwatch-logs
                 systemctl start journald-cloudwatch-logs
+                sysctl -p
                 systemctl enable geth.service
                 systemctl enable geth-tx.service
                 systemctl enable geth-peer-data.service
@@ -1812,6 +1813,7 @@ Resources:
                 systemctl daemon-reload
                 systemctl enable geth.service
                 sleep 5 #TODO- workaround for a deadlock on topic creation
+                sysctl -p
                 rm /var/lib/ethereum/geth.ipc || true
                 systemctl start geth.service || true &
                 systemctl enable amazon-cloudwatch-agent.service
@@ -2619,6 +2621,7 @@ Resources:
                 systemctl enable geth.service
                 sleep 5 #TODO- workaround for a deadlock on topic creation
                 rm /var/lib/ethereum/geth.ipc || true
+                sysctl -p
                 systemctl start geth.service || true &
                 systemctl enable amazon-cloudwatch-agent.service
                 systemctl start amazon-cloudwatch-agent.service
