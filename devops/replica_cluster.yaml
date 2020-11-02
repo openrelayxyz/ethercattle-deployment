@@ -1839,13 +1839,13 @@ Resources:
                       "name": "${NetworkId}-replica-proxy-heavy",
                       "tags": [
                         "${NetworkId}",
-                        "replica-proxy"
+                        "replica-proxy-heavy"
                       ],
                       "port": 7545,
                       "weights": { "passing": 1, "warning": 0 },
                       "connect": {"sidecar_service": {}},
                       "check": {
-                         "id": "replica-proxy",
+                         "id": "replica-proxy-heavy",
                           "name": "Proxy healthcheck",
                           "http": "http://localhost:9999",
                           "method": "GET",
