@@ -2275,12 +2275,14 @@ Resources:
 
 
                 fio --filename=/dev/sdf --rw=read --bs=128k --iodepth=32 --ioengine=libaio --prio=7 --prioclass=3 --thinktime=2 --rate_iops=$((${DiskSize} * 3 - 100 )) --direct=1 --name=volume-initialize &
+
+                /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource ReplicaLaunchTemplate --configsets cs_install --region ${AWS::Region}
+
                 if [ -f /usr/bin/replica-hook ]
                 then
                   /usr/bin/replica-hook
                 fi
 
-                /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource ReplicaLaunchTemplate --configsets cs_install --region ${AWS::Region}
 
 
                 export AWS_DEFAULT_REGION=${AWS::Region}
