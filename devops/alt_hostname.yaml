@@ -27,6 +27,12 @@ Parameters:
     MinValue: 1
     Default: 8545
     Description: Port to use for websocket health checks. AWS load balancers don't handle health checks on websockets, so we need to tie this to a different port.
+  GraphqlHealthCheckPort:
+    Type: Number
+    MaxValue: 65535
+    MinValue: 1
+    Default: 8547
+    Description: Port to use for graphql health checks.
   ReplicaHealthCheckPort:
     Type: Number
     MaxValue: 65535
@@ -107,6 +113,7 @@ Resources:
       HealthCheckIntervalSeconds: 30
       UnhealthyThresholdCount: 2
       HealthyThresholdCount: 5
+      HealthCheckPort: !Ref GraphqlHealthCheckPort
       Matcher:
         HttpCode: "200,403"
       Port: !Ref GraphQLPort
