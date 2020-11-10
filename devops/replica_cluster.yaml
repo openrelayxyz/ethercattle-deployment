@@ -1294,7 +1294,7 @@ Resources:
       Period: 60
       Statistic: Sum
       Threshold: 1000
-      TreatMissingData: missing
+      TreatMissingData: notBreaching
 
   ReplicaCountAlarm:
     Type: AWS::CloudWatch::Alarm
