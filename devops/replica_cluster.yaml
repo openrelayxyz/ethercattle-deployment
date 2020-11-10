@@ -793,6 +793,7 @@ Resources:
                 systemctl start amazon-cloudwatch-agent.service
                 systemctl enable journald-cloudwatch-logs
                 systemctl start journald-cloudwatch-logs
+                sysctl -p || true
                 systemctl enable geth.service
                 systemctl enable geth-tx.service
                 systemctl enable geth-peer-data.service
@@ -2290,6 +2291,7 @@ Resources:
                 systemctl daemon-reload
                 systemctl enable geth.service
                 sleep 5 #TODO- workaround for a deadlock on topic creation
+                sysctl -p || true
                 rm /var/lib/ethereum/geth.ipc || true
                 systemctl start geth.service || true &
                 systemctl enable amazon-cloudwatch-agent.service
@@ -3061,7 +3063,7 @@ Resources:
                 EnvironmentFile=/etc/systemd/system/ethcattle-vars
                 Type=simple
                 LimitNOFILE=655360
-                ExecStartPre=/usr/bin/geth replica ${FreezerFlags} --kafka.broker=${KafkaBrokerURL}""$SEP""fetch.default=8388608&max.waittime=25&avoid_leader=1 --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown 2>>/tmp/geth-stderr || true
+
                 ExecStart=/usr/bin/bash -c '/usr/bin/geth ${FreezerFlags} --datadir=/var/lib/ethereum --light.maxpeers 0 --maxpeers 25 ${ReplicaHTTPFlag} ${ReplicaGraphQLFlag} ${ReplicaWebsocketsFlag}'
                 CPUSchedulingPolicy=fifo
                 CPUSchedulingPriority=20
@@ -3073,6 +3075,7 @@ Resources:
                 WantedBy=multi-user.target
                 " > /etc/systemd/system/geth.service
 
+                # ExecStartPre=/usr/bin/geth replica ${FreezerFlags} --kafka.broker=${KafkaBrokerURL}""$SEP""fetch.default=8388608&max.waittime=25&avoid_leader=1 --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown 2>>/tmp/geth-stderr || true
                 printf "[Unit]\nDescription=journald-cloudwatch-logs\nWants=basic.target\nAfter=basic.target network.target\n\n[Service]\nExecStart=/usr/local/bin/journald-cloudwatch-logs /usr/local/etc/journald-cloudwatch-logs.conf\nKillMode=process\nRestart=on-failure\nRestartSec=42s" > /etc/systemd/system/journald-cloudwatch-logs.service
 
                 printf "log_group = \"${FallBackLG}\"\nstate_file = \"/var/lib/journald-cloudwatch-logs/state\"" > /usr/local/etc/journald-cloudwatch-logs.conf
@@ -3105,6 +3108,7 @@ Resources:
                 systemctl enable geth.service
                 sleep 5 #TODO- workaround for a deadlock on topic creation
                 rm /var/lib/ethereum/geth.ipc || true
+                sysctl -p || true
                 systemctl start geth.service || true &
                 systemctl enable amazon-cloudwatch-agent.service
                 systemctl start amazon-cloudwatch-agent.service
