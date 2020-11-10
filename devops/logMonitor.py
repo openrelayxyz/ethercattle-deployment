@@ -183,8 +183,7 @@ def replicaHandler(event, context):
                          stream=eventData["logStream"])
 
         if "missing trie node" in item["message"]:
-            appendMetric(item, metricData, "trieMissing", 1,
-            stream=eventData["logStream"])
+            appendMetric(item, metricData, "trieMissing", 1)
 
         if metricData:
             client.put_metric_data(

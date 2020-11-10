@@ -1287,12 +1287,12 @@ Resources:
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
       EvaluationPeriods: 1
       MetricName: "trieMissing"
-      Namespace: BlockData
+      Namespace: ReplicaData
       OKActions:
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
       Period: 60
-      Statistic: Maximum
+      Statistic: Sum
       Threshold: 1000
       TreatMissingData: missing
 
