@@ -178,9 +178,13 @@ def replicaHandler(event, context):
         except ValueError:
             pass
 
-        if "Error communicating with backend:" in item:
+        if "Error communicating with backend:" in item["message"]:
             appendMetric(item, metricData, "backend_error", 1,
                          stream=eventData["logStream"])
+
+        if "missing trie node" in item["message"]:
+            appendMetric(item, metricData, "trieMissing", 1,
+            stream=eventData["logStream"])
 
         if metricData:
             client.put_metric_data(

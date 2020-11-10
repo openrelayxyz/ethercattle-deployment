@@ -1270,6 +1270,30 @@ Resources:
       Statistic: Maximum
       Threshold: 10
       TreatMissingData: missing
+  MissingTrieNodeAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmActions:
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+      AlarmDescription: "Alarms when missingTrie > 1000"
+      ComparisonOperator: "GreaterThanThreshold"
+      Dimensions:
+        - Name: clusterId
+          Value : !Ref KafkaTopic
+      InsufficientDataActions:
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+      EvaluationPeriods: 1
+      MetricName: "trieMissing"
+      Namespace: BlockData
+      OKActions:
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+      Period: 60
+      Statistic: Maximum
+      Threshold: 1000
+      TreatMissingData: missing
 
   ReplicaCountAlarm:
     Type: AWS::CloudWatch::Alarm
@@ -1389,7 +1413,7 @@ Resources:
     Properties:
       Code:
         S3Bucket: !Ref S3GethBucketName
-        S3Key: lambdaPackage-20.zip
+        S3Key: lambdaPackage-21.zip
       Description: "A lambda function to process Geth logs into metrics"
       Environment:
         Variables:
@@ -2358,7 +2382,7 @@ Resources:
     Properties:
       Code:
         S3Bucket: !Ref S3GethBucketName
-        S3Key: lambdaPackage-20.zip
+        S3Key: lambdaPackage-21.zip
       Description: "A lambda function to process Geth logs into metrics"
       Environment:
         Variables:
@@ -3349,7 +3373,7 @@ Resources:
     Properties:
       Code:
         S3Bucket: !Ref S3GethBucketName
-        S3Key: lambdaPackage-20.zip
+        S3Key: lambdaPackage-21.zip
       Description: "Launch instances to snapshot chaindata"
       Environment:
         Variables:
@@ -3422,7 +3446,7 @@ Resources:
     Properties:
       Code:
         S3Bucket: !Ref S3GethBucketName
-        S3Key: lambdaPackage-20.zip
+        S3Key: lambdaPackage-21.zip
       Description: "Align master volume sizes with CloudFormation parameters"
       Environment:
         Variables:
@@ -3481,7 +3505,7 @@ Resources:
     Properties:
       Code:
         S3Bucket: !Ref S3GethBucketName
-        S3Key: lambdaPackage-20.zip
+        S3Key: lambdaPackage-21.zip
       Description: "Cleanup old chaindata snapshots"
       Environment:
         Variables:
@@ -3515,7 +3539,7 @@ Resources:
     Properties:
       Code:
         S3Bucket: !Ref S3GethBucketName
-        S3Key: lambdaPackage-20.zip
+        S3Key: lambdaPackage-21.zip
       Description: "Collect metrics for remote RPC URLs"
       Environment:
         Variables:
