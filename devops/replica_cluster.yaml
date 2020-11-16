@@ -2058,7 +2058,7 @@ Resources:
                     !If [HasReplicaHTTP, "--rpc --rpcaddr 0.0.0.0 --rpcport 8545", ""]
                 ReplicaGraphQLFlag:
                     # Wow that's a lot of escaping!
-                    !If [HasReplicaGraphQL, "--graphql --graphql.addr 0.0.0.0 --graphql.port 8547 --graphql.vhosts \\\\\\'*\\\\\\'", ""]
+                    !If [HasReplicaGraphQL, "--graphql --graphql.vhosts \\\\\\'*\\\\\\'", ""]
                 ReplicaWebsocketsFlag:
                     !If [HasReplicaWebsockets, "--ws --ws.addr 0.0.0.0 --ws.port 8546", ""]
                 BaseInfrastructure:
