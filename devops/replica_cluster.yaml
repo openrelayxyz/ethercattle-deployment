@@ -2055,7 +2055,7 @@ Resources:
               - ClusterId:
                   "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
                 ReplicaHTTPFlag:
-                    !If [HasReplicaHTTP, "--rpc --rpcaddr 0.0.0.0 --rpcport 8545", ""]
+                    !If [HasReplicaHTTP, "--http --http.addr 0.0.0.0 --http.port 8545", ""]
                 ReplicaGraphQLFlag:
                     # Wow that's a lot of escaping!
                     !If [HasReplicaGraphQL, "--graphql --graphql.vhosts \\\\\\'*\\\\\\'", ""]
