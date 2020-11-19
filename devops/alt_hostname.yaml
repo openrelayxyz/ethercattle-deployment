@@ -166,7 +166,7 @@ Resources:
         HostedZoneId:
           "Fn::ImportValue": !Sub "${InfrastructureStack}-RPCALBCanonicalHostedZoneId"
       HostedZoneName: !Sub "${HostedZone}."
-      Name: !Sub "${ServiceName}.graphql.${AWS::region}.${HostedZone}"
+      Name: !Sub "${ServiceName}.graphql.${AWS::Region}.${HostedZone}"
       Type: A
       Weight: 1
       SetIdentifier: !Sub "${AWS::StackName}-${AWS::Region}"
