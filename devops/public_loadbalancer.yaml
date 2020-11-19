@@ -162,7 +162,7 @@ Resources:
       Name: !Sub "${ServiceName}.rpc.${HostedZone}"
       Type: A
       Weight: 1
-      SetIdentifier: !Sub "${AWS::StackName}"
+      SetIdentifier: !Sub "${AWS::StackName}-${AWS::Region}"
   RPCALBWildcardDNS:
     Type: "AWS::Route53::RecordSet"
     Properties:
@@ -174,7 +174,7 @@ Resources:
       Name: !Sub "*.${ServiceName}.rpc.${HostedZone}"
       Type: A
       Weight: 1
-      SetIdentifier: !Sub "${AWS::StackName}"
+      SetIdentifier: !Sub "${AWS::StackName}-${AWS::Region}"
   GraphQLALBGroup:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
     Properties:
@@ -202,7 +202,7 @@ Resources:
       Name: !Sub "${ServiceName}.graphql.${HostedZone}"
       Type: A
       Weight: 1
-      SetIdentifier: !Sub "${AWS::StackName}"
+      SetIdentifier: !Sub "${AWS::StackName}-${AWS::Region}"
   GraphQLALBWildcardDNS:
     Type: "AWS::Route53::RecordSet"
     Properties:
@@ -214,7 +214,7 @@ Resources:
       Name: !Sub "*.${ServiceName}.graphql.${HostedZone}"
       Type: A
       Weight: 1
-      SetIdentifier: !Sub "${AWS::StackName}"
+      SetIdentifier: !Sub "${AWS::StackName}-${AWS::Region}"
   GraphQLALBListenerRule:
     Type: AWS::ElasticLoadBalancingV2::ListenerRule
     Properties:
@@ -254,7 +254,7 @@ Resources:
       Name: !Sub "${ServiceName}.ws.${HostedZone}"
       Type: A
       Weight: 1
-      SetIdentifier: !Sub "${AWS::StackName}"
+      SetIdentifier: !Sub "${AWS::StackName}-${AWS::Region}"
   WebsocketsALBWildcardDNS:
     Type: "AWS::Route53::RecordSet"
     Properties:
@@ -266,7 +266,7 @@ Resources:
       Name: !Sub "*.${ServiceName}.ws.${HostedZone}"
       Type: A
       Weight: 1
-      SetIdentifier: !Sub "${AWS::StackName}"
+      SetIdentifier: !Sub "${AWS::StackName}-${AWS::Region}"
   WebsocketsALBListenerRule:
     Type: AWS::ElasticLoadBalancingV2::ListenerRule
     Properties:
