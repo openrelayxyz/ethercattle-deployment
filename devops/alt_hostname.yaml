@@ -94,7 +94,6 @@ Resources:
       Name: !Sub "${ServiceName}.rpc.${HostedZone}"
       Region: !Sub ${AWS::Region}
       Type: A
-      Weight: 1
       SetIdentifier: !Sub "${AWS::StackName}-${AWS::Region}"
   RPCALBRegionalDNS:
     Type: "AWS::Route53::RecordSet"
@@ -154,7 +153,6 @@ Resources:
       Name: !Sub "${ServiceName}.graphql.${HostedZone}"
       Region: !Sub ${AWS::Region}
       Type: A
-      Weight: 1
       SetIdentifier: !Sub "${AWS::StackName}-${AWS::Region}"
   GraphQLALBRegionalDNS:
     Type: "AWS::Route53::RecordSet"
@@ -227,7 +225,6 @@ Resources:
       Name: !Sub "${ServiceName}.ws.${HostedZone}"
       Region: !Sub ${AWS::Region}
       Type: A
-      Weight: 1
       SetIdentifier: !Sub "${AWS::StackName}-${AWS::Region}"
   WebsocketsALBRegionalDNS:
     Type: "AWS::Route53::RecordSet"
