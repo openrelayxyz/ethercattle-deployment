@@ -39,10 +39,17 @@ Parameters:
     MinValue: 1
     Default: 8545
     Description: Port to use for replica health checks. Enables you to use more advanced healtchecks if needed for RPC.
-
+  RegionAgnosticDNS:
+    Description: Enable region agnostic DNS
+    Type: String
+    Default: 'true'
+    AllowedValues:
+    - 'true'
+    - 'false'
 
 Conditions:
   HasSNSTopic: !Not [!Equals [ !Ref AlarmSNSTopic, "" ]]
+  IncludeRegionAgnosticDNS: !Equals [ !Ref RegionAgnosticDNS, "true" ]
 
 
 Resources:
@@ -82,6 +89,7 @@ Resources:
         - Key: Service
           Value: !Sub "${ServiceName}.rpc.${HostedZone}"
   RPCALBDNS:
+    Condition: IncludeRegionAgnosticDNS
     Type: "AWS::Route53::RecordSet"
     Properties:
       AliasTarget:
@@ -110,6 +118,7 @@ Resources:
       Weight: 1
       SetIdentifier: !Sub "${AWS::StackName}-${AWS::Region}"
   RPCALBWildcardDNS:
+    Condition: IncludeRegionAgnosticDNS
     Type: "AWS::Route53::RecordSet"
     Properties:
       AliasTarget:
@@ -121,7 +130,7 @@ Resources:
       HostedZoneName: !Sub "${HostedZone}."
       Name: !Sub "*.${ServiceName}.rpc.${HostedZone}"
       Type: A
-      Weight: 1
+      Region: !Sub ${AWS::Region}
       SetIdentifier: !Sub "${AWS::StackName}-${AWS::Region}"
   GraphQLALBGroup:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
@@ -141,6 +150,7 @@ Resources:
         - Key: Service
           Value: !Sub "${ServiceName}.graphql.${HostedZone}"
   GraphQLALBDNS:
+    Condition: IncludeRegionAgnosticDNS
     Type: "AWS::Route53::RecordSet"
     Properties:
       AliasTarget:
@@ -169,6 +179,7 @@ Resources:
       Weight: 1
       SetIdentifier: !Sub "${AWS::StackName}-${AWS::Region}"
   GraphQLALBWildcardDNS:
+    Condition: IncludeRegionAgnosticDNS
     Type: "AWS::Route53::RecordSet"
     Properties:
       AliasTarget:
@@ -180,7 +191,7 @@ Resources:
       HostedZoneName: !Sub "${HostedZone}."
       Name: !Sub "*.${ServiceName}.graphql.${HostedZone}"
       Type: A
-      Weight: 1
+      Region: !Sub ${AWS::Region}
       SetIdentifier: !Sub "${AWS::StackName}-${AWS::Region}"
   GraphQLALBListenerRule:
     Type: AWS::ElasticLoadBalancingV2::ListenerRule
@@ -213,6 +224,7 @@ Resources:
         - Key: Service
           Value: !Sub "${ServiceName}.ws.${HostedZone}"
   WebsocketsALBDNS:
+    Condition: IncludeRegionAgnosticDNS
     Type: "AWS::Route53::RecordSet"
     Properties:
       AliasTarget:
@@ -241,6 +253,7 @@ Resources:
       Weight: 1
       SetIdentifier: !Sub "${AWS::StackName}-${AWS::Region}"
   WebsocketsALBWildcardDNS:
+    Condition: IncludeRegionAgnosticDNS
     Type: "AWS::Route53::RecordSet"
     Properties:
       AliasTarget:
@@ -252,7 +265,7 @@ Resources:
       HostedZoneName: !Sub "${HostedZone}."
       Name: !Sub "*.${ServiceName}.ws.${HostedZone}"
       Type: A
-      Weight: 1
+      Region: !Sub ${AWS::Region}
       SetIdentifier: !Sub "${AWS::StackName}-${AWS::Region}"
   WebsocketsALBListenerRule:
     Type: AWS::ElasticLoadBalancingV2::ListenerRule
