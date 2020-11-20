@@ -3314,7 +3314,7 @@ Resources:
   CloudwatchDashboard:
     Type: AWS::CloudWatch::Dashboard
     Properties:
-      DashboardName: !Sub "${AWS::StackName}"
+      DashboardName: !Sub "${AWS::StackName}-${AWS::Region}"
       DashboardBody:
         Fn::Sub:
           - |
