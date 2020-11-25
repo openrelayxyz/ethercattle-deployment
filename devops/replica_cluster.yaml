@@ -208,7 +208,9 @@ Parameters:
     Type: String
     Default: "rivet-consul-member"
     ConstraintDescription: Must match EC2 Tag Name requirements.
-
+  ConsulPrimaryRegion:
+    Description: The AWS region of the primary Consul cluster. If not set, defaults to this region.
+    Type: String
 
 
 Metadata:
@@ -484,6 +486,7 @@ Conditions:
   ReplicaSpotLowestPrice: !Equals [!Ref ReplicaSpotAllocationStrategy, "lowest-price"]
   HasFreezerBucket: !Not [ !Equals [ !Ref FreezerBucket, "" ] ]
   EnabledFreezerBucket: !Equals [ !Ref EnableS3Freezer, "true" ]
+  SpecifiesConsulRegion: !Not [ !Equals [ !Ref ConsulPrimaryRegion, "" ] ]
 
 Resources:
   LambdaExecutionRole:
@@ -1613,6 +1616,16 @@ Resources:
         ToPort: '21016'
         CidrIp: !Join ["", ["Fn::ImportValue": !Sub "${InfrastructureStack}-VpcBaseIp", ".0.0/14"]]
       - IpProtocol: tcp
+        # Consul agent gossip
+        FromPort: '8301'
+        ToPort: '8301'
+        CidrIp: !Join ["", ["Fn::ImportValue": !Sub "${InfrastructureStack}-VpcBaseIp", ".0.0/14"]]
+      - IpProtocol: udp
+        # Consul agent gossip
+        FromPort: '8301'
+        ToPort: '8301'
+        CidrIp: !Join ["", ["Fn::ImportValue": !Sub "${InfrastructureStack}-VpcBaseIp", ".0.0/14"]]
+      - IpProtocol: tcp
         FromPort: '8546'
         ToPort: '8546'
         CidrIp: !Join ["", ["Fn::ImportValue": !Sub "${InfrastructureStack}-VpcBaseIp", ".0.0/16"]]
@@ -1786,30 +1799,34 @@ Resources:
           consul_bootstrap:
             files:
               /opt/consul/config/client.json:
-                content: !Sub |
-                  {
-                    "advertise_addr": "PrivateIpAddress",
-                    "bind_addr": "PrivateIpAddress",
-                    "node_name": "InstanceId",
-                    "datacenter": "${AWS::Region}",
-                    "server": false,
-                    "ui" : false,
-                    "leave_on_terminate" : true,
-                    "skip_leave_on_interrupt" : false,
-                    "disable_update_check": true,
-                    "log_level": "warn",
-                    "enable_local_script_checks": true,
-                    "data_dir": "/opt/consul/data",
-                    "client_addr": "0.0.0.0",
-                    "retry_join": ["provider=aws region=${AWS::Region} tag_key=${ConsulEc2RetryTagKey} tag_value=${ConsulEc2RetryTagValue}"],
-                    "addresses": {
-                      "http": "0.0.0.0"
-                    },
-                    "ports": { "grpc": 8502 },
-                    "connect": {
-                      "enabled": true
-                    }
-                  }
+                content:
+                  "Fn::Sub":
+                    - |
+                      {
+                        "advertise_addr": "PrivateIpAddress",
+                        "bind_addr": "PrivateIpAddress",
+                        "node_name": "InstanceId",
+                        "datacenter": "${AWS::Region}",
+                        "server": false,
+                        "ui" : false,
+                        "leave_on_terminate" : true,
+                        "skip_leave_on_interrupt" : false,
+                        "disable_update_check": true,
+                        "log_level": "warn",
+                        "enable_local_script_checks": true,
+                        "data_dir": "/opt/consul/data",
+                        "client_addr": "0.0.0.0",
+                        "primary_datacenter": "${PrimaryRegion}",
+                        "retry_join": ["provider=aws region=${AWS::Region} tag_key=${ConsulEc2RetryTagKey} tag_value=${ConsulEc2RetryTagValue}"],
+                        "addresses": {
+                          "http": "0.0.0.0"
+                        },
+                        "ports": { "grpc": 8502 },
+                        "connect": {
+                          "enabled": true
+                        }
+                      }
+                    - PrimaryRegion: !If [ SpecifiesConsulRegion, !Ref ConsulPrimaryRegion, !Sub "${AWS::Region}"]
                 mode: 000644
               /etc/systemd/system/consul.service:
                 content: !Join
