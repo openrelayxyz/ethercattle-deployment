@@ -194,6 +194,9 @@ Parameters:
     Type: String
     Description: A bucket that has already been created to store logs in. Will create a subirectory flume folder.
     Default: ""
+  ReplicaClusterVersion:
+    Description: A high level version number for the replica cluster. Used for blue / green deployments
+    Default: 1
   ConsulEc2RetryTagKey:
     Description:
       The EC2 instance tag key to filter on when joining to other Consul
@@ -740,6 +743,7 @@ Resources:
                 infraName=${InfrastructureStack}
                 baseInfraName=${BaseInfrastructure}
                 network=${NetworkId}
+                ReplicaClusterVersion=${ReplicaClusterVersion}
                 AWS_REGION=${AWS::Region}
                 LOG_BLOCK_LIMIT=10000
                 FLUME_URL=${FlumeURL}" > /etc/systemd/system/ethcattle-vars
@@ -1987,6 +1991,7 @@ Resources:
                 infraName=${InfrastructureStack}
                 baseInfraName=${BaseInfrastructure}
                 network=${NetworkId}
+                ReplicaClusterVersion=${ReplicaClusterVersion}
                 AWS_REGION=${AWS::Region}
                 LOG_BLOCK_LIMIT=10000
                 FLUME_URL=${FlumeURL}" > /etc/systemd/system/ethcattle-vars
@@ -2227,7 +2232,7 @@ Resources:
 
                 export AWS_DEFAULT_REGION=${AWS::Region}
                 export AWS_REGION=${AWS::Region}
-                printf "KafkaHostname=${KafkaBrokerURL}\nKafkaTopic=${KafkaTopic}\nNetworkId=${NetworkId}\ninfraName=${InfrastructureStack}\nAWS_REGION=${AWS::Region}\n" > /etc/systemd/system/ethcattle-vars
+                printf "ReplicaClusterVersion=${ReplicaClusterVersion}\nKafkaHostname=${KafkaBrokerURL}\nKafkaTopic=${KafkaTopic}\nNetworkId=${NetworkId}\ninfraName=${InfrastructureStack}\nAWS_REGION=${AWS::Region}\n" > /etc/systemd/system/ethcattle-vars
 
                 if [ -f /usr/bin/replica-snapshot-hook ]
                 then
@@ -2803,6 +2808,7 @@ Resources:
                 infraName=${InfrastructureStack}
                 baseInfraName=${BaseInfrastructure}
                 network=${NetworkId}
+                ReplicaClusterVersion=${ReplicaClusterVersion}
                 AWS_REGION=${AWS::Region}
                 LOG_BLOCK_LIMIT=10000" > /etc/systemd/system/ethcattle-vars
 
