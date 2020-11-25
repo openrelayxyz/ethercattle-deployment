@@ -196,7 +196,8 @@ Parameters:
     Default: ""
   ReplicaClusterVersion:
     Description: A high level version number for the replica cluster. Used for blue / green deployments
-    Default: 1
+    Default: "1"
+    Type: String
   ConsulEc2RetryTagKey:
     Description:
       The EC2 instance tag key to filter on when joining to other Consul
