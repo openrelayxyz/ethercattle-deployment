@@ -346,22 +346,16 @@ Resources:
       AlarmDescription: "Alarms when all replicas are unhealthy"
       ComparisonOperator: "LessThanOrEqualToThreshold"
       EvaluationPeriods: 1
-      Metrics:
-        - Id: healthy
-          MetricStat:
-            Metric:
-              MetricName: "HealthyHostCount"
-              Namespace: "AWS/ApplicationELB"
-              Dimensions:
-                - Name: TargetGroup
-                  Value : !Sub ${RPCALBGroup.TargetGroupFullName}
-                - Name: LoadBalancer
-                  Value:
-                    "Fn::ImportValue": !Sub "${InfrastructureStack}-RPCALBName"
-            Period: 60
-            Stat: Maximum
-          Label: Remote Block Number
-          ReturnData: true
+      MetricName: "HealthyHostCount"
+      Namespace: "AWS/ApplicationELB"
+      Dimensions:
+        - Name: TargetGroup
+          Value : !Sub ${RPCALBGroup.TargetGroupFullName}
+        - Name: LoadBalancer
+          Value:
+            "Fn::ImportValue": !Sub "${InfrastructureStack}-RPCALBName"
+      Period: 60
+      Statistic: Maximum
       OKActions:
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
@@ -372,8 +366,9 @@ Resources:
     Properties:
       HealthCheckConfig:
         Type: CLOUDWATCH_METRIC
-        AlarmIdentifier: !Ref TargetGroupUnroutableAlarm
-        Region: !Sub ${AWS::Region}
+        AlarmIdentifier:
+          Name: !Ref TargetGroupUnroutableAlarm
+          Region: !Sub "${AWS::Region}"
         InsufficientDataHealthStatus: LastKnownStatus
 
 Outputs:
