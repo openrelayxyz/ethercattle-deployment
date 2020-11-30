@@ -81,6 +81,8 @@ Resources:
       HealthyThresholdCount: 5
       Port: 8545
       HealthCheckPort: !Ref ReplicaHealthCheckPort
+      Matcher:
+        HttpCode: "200,429"
       Protocol: HTTP
       VpcId:
         "Fn::ImportValue":
@@ -102,6 +104,7 @@ Resources:
       Name: !Sub "${ServiceName}.rpc.${HostedZone}"
       Region: !Sub ${AWS::Region}
       Type: A
+      HealthCheckId: !Ref DNSHealthCheck
       SetIdentifier: !Sub "${AWS::StackName}-${AWS::Region}"
   RPCALBRegionalDNS:
     Type: "AWS::Route53::RecordSet"
@@ -130,6 +133,7 @@ Resources:
       HostedZoneName: !Sub "${HostedZone}."
       Name: !Sub "*.${ServiceName}.rpc.${HostedZone}"
       Type: A
+      HealthCheckId: !Ref DNSHealthCheck
       Region: !Sub ${AWS::Region}
       SetIdentifier: !Sub "${AWS::StackName}-${AWS::Region}"
   GraphQLALBGroup:
@@ -163,6 +167,7 @@ Resources:
       Name: !Sub "${ServiceName}.graphql.${HostedZone}"
       Region: !Sub ${AWS::Region}
       Type: A
+      HealthCheckId: !Ref DNSHealthCheck
       SetIdentifier: !Sub "${AWS::StackName}-${AWS::Region}"
   GraphQLALBRegionalDNS:
     Type: "AWS::Route53::RecordSet"
@@ -191,6 +196,7 @@ Resources:
       HostedZoneName: !Sub "${HostedZone}."
       Name: !Sub "*.${ServiceName}.graphql.${HostedZone}"
       Type: A
+      HealthCheckId: !Ref DNSHealthCheck
       Region: !Sub ${AWS::Region}
       SetIdentifier: !Sub "${AWS::StackName}-${AWS::Region}"
   GraphQLALBListenerRule:
@@ -236,6 +242,7 @@ Resources:
       HostedZoneName: !Sub "${HostedZone}."
       Name: !Sub "${ServiceName}.ws.${HostedZone}"
       Region: !Sub ${AWS::Region}
+      HealthCheckId: !Ref DNSHealthCheck
       Type: A
       SetIdentifier: !Sub "${AWS::StackName}-${AWS::Region}"
   WebsocketsALBRegionalDNS:
@@ -265,6 +272,7 @@ Resources:
       HostedZoneName: !Sub "${HostedZone}."
       Name: !Sub "*.${ServiceName}.ws.${HostedZone}"
       Type: A
+      HealthCheckId: !Ref DNSHealthCheck
       Region: !Sub ${AWS::Region}
       SetIdentifier: !Sub "${AWS::StackName}-${AWS::Region}"
   WebsocketsALBListenerRule:
@@ -329,6 +337,44 @@ Resources:
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
       Threshold: 0
       TreatMissingData: breaching
+  TargetGroupUnroutableAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmActions:
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+      AlarmDescription: "Alarms when all replicas are unhealthy"
+      ComparisonOperator: "LessThanOrEqualToThreshold"
+      EvaluationPeriods: 1
+      Metrics:
+        - Id: healthy
+          MetricStat:
+            Metric:
+              MetricName: "HealthyHostCount"
+              Namespace: "AWS/ApplicationELB"
+              Dimensions:
+                - Name: TargetGroup
+                  Value : !Sub ${RPCALBGroup.TargetGroupFullName}
+                - Name: LoadBalancer
+                  Value:
+                    "Fn::ImportValue": !Sub "${InfrastructureStack}-RPCALBName"
+            Period: 60
+            Stat: Maximum
+          Label: Remote Block Number
+          ReturnData: true
+      OKActions:
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+      Threshold: 0
+      TreatMissingData: breaching
+  DNSHealthCheck:
+    Type: AWS::Route53::HealthCheck
+    Properties:
+      HealthCheckConfig:
+        Type: CLOUDWATCH_METRIC
+        AlarmIdentifier: !Ref TargetGroupUnroutableAlarm
+        Region: !Sub ${AWS::Region}
+        InsufficientDataHealthStatus: LastKnownStatus
 
 Outputs:
   ClusterId:
