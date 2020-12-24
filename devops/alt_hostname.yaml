@@ -290,6 +290,82 @@ Resources:
       ListenerArn:
         "Fn::ImportValue": !Sub "${InfrastructureStack}-RPCALBListener"
       Priority: !Sub "40${Priority}"
+  CompatALBGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckIntervalSeconds: 30
+      UnhealthyThresholdCount: 2
+      HealthyThresholdCount: 5
+      Port: 8001
+      HealthCheckPort: !Ref WSHealthCheckPort
+      Protocol: HTTP
+      VpcId:
+        "Fn::ImportValue":
+            !Sub "${InfrastructureStack}-VpcId"
+      Tags:
+        - Key: Service
+          Value: !Sub "${ServiceName}.compat.${HostedZone}"
+  CompatALBDNS:
+    Condition: IncludeRegionAgnosticDNS
+    Type: "AWS::Route53::RecordSet"
+    Properties:
+      AliasTarget:
+        DNSName:
+          "Fn::ImportValue": !Sub "${InfrastructureStack}-RPCALBDNS"
+        EvaluateTargetHealth: False
+        HostedZoneId:
+          "Fn::ImportValue": !Sub "${InfrastructureStack}-RPCALBCanonicalHostedZoneId"
+      HostedZoneName: !Sub "${HostedZone}."
+      Name: !Sub "${ServiceName}.compat.${HostedZone}"
+      Region: !Sub ${AWS::Region}
+      HealthCheckId: !Ref DNSHealthCheck
+      Type: A
+      SetIdentifier: !Sub "${AWS::StackName}-${AWS::Region}"
+  CompatALBRegionalDNS:
+    Type: "AWS::Route53::RecordSet"
+    Properties:
+      AliasTarget:
+        DNSName:
+          "Fn::ImportValue": !Sub "${InfrastructureStack}-RPCALBDNS"
+        EvaluateTargetHealth: False
+        HostedZoneId:
+          "Fn::ImportValue": !Sub "${InfrastructureStack}-RPCALBCanonicalHostedZoneId"
+      HostedZoneName: !Sub "${HostedZone}."
+      Name: !Sub "${ServiceName}.compat.${AWS::Region}.${HostedZone}"
+      Type: A
+      Weight: 1
+      SetIdentifier: !Sub "${AWS::StackName}-${AWS::Region}"
+  CompatALBWildcardDNS:
+    Condition: IncludeRegionAgnosticDNS
+    Type: "AWS::Route53::RecordSet"
+    Properties:
+      AliasTarget:
+        DNSName:
+          "Fn::ImportValue": !Sub "${InfrastructureStack}-RPCALBDNS"
+        EvaluateTargetHealth: False
+        HostedZoneId:
+          "Fn::ImportValue": !Sub "${InfrastructureStack}-RPCALBCanonicalHostedZoneId"
+      HostedZoneName: !Sub "${HostedZone}."
+      Name: !Sub "*.${ServiceName}.compat.${HostedZone}"
+      Type: A
+      HealthCheckId: !Ref DNSHealthCheck
+      Region: !Sub ${AWS::Region}
+      SetIdentifier: !Sub "${AWS::StackName}-${AWS::Region}"
+  CompatALBListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      Actions:
+      - Type: forward
+        TargetGroupArn: !Ref CompatALBGroup
+      Conditions:
+      - Field: host-header
+        HostHeaderConfig:
+          Values:
+          - !Sub "*${ServiceName}.compat.${HostedZone}"
+          - !Sub "*${ServiceName}.compat.${AWS::Region}.${HostedZone}"
+      ListenerArn:
+        "Fn::ImportValue": !Sub "${InfrastructureStack}-RPCALBListener"
+      Priority: !Sub "50${Priority}"
   UnHealthyHostCountAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
