@@ -4,7 +4,6 @@ Parameters:
   DiskSize:
     Default: '250'
     Description: Size of each node's chaindata storage volume in GiB
-    MaxValue: '1024'
     MinValue: '8'
     Type: Number
   ReplicaImageAMI:
