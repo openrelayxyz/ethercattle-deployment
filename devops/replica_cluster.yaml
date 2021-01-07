@@ -707,6 +707,7 @@ Resources:
                 totalm=$(free -m | awk '/^Mem:/{print $2}') ; echo $totalm
                 allocatesafe=$((totalm * 75 / 100))
 
+                sysctl -p || true
                 GETH_BIN="geth-linux-$ARCH"
                 LOGS_BIN="journald-cloudwatch-logs-$ARCH"
                 aws s3 cp s3://${S3GethBucketName}/${ECGethVersion}/$GETH_BIN /usr/bin/geth
@@ -1940,6 +1941,7 @@ Resources:
                 totalm=$(free -m | awk '/^Mem:/{print $2}') ; echo $totalm
                 allocatesafe=$((totalm * 75 / 100))
 
+                sysctl -p || true
                 GETH_BIN="geth-linux-$ARCH"
                 LOGS_BIN="journald-cloudwatch-logs-$ARCH"
                 aws s3 cp s3://${S3GethBucketName}/${ECGethVersion}/$GETH_BIN /usr/bin/geth
@@ -2220,6 +2222,7 @@ Resources:
                 totalm=$(free -m | awk '/^Mem:/{print $2}') ; echo $totalm
                 allocatesafe=$((totalm * 75 / 100))
 
+                sysctl -p || true
                 GETH_BIN="geth-linux-$ARCH"
                 aws s3 cp s3://${S3GethBucketName}/${ECGethVersion}/$GETH_BIN /usr/bin/geth
                 chmod +x /usr/bin/geth
@@ -2268,7 +2271,6 @@ Resources:
 
 
                 # Update from kafka
-
 
                 sudo -Eu geth /usr/bin/geth replica --cache=$allocatesafe ${ReplicaExtraFlags} ${FreezerFlags} --kafka.broker=$KAFKA_ESCAPED_URL""$SEP""avoid_leader=1 --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown
                 if ! sudo -Eu geth /usr/bin/geth verifystatetrie ${FreezerFlags} --datadir=/var/lib/ethereum ${SnapshotValidationThreshold}
@@ -2756,6 +2758,7 @@ Resources:
                 totalm=$(free -m | awk '/^Mem:/{print $2}') ; echo $totalm
                 allocatesafe=$((totalm * 75 / 100))
 
+                sysctl -p || true
                 GETH_BIN="geth-linux-$ARCH"
                 LOGS_BIN="journald-cloudwatch-logs-$ARCH"
                 aws s3 cp s3://${S3GethBucketName}/${ECGethVersion}/$GETH_BIN /usr/bin/geth
