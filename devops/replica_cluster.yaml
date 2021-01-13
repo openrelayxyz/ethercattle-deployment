@@ -2173,6 +2173,51 @@ Resources:
 
   SnapshotterLaunchTemplate:
     Type: AWS::EC2::LaunchTemplate
+    Metadata:
+      AWS::CloudFormation::Init:
+          configSets:
+            s_scripting:
+              - validate_block_catchup
+          validate_block_catchup:
+            files:
+              /tmp/validate_block_catchup.sh:
+                content:
+                  "Fn::Sub":
+                    - |
+                      #!/usr/bin/env bash
+
+                      set -e
+                      set -x
+
+                      # make sure that geth is able to start as a full node and catch up with peers
+                      sudo -Eu geth /usr/bin/geth ${MasterExtraFlags} --cache=$allocatesafe --light.maxpeers 0 --maxpeers 25 --rpc --rpcaddr 0.0.0.0 --rpcport 8545 --datadir=/var/lib/ethereum ${FreezerFlags} &
+                      pid=$!
+                      test_pass=0
+                      while [ $test_pass -le 1 ]
+                      do
+                        if curl -X POST --insecure -H "Content-Type: application/json" --data '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":64}' localhost:8545
+                        then
+                          test_pass=$(( $test_pass + 1 ))
+                        else
+                          test_pass=0
+                        fi
+                        sleep 10
+                      done
+                      START_BLOCK=$(curl -X POST --insecure -H "Content-Type: application/json" --data '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":64}' localhost:8545 | jq -r '.result')
+                      END_BLOCK=$(curl -X POST --insecure -H "Content-Type: application/json" --data '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":64}' localhost:8545 | jq -r '.result')
+                      while [[ "$((END_BLOCK - START_BLOCK))" -le "10" ]]; do
+                        END_BLOCK=$(curl -X POST --insecure -H "Content-Type: application/json" --data '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":64}' localhost:8545 | jq -r '.result')
+                        sleep 10
+                      done
+
+                      kill -HUP $pid
+                    - ClusterId:
+                        "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
+                      FreezerFlags: !If [ EnabledFreezerBucket, {"Fn::Sub": ["--datadir.ancient=s3://${Bucket}/${NetworkId}", {Bucket: !If [ HasFreezerBucket, !Ref FreezerBucket, {"Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket"} ]} ]}, ""]
+                mode: "000700"
+                owner: root
+                group: root
+
     Properties:
       LaunchTemplateData:
         ImageId: !If [HasReplicaImageAMI, !Ref ReplicaImageAMI, !FindInMap [RegionMap, !Ref "AWS::Region", AL2AMI]]
@@ -2220,7 +2265,7 @@ Resources:
                 sleep 21600 && if [ "${S3BackupLogsBucket}" != "" ] ; then cat /var/log/cloud-init-output.log | aws s3 cp - s3://${S3BackupLogsBucket}/ethercattle/${NetworkId}/failure-$(date '+%Y%m%d-%H%M%S').log || true; fi && poweroff &
 
                 totalm=$(free -m | awk '/^Mem:/{print $2}') ; echo $totalm
-                allocatesafe=$((totalm * 75 / 100))
+                export allocatesafe=$((totalm * 75 / 100))
 
                 sysctl -p || true
                 GETH_BIN="geth-linux-$ARCH"
@@ -2250,6 +2295,7 @@ Resources:
                 SEP=$(echo "${KafkaBrokerURL}" | grep -q "?" && echo "&" || echo "?")
                 SEP_ESCAPED=$(echo "${KafkaBrokerURL}" | grep -q "?" && echo "\\&" || echo "?")
                 KAFKA_ESCAPED_URL="$(printf "${KafkaBrokerURL}"| sed 's^&^\\&^g')"
+                /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource SnapshotterLaunchTemplate --configsets s_scripting --region ${AWS::Region} --role ${SnapshotterNodeRole}
 
                 # sudo -Eu geth /usr/bin/geth ${MasterExtraFlags} --cache=$allocatesafe --light.maxpeers 0 --maxpeers 0 --rpc --rpcaddr 0.0.0.0 --rpcport 8545 --datadir=/var/lib/ethereum ${FreezerFlags} &
                 # pid=$!
@@ -2379,7 +2425,7 @@ Resources:
                 # check on the snapshot, as it requires it to be able to validate blocks.
                 # We don't want this to end up in our final snapshot, but if we can't sync from
                 # the network we don't want to present this snapshot to the cluster.
-                if ! sudo -Eu geth /usr/bin/geth --cache=$allocatesafe ${ReplicaExtraFlags} ${FreezerFlags} --datadir=/var/lib/ethereum --exitwhensynced
+                if ! /tmp/validate_block_catchup.sh
                 then
                   if [ "${AggregatedNotifications}" != "" ]
                   then
@@ -2452,7 +2498,8 @@ Resources:
                     cat /var/log/cloud-init-output.log | aws s3 cp - s3://${S3BackupLogsBucket}/ethercattle/${NetworkId}/success-$(date '+%Y%m%d-%H%M%S').log || true
                   fi
                 poweroff
-              - ClusterId:
+              - SnapshotterNodeRole: !Ref SnapshotterNodeRole
+                ClusterId:
                   "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
                 FreezerFlags: !If [ EnabledFreezerBucket, {"Fn::Sub": ["--datadir.ancient=s3://${Bucket}/${NetworkId}", {Bucket: !If [ HasFreezerBucket, !Ref FreezerBucket, {"Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket"} ]} ]}, ""]
   # PrunerLaunchTemplate:
@@ -3062,6 +3109,7 @@ Resources:
             Effect: Allow
           - Action:
               - cloudformation:DescribeStacks
+              - cloudformation:DescribeStackResource
               - ec2:DescribeLaunchTemplates
               - ec2:DescribeSnapshotAttribute
               - ec2:CreateTags
