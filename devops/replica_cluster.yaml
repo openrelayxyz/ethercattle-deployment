@@ -1798,7 +1798,7 @@ Resources:
                 command: mkdir -p /opt/consul/data
           install_consul:
             sources:
-              /usr/bin/: https://releases.hashicorp.com/consul/1.7.0/consul_1.7.0_linux_amd64.zip
+              /usr/bin/: https://releases.hashicorp.com/consul/1.9.1/consul_1.9.1_linux_amd64.zip
           install_consul_template:
             sources:
               /usr/bin/: https://releases.hashicorp.com/consul-template/0.24.0/consul-template_0.24.0_linux_amd64.zip
@@ -1888,9 +1888,9 @@ Resources:
               06_get_envoy:
                 command: curl -L https://getenvoy.io/cli | bash -s -- -b /usr/local/bin
               07_fetch_envoy:
-                command: /usr/local/bin/getenvoy fetch standard:1.13.1
+                command: /usr/local/bin/getenvoy fetch standard:1.16.0
               08_install_envoy:
-                command: mv /root/.getenvoy/builds/standard/1.13.1/linux_glibc/bin/envoy /usr/bin/envoy
+                command: mv /root/.getenvoy/builds/standard/1.16.0/linux_glibc/bin/envoy /usr/bin/envoy
     Properties:
       LaunchTemplateData:
         ImageId: !If [HasReplicaImageAMI, !Ref ReplicaImageAMI, !FindInMap [RegionMap, !Ref "AWS::Region", AL2AMI]]
