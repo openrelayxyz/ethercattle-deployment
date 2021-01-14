@@ -2914,6 +2914,7 @@ Resources:
                 Value: !Sub "${KafkaTopic}-Fallback"
         SecurityGroupIds:
           - !Sub ${ReplicaNodeSecurityGroup.GroupId}
+          - !Sub ${MasterNodeSecurityGroup.GroupId}
           - !If [HasExtraSecurityGroup, !Ref ReplicaExtraSecurityGroup, !Ref 'AWS::NoValue']
         IamInstanceProfile:
           Name: !Ref ReplicaNodeInstanceProfile
