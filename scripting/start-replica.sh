@@ -3,6 +3,8 @@
 printf "log_group = \"${ReplicaLG}\"\nstate_file = \"/var/lib/journald-cloudwatch-logs/state\"" > /usr/local/etc/journald-cloudwatch-logs.conf
 
 rm /var/lib/ethereum/geth.ipc || true
+ln -s /etc/systemd/system/geth-replica.service /etc/systemd/system/geth.service
+systemctl daemon-reload
 systemctl enable geth-replica.service
 systemctl start geth-replica.service
 
