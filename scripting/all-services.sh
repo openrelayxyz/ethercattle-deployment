@@ -18,6 +18,9 @@ then
   OVERLAY_FLAG="--datadir.overlay=/var/lib/ethereum/overlay"
 fi
 
+totalm=$(free -m | awk '/^Mem:/{print $2}') ; echo $totalm
+allocatesafe=$((totalm * 75 / 100))
+
 printf "KafkaHostname=${KafkaBrokerURL}
 KafkaTopic=${KafkaTopic}
 NetworkId=${NetworkId}

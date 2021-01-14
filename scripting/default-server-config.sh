@@ -9,9 +9,6 @@ then
   ARCH="arm64"
 fi
 
-totalm=$(free -m | awk '/^Mem:/{print $2}') ; echo $totalm
-allocatesafe=$((totalm * 75 / 100))
-
 sysctl -p || true
 GETH_BIN="geth-linux-$ARCH"
 LOGS_BIN="journald-cloudwatch-logs-$ARCH"
