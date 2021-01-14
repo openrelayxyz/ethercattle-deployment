@@ -661,6 +661,405 @@ Resources:
 
   MasterLaunchTemplate:
     Type: AWS::EC2::LaunchTemplate
+
+    Metadata:
+      AWS::CloudFormation::Init:
+          configSets:
+            setup:
+              - setup_ethercattle_files
+
+          setup_ethercattle_files:
+            files:
+              /root/configure-server.sh:
+                content:
+                  "Fn::Sub":
+                    - |
+                      #!/usr/bin/env bash -xe
+                      yum install -y aws-cfn-bootstrap
+
+                      if [ "$(arch)" == "x86_64" ]
+                      then
+                        ARCH="amd64"
+                      elif [ "$(arch)" == "aarch64" ]
+                      then
+                        ARCH="arm64"
+                      fi
+
+                      totalm=$(free -m | awk '/^Mem:/{print $2}') ; echo $totalm
+                      allocatesafe=$((totalm * 75 / 100))
+
+                      sysctl -p || true
+                      GETH_BIN="geth-linux-$ARCH"
+                      LOGS_BIN="journald-cloudwatch-logs-$ARCH"
+                      aws s3 cp s3://${S3GethBucketName}/${ECGethVersion}/$GETH_BIN /usr/bin/geth
+                      aws s3 cp s3://${S3GethBucketName}/$LOGS_BIN /usr/local/bin/journald-cloudwatch-logs
+                      aws s3 cp s3://${S3GethBucketName}/peerManagerAuth.py /usr/local/bin/peerManager.py
+                      chmod +x /usr/bin/geth
+                      chmod +x /usr/local/bin/journald-cloudwatch-logs
+                      chmod +x /usr/local/bin/peerManager.py
+                      mkdir -p /var/lib/journald-cloudwatch-logs/
+                      mkdir -p /var/lib/ethereum
+                      mount -o barrier=0,data=writeback /dev/sdf /var/lib/ethereum
+                      mkdir -p /var/lib/ethereum/overlay
+                      resize2fs /dev/sdf
+                      useradd -r geth
+
+                      echo "/dev/sdf  /var/lib/ethereum    ext4   barrier=0,data=writeback,noatime  1   1" >> /etc/fstab
+
+                      if [ -e /dev/sdg ]
+                      then
+                        mkfs.ext4 /dev/sdg
+                        mount -o barrier=0,data=writeback /dev/sdg /var/lib/ethereum/overlay
+                        echo "/dev/sdg  /var/lib/ethereum/overlay    ext4   barrier=0,data=writeback,noatime  1   1" >> /etc/fstab
+                      fi
+                      ignore="$(readlink -f /dev/sd*) $(readlink -f /dev/xvd*)"
+                      cutignore="$(for x in $ignore ; do echo $x | cut -c -12; done | uniq)"
+                      devices="$(ls /dev/nvme* | grep -E 'n1$')"
+                      cutdevices="$(for x in $devices ; do echo $x | cut -c -12; done | uniq)"
+                      localnvme=$(for d in $cutdevices; do if ! $(echo "$cutignore"| grep -q $d) ; then echo $d; fi ; done)
+                      if [ ! -z "$localnvme" ]
+                      then
+                        mkfs.ext4 $localnvme
+                        mount -o barrier=0,data=writeback $localnvme /var/lib/ethereum/overlay
+                        echo "$localnvme  /var/lib/ethereum/overlay    ext4   barrier=0,data=writeback,noatime  1   1" >> /etc/fstab
+                      fi
+
+                      chown -R geth /var/lib/ethereum
+
+                      yum install -y https://s3.amazonaws.com/amazoncloudwatch-agent/amazon_linux/$ARCH/latest/amazon-cloudwatch-agent.rpm nmap-ncat jq python-pip jq fio || true
+                      pip install kafka-python
+                      /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -c ssm:${MetricsConfigParameter} -s
+
+                      crontab -l >  newcrontab || true
+                      echo "5,20,35,50 * * * * /usr/bin/sh -c 'for x in \$(ls /dev/sd*) ; do echo resizing \$(readlink -f \$x) if needed; /usr/sbin/resize2fs \$(readlink -f \$x) ; done'" >> newcrontab
+                      crontab newcrontab
+
+
+                      printf "[Unit]
+                      Description=journald-cloudwatch-logs
+                      Wants=basic.target
+                      After=basic.target network.target
+
+                      [Service]
+                      ExecStart=/usr/local/bin/journald-cloudwatch-logs /usr/local/etc/journald-cloudwatch-logs.conf
+                      KillMode=process
+                      Restart=on-failure
+                      RestartSec=42s" > /etc/systemd/system/journald-cloudwatch-logs.service
+
+                      echo "geth        hard nofile 500000" >> /etc/security/limits.conf
+                      echo "geth        soft nofile 500000" >> /etc/security/limits.conf
+
+                      systemctl daemon-reload
+
+                      sleep 5 #TODO- workaround for a deadlock on topic creation
+
+
+                      systemctl enable amazon-cloudwatch-agent.service
+                      systemctl start amazon-cloudwatch-agent.service
+                      systemctl enable journald-cloudwatch-logs
+                      systemctl start journald-cloudwatch-logs
+                    - ClusterId:
+                        "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
+                      ReplicaHTTPFlag:
+                          !If [HasReplicaHTTP, "--http --http.addr 0.0.0.0 --http.port 8545", ""]
+                      ReplicaGraphQLFlag:
+                          # Wow that's a lot of escaping!
+                          !If [HasReplicaGraphQL, "--graphql --graphql.vhosts \\\\\\'*\\\\\\'", ""]
+                      ReplicaWebsocketsFlag:
+                          !If [HasReplicaWebsockets, "--ws --ws.addr 0.0.0.0 --ws.port 8546", ""]
+                      BaseInfrastructure:
+                        "Fn::ImportValue": !Sub "${InfrastructureStack}-BaseInfrastructure"
+                      FreezerFlags: !If [ EnabledFreezerBucket, {"Fn::Sub": ["--datadir.ancient=s3://${Bucket}/${NetworkId}", {Bucket: !If [ HasFreezerBucket, !Ref FreezerBucket, {"Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket"} ]} ]}, ""]
+                      EventsTopicFlag: !If [ HasEventsTopic, !Sub "--kafka.event.topic ${EventsTopic}", ""]
+                mode: "000700"
+                owner: root
+                group: root
+              /root/service-configs.sh:
+                content:
+                  "Fn::Sub":
+                    - |
+                      #!/usr/bin/env bash -xe
+
+                      SEP=$(echo "${KafkaBrokerURL}" | grep -q "?" && echo "&" || echo "?")
+                      SEP_ESCAPED=$(echo "${KafkaBrokerURL}" | grep -q "?" && echo "\\&" || echo "?")
+                      KAFKA_ESCAPED_URL="$(printf "${KafkaBrokerURL}"| sed 's^&^\\\\&^g')"
+
+                      if [ -e /dev/sdg ]
+                      then
+                        OVERLAY_FLAG="--datadir.overlay=/var/lib/ethereum/overlay"
+                      fi
+                      ignore="$(readlink -f /dev/sd*) $(readlink -f /dev/xvd*)"
+                      cutignore="$(for x in $ignore ; do echo $x | cut -c -12; done | uniq)"
+                      devices="$(ls /dev/nvme* | grep -E 'n1$')"
+                      cutdevices="$(for x in $devices ; do echo $x | cut -c -12; done | uniq)"
+                      localnvme=$(for d in $cutdevices; do if ! $(echo "$cutignore"| grep -q $d) ; then echo $d; fi ; done)
+                      if [ ! -z "$localnvme" ]
+                      then
+                        OVERLAY_FLAG="--datadir.overlay=/var/lib/ethereum/overlay"
+                      fi
+
+                      printf "KafkaHostname=${KafkaBrokerURL}
+                      KafkaTopic=${KafkaTopic}
+                      NetworkId=${NetworkId}
+                      infraName=${InfrastructureStack}
+                      baseInfraName=${BaseInfrastructure}
+                      network=${NetworkId}
+                      ReplicaClusterVersion=${ReplicaClusterVersion}
+                      AWS_REGION=${AWS::Region}
+                      LOG_BLOCK_LIMIT=10000
+                      FLUME_URL=${FlumeURL}" > /etc/systemd/system/ethcattle-vars
+
+
+                      printf "[Unit]
+                      Description=Ethereum go client replica
+                      After=syslog.target network.target
+                      [Service]
+                      User=geth
+                      Group=geth
+                      Environment=HOME=/var/lib/ethereum
+                      EnvironmentFile=/etc/systemd/system/ethcattle-vars
+                      Type=simple
+                      LimitNOFILE=655360
+                      ExecStartPre=/usr/bin/bash -c '/usr/bin/geth replica --cache=$allocatesafe ${ReplicaExtraFlags} ${FreezerFlags}  $OVERLAY_FLAG --kafka.broker=$KAFKA_ESCAPED_URL""$SEP_ESCAPED""fetch.default=8388608\\&max.waittime=25\\&avoid_leader=1  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown 2>>/tmp/geth-stderr'
+                      ExecStart=/usr/bin/bash -c '/usr/bin/geth replica --cache=$allocatesafe ${ReplicaExtraFlags} ${FreezerFlags} $OVERLAY_FLAG --kafka.broker=$KAFKA_ESCAPED_URL --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --kafka.txpool.topic=\$infraName-txpool  --kafka.tx.topic=\$NetworkId-tx --replica.startup.age=45  ${ReplicaHTTPFlag} ${ReplicaGraphQLFlag} ${ReplicaWebsocketsFlag}'
+                      CPUSchedulingPolicy=fifo
+                      CPUSchedulingPriority=20
+                      TimeoutStopSec=90
+                      Restart=on-failure
+                      TimeoutStartSec=86400
+                      RestartSec=10s
+                      [Install]
+                      WantedBy=multi-user.target
+                      " > /etc/systemd/system/geth-replica.service
+
+                      printf "[Unit]
+                      Description=Ethereum go client replica
+                      After=syslog.target network.target
+                      [Service]
+                      User=geth
+                      Group=geth
+                      Environment=HOME=/var/lib/ethereum
+                      EnvironmentFile=/etc/systemd/system/ethcattle-vars
+                      Type=simple
+                      LimitNOFILE=655360
+                      # ExecStartPre=/usr/bin/geth replica ${FreezerFlags}  $OVERLAY_FLAG  --cache=$allocatesafe ${FreezerFlags} --kafka.broker=$KAFKA_ESCAPED_URL""$SEP_ESCAPED""fetch.default=8388608\\&max.waittime=25\\&avoid_leader=1  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown 2>>/tmp/geth-stderr || true
+                      ExecStart=/usr/bin/bash -c '/usr/bin/geth ${FreezerFlags}  $OVERLAY_FLAG  --cache=$allocatesafe ${FreezerFlags} --datadir=/var/lib/ethereum --light.maxpeers 0 --maxpeers 25 ${ReplicaHTTPFlag} ${ReplicaGraphQLFlag} ${ReplicaWebsocketsFlag}'
+                      CPUSchedulingPolicy=fifo
+                      CPUSchedulingPriority=20
+                      TimeoutStopSec=90
+                      TimeoutStartSec=86400
+                      RestartSec=10s
+                      [Install]
+                      WantedBy=multi-user.target
+                      " > /etc/systemd/system/geth-fallback.service
+
+
+                      printf "[Unit]
+                      Description=Ethereum go client
+                      After=syslog.target network.target
+
+                      [Service]
+                      User=geth
+                      Group=geth
+                      Environment=HOME=/var/lib/ethereum
+                      EnvironmentFile=/etc/systemd/system/ethcattle-vars
+                      Type=simple
+                      LimitNOFILE=655360
+                      ExecStartPre=/usr/bin/bash -c '/usr/bin/geth replica --cache=$allocatesafe ${ReplicaExtraFlags} ${FreezerFlags} $OVERLAY_FLAG --kafka.broker=$KAFKA_ESCAPED_URL""$SEP_ESCAPED""fetch.default=8388608\\&max.waittime=25\\&avoid_leader=1  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown 2>>/tmp/geth-stderr'
+                      ExecStart=/usr/bin/geth ${MasterExtraFlags} ${FreezerFlags} $OVERLAY_FLAG --light.maxpeers 0 --maxpeers 25 --gcmode=archive --kafka.broker=${KafkaBrokerURL}""$SEP""net.maxopenrequests=1\&message.send.max.retries=20000  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --kafka.txpool.topic=${InfrastructureStack}-txpool ${EventsTopicFlag}
+                      TimeoutStartSec=86400
+                      TimeoutStopSec=90
+                      OnFailure=poweroff.target
+
+                      [Install]
+                      WantedBy=multi-user.target
+                      " > /etc/systemd/system/geth-master.service
+
+
+                      printf "[Unit]
+                      Description=Ethereum go client transaction relay
+                      After=syslog.target network.target geth
+
+                      [Service]
+                      User=geth
+                      Group=geth
+                      Environment=HOME=/var/lib/ethereum
+                      Type=simple
+                      ExecStart=/usr/bin/geth txrelay --kafka.broker=${KafkaBrokerURL} --kafka.tx.topic=${NetworkId}-tx --kafka.tx.consumergroup=${KafkaTopic}-cg /var/lib/ethereum/geth.ipc
+                      TimeoutStopSec=90
+                      Restart=on-failure
+                      RestartSec=10s
+
+                      [Install]
+                      WantedBy=multi-user.target
+                      " > /etc/systemd/system/geth-tx.service
+
+                      printf "[Unit]
+                      Description=Geth Peer Monitoring
+                      After=syslog.target network.target geth
+
+                      [Service]
+                      User=geth
+                      Group=geth
+                      Environment=HOME=/var/lib/ethereum
+                      Type=simple
+                      ExecStart=/usr/local/bin/peerManager.py /var/lib/ethereum/geth.ipc ${NetworkId}-peerlist ${KafkaBrokerURL}
+                      KillMode=process
+                      TimeoutStopSec=90
+                      Restart=on-failure
+                      RestartSec=10s
+                      " > /etc/systemd/system/geth-peer-data.service
+
+                    - ClusterId:
+                        "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
+                      ReplicaHTTPFlag:
+                          !If [HasReplicaHTTP, "--http --http.addr 0.0.0.0 --http.port 8545", ""]
+                      ReplicaGraphQLFlag:
+                          # Wow that's a lot of escaping!
+                          !If [HasReplicaGraphQL, "--graphql --graphql.vhosts \\\\\\'*\\\\\\'", ""]
+                      ReplicaWebsocketsFlag:
+                          !If [HasReplicaWebsockets, "--ws --ws.addr 0.0.0.0 --ws.port 8546", ""]
+                      BaseInfrastructure:
+                        "Fn::ImportValue": !Sub "${InfrastructureStack}-BaseInfrastructure"
+                      FreezerFlags: !If [ EnabledFreezerBucket, {"Fn::Sub": ["--datadir.ancient=s3://${Bucket}/${NetworkId}", {Bucket: !If [ HasFreezerBucket, !Ref FreezerBucket, {"Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket"} ]} ]}, ""]
+                      EventsTopicFlag: !If [ HasEventsTopic, !Sub "--kafka.event.topic ${EventsTopic}", ""]
+                mode: "000700"
+                owner: root
+                group: root
+              /root/start-master.sh:
+                content:
+                  "Fn::Sub":
+                    - |
+                      #!/usr/bin/env bash -xe
+                      printf "log_group = \"${MasterLG}\"
+                      state_file = \"/var/lib/journald-cloudwatch-logs/state\"" > /usr/local/etc/journald-cloudwatch-logs.conf
+
+                      rm -f /var/lib/ethereum/geth/nodekey || true
+                      rm /var/lib/ethereum/geth.ipc || true
+
+                      systemctl enable geth-master.service
+                      systemctl enable geth-tx.service
+                      systemctl enable geth-peer-data.service
+
+                      systemctl start geth-master.service || true &
+                      sleep 5
+                      systemctl start geth-tx.service
+                      systemctl start geth-peer-data.service
+
+                    - ClusterId:
+                        "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
+                      ReplicaHTTPFlag:
+                          !If [HasReplicaHTTP, "--http --http.addr 0.0.0.0 --http.port 8545", ""]
+                      ReplicaGraphQLFlag:
+                          # Wow that's a lot of escaping!
+                          !If [HasReplicaGraphQL, "--graphql --graphql.vhosts \\\\\\'*\\\\\\'", ""]
+                      ReplicaWebsocketsFlag:
+                          !If [HasReplicaWebsockets, "--ws --ws.addr 0.0.0.0 --ws.port 8546", ""]
+                      BaseInfrastructure:
+                        "Fn::ImportValue": !Sub "${InfrastructureStack}-BaseInfrastructure"
+                      FreezerFlags: !If [ EnabledFreezerBucket, {"Fn::Sub": ["--datadir.ancient=s3://${Bucket}/${NetworkId}", {Bucket: !If [ HasFreezerBucket, !Ref FreezerBucket, {"Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket"} ]} ]}, ""]
+                      EventsTopicFlag: !If [ HasEventsTopic, !Sub "--kafka.event.topic ${EventsTopic}", ""]
+                mode: "000700"
+                owner: root
+                group: root
+              /root/start-replica.sh:
+                content:
+                  "Fn::Sub":
+                    - |
+                      #!/usr/bin/env bash -xe
+
+                      printf "log_group = \"${ReplicaLG}\"\nstate_file = \"/var/lib/journald-cloudwatch-logs/state\"" > /usr/local/etc/journald-cloudwatch-logs.conf
+
+                      rm /var/lib/ethereum/geth.ipc || true
+                      systemctl enable geth-replica.service
+                      systemctl start geth-replica.service
+
+                      /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource ReplicaLaunchTemplate --configsets cs_install --region ${AWS::Region}
+
+                      if [ -f /usr/bin/replica-hook ]
+                      then
+                        /usr/bin/replica-hook
+                      fi
+                    - ClusterId:
+                        "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
+                      ReplicaHTTPFlag:
+                          !If [HasReplicaHTTP, "--http --http.addr 0.0.0.0 --http.port 8545", ""]
+                      ReplicaGraphQLFlag:
+                          # Wow that's a lot of escaping!
+                          !If [HasReplicaGraphQL, "--graphql --graphql.vhosts \\\\\\'*\\\\\\'", ""]
+                      ReplicaWebsocketsFlag:
+                          !If [HasReplicaWebsockets, "--ws --ws.addr 0.0.0.0 --ws.port 8546", ""]
+                      BaseInfrastructure:
+                        "Fn::ImportValue": !Sub "${InfrastructureStack}-BaseInfrastructure"
+                      FreezerFlags: !If [ EnabledFreezerBucket, {"Fn::Sub": ["--datadir.ancient=s3://${Bucket}/${NetworkId}", {Bucket: !If [ HasFreezerBucket, !Ref FreezerBucket, {"Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket"} ]} ]}, ""]
+                      EventsTopicFlag: !If [ HasEventsTopic, !Sub "--kafka.event.topic ${EventsTopic}", ""]
+                mode: "000700"
+                owner: root
+                group: root
+              /root/start-fallback.sh:
+                content:
+                  "Fn::Sub":
+                    - |
+                      #!/usr/bin/env bash -xe
+
+                      printf "log_group = \"${FallBackLG}\"\nstate_file = \"/var/lib/journald-cloudwatch-logs/state\"" > /usr/local/etc/journald-cloudwatch-logs.conf
+
+                      rm /var/lib/ethereum/geth.ipc || true
+                      systemctl enable geth-fallback.service
+                      systemctl start geth-fallback.service
+
+
+                      /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource ReplicaLaunchTemplate --configsets cs_install --region ${AWS::Region}
+
+                      if [ -f /usr/bin/replica-hook ]
+                      then
+                        /usr/bin/replica-hook
+                      fi
+
+                    - ClusterId:
+                        "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
+                      ReplicaHTTPFlag:
+                          !If [HasReplicaHTTP, "--http --http.addr 0.0.0.0 --http.port 8545", ""]
+                      ReplicaGraphQLFlag:
+                          # Wow that's a lot of escaping!
+                          !If [HasReplicaGraphQL, "--graphql --graphql.vhosts \\\\\\'*\\\\\\'", ""]
+                      ReplicaWebsocketsFlag:
+                          !If [HasReplicaWebsockets, "--ws --ws.addr 0.0.0.0 --ws.port 8546", ""]
+                      BaseInfrastructure:
+                        "Fn::ImportValue": !Sub "${InfrastructureStack}-BaseInfrastructure"
+                      FreezerFlags: !If [ EnabledFreezerBucket, {"Fn::Sub": ["--datadir.ancient=s3://${Bucket}/${NetworkId}", {Bucket: !If [ HasFreezerBucket, !Ref FreezerBucket, {"Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket"} ]} ]}, ""]
+                      EventsTopicFlag: !If [ HasEventsTopic, !Sub "--kafka.event.topic ${EventsTopic}", ""]
+                mode: "000700"
+                owner: root
+                group: root
+              /root/loadtest-disk.sh:
+                content:
+                  "Fn::Sub":
+                    - |
+                      #!/usr/bin/env bash -xe
+                      fio --filename=/dev/sdf --rw=read --bs=128k --iodepth=32 --ioengine=libaio --prio=7 --prioclass=3 --thinktime=2 --rate_iops=$((${DiskSize} * 3 - 100 )) --direct=1 --name=volume-initialize &
+                      export AWS_DEFAULT_REGION=${AWS::Region}
+                      VOLUME_ID=$(aws ec2 describe-volumes --filters Name=attachment.instance-id,Values="$(curl http://169.254.169.254/latest/meta-data/instance-id)" | jq '.Volumes[] | select(. | .Attachments[0].Device == "/dev/sdf") | .VolumeId' -cr)
+                      wait
+                      aws ec2 modify-volume --volume-id $VOLUME_ID --volume-type gp2 &
+
+                    - ClusterId:
+                        "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
+                      ReplicaHTTPFlag:
+                          !If [HasReplicaHTTP, "--http --http.addr 0.0.0.0 --http.port 8545", ""]
+                      ReplicaGraphQLFlag:
+                          # Wow that's a lot of escaping!
+                          !If [HasReplicaGraphQL, "--graphql --graphql.vhosts \\\\\\'*\\\\\\'", ""]
+                      ReplicaWebsocketsFlag:
+                          !If [HasReplicaWebsockets, "--ws --ws.addr 0.0.0.0 --ws.port 8546", ""]
+                      BaseInfrastructure:
+                        "Fn::ImportValue": !Sub "${InfrastructureStack}-BaseInfrastructure"
+                      FreezerFlags: !If [ EnabledFreezerBucket, {"Fn::Sub": ["--datadir.ancient=s3://${Bucket}/${NetworkId}", {Bucket: !If [ HasFreezerBucket, !Ref FreezerBucket, {"Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket"} ]} ]}, ""]
+                      EventsTopicFlag: !If [ HasEventsTopic, !Sub "--kafka.event.topic ${EventsTopic}", ""]
+                mode: "000700"
+                owner: root
+                group: root
+
     Properties:
       LaunchTemplateData:
         ImageId: !If [HasReplicaImageAMI, !Ref ReplicaImageAMI, !FindInMap [RegionMap, !Ref "AWS::Region", AL2AMI]]
@@ -695,127 +1094,12 @@ Resources:
           "Fn::Base64":
             "Fn::Sub":
               - |
-                #!/bin/bash -xe
-                if [ "$(arch)" == "x86_64" ]
-                then
-                  ARCH="amd64"
-                elif [ "$(arch)" == "aarch64" ]
-                then
-                  ARCH="arm64"
-                fi
-
-                totalm=$(free -m | awk '/^Mem:/{print $2}') ; echo $totalm
-                allocatesafe=$((totalm * 75 / 100))
-
-                sysctl -p || true
-                GETH_BIN="geth-linux-$ARCH"
-                LOGS_BIN="journald-cloudwatch-logs-$ARCH"
-                aws s3 cp s3://${S3GethBucketName}/${ECGethVersion}/$GETH_BIN /usr/bin/geth
-                aws s3 cp s3://${S3GethBucketName}/$LOGS_BIN /usr/local/bin/journald-cloudwatch-logs
-                aws s3 cp s3://${S3GethBucketName}/peerManagerAuth.py /usr/local/bin/peerManager.py
-                chmod +x /usr/bin/geth
-                chmod +x /usr/local/bin/journald-cloudwatch-logs
-                chmod +x /usr/local/bin/peerManager.py
-                mkdir -p /var/lib/journald-cloudwatch-logs/
-                mkdir -p /var/lib/ethereum
-                mount -o barrier=0,data=writeback /dev/sdf /var/lib/ethereum
-                resize2fs /dev/sdf
-                useradd -r geth
-                chown -R geth /var/lib/ethereum
-                rm -f /var/lib/ethereum/geth/nodekey
-
-                echo "/dev/sdf  /var/lib/ethereum    ext4   defaults,noatime  1   1" >> /etc/fstab
-
-                yum install -y https://s3.amazonaws.com/amazoncloudwatch-agent/amazon_linux/$ARCH/latest/amazon-cloudwatch-agent.rpm nmap-ncat jq python-pip
-
-                pip install kafka-python
-
-                /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -c ssm:${MetricsConfigParameter} -s
-
-                SEP=$(echo "${KafkaBrokerURL}" | grep -q "?" && echo "&" || echo "?")
-                SEP_ESCAPED=$(echo "${KafkaBrokerURL}" | grep -q "?" && echo "\\&" || echo "?")
-                KAFKA_ESCAPED_URL="$(printf "${KafkaBrokerURL}"| sed 's^&^\\\\&^g')"
-                crontab -l >  newcrontab || true
-                echo "5,20,35,50 * * * * /usr/bin/sh -c 'for x in \$(ls /dev/sd*) ; do echo resizing \$(readlink -f \$x) if needed; /usr/sbin/resize2fs \$(readlink -f \$x) ; done'" >> newcrontab
-                crontab newcrontab
-
-                printf "KafkaHostname=${KafkaBrokerURL}
-                KafkaTopic=${KafkaTopic}
-                NetworkId=${NetworkId}
-                infraName=${InfrastructureStack}
-                baseInfraName=${BaseInfrastructure}
-                network=${NetworkId}
-                ReplicaClusterVersion=${ReplicaClusterVersion}
-                AWS_REGION=${AWS::Region}
-                LOG_BLOCK_LIMIT=10000
-                FLUME_URL=${FlumeURL}" > /etc/systemd/system/ethcattle-vars
-
-                printf "[Unit]
-                Description=Ethereum go client
-                After=syslog.target network.target
-
-                [Service]
-                User=geth
-                Group=geth
-                Environment=HOME=/var/lib/ethereum
-                EnvironmentFile=/etc/systemd/system/ethcattle-vars
-                Type=simple
-                LimitNOFILE=655360
-                ExecStartPre=/usr/bin/bash -c '/usr/bin/geth replica --cache=$allocatesafe ${ReplicaExtraFlags} ${FreezerFlags} --kafka.broker=$KAFKA_ESCAPED_URL""$SEP_ESCAPED""fetch.default=8388608\\&max.waittime=25\\&avoid_leader=1  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown 2>>/tmp/geth-stderr'
-                ExecStart=/usr/bin/geth ${MasterExtraFlags} ${FreezerFlags} --light.maxpeers 0 --maxpeers 25 --gcmode=archive --kafka.broker=${KafkaBrokerURL}""$SEP""net.maxopenrequests=1\&message.send.max.retries=20000  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --kafka.txpool.topic=${InfrastructureStack}-txpool ${EventsTopicFlag}
-                KillSignal=SIGINT
-                TimeoutStartSec=86400
-                TimeoutStopSec=90
-                OnFailure=poweroff.target
-
-                [Install]
-                WantedBy=multi-user.target
-                " > /etc/systemd/system/geth.service
-
-                printf "[Unit]
-                Description=Ethereum go client transaction relay
-                After=syslog.target network.target geth
-
-                [Service]
-                User=geth
-                Group=geth
-                Environment=HOME=/var/lib/ethereum
-                Type=simple
-                ExecStart=/usr/bin/geth txrelay --kafka.broker=${KafkaBrokerURL} --kafka.tx.topic=${NetworkId}-tx --kafka.tx.consumergroup=${KafkaTopic}-cg /var/lib/ethereum/geth.ipc
-                KillSignal=SIGINT
-                TimeoutStopSec=90
-                Restart=on-failure
-                RestartSec=10s
-
-                [Install]
-                WantedBy=multi-user.target
-                " > /etc/systemd/system/geth-tx.service
-
-                printf "[Unit]\nDescription=journald-cloudwatch-logs\nWants=basic.target\nAfter=basic.target network.target\n\n[Service]\nExecStart=/usr/local/bin/journald-cloudwatch-logs /usr/local/etc/journald-cloudwatch-logs.conf\nKillMode=process\nRestart=on-failure\nRestartSec=42s" > /etc/systemd/system/journald-cloudwatch-logs.service
-
-                printf "log_group = \"${MasterLG}\"\nstate_file = \"/var/lib/journald-cloudwatch-logs/state\"" > /usr/local/etc/journald-cloudwatch-logs.conf
-
-                printf "[Unit]\nDescription=Geth Peer Monitoring\nAfter=syslog.target network.target geth\n\n[Service]\nUser=geth\nGroup=geth\nEnvironment=HOME=/var/lib/ethereum\nType=simple\nExecStart=/usr/local/bin/peerManager.py /var/lib/ethereum/geth.ipc ${NetworkId}-peerlist ${KafkaBrokerURL}\nKillMode=process\nKillSignal=SIGINT\nTimeoutStopSec=90\nRestart=on-failure\nRestartSec=10s\n" > /etc/systemd/system/geth-peer-data.service
-
-                systemctl daemon-reload
-                systemctl enable amazon-cloudwatch-agent.service
-                systemctl start amazon-cloudwatch-agent.service
-                systemctl enable journald-cloudwatch-logs
-                systemctl start journald-cloudwatch-logs
-                sysctl -p || true
-                systemctl enable geth.service
-                systemctl enable geth-tx.service
-                systemctl enable geth-peer-data.service
-                systemctl start geth.service || true &
-                sleep 5
-                systemctl start geth-tx.service
-                systemctl start geth-peer-data.service
-
-                export AWS_DEFAULT_REGION=${AWS::Region}
-                VOLUME_ID=$(aws ec2 describe-volumes --filters Name=attachment.instance-id,Values="$(curl http://169.254.169.254/latest/meta-data/instance-id)" | jq '.Volumes[] | select(. | .Attachments[0].Device == "/dev/sdf") | .VolumeId' -cr)
-                sleep 1800 && aws ec2 modify-volume --volume-id $VOLUME_ID --volume-type gp2 &
-
-
+                #!/usr/bin/env bash -xe
+                /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource MasterLaunchTemplate --configsets setup --region ${AWS::Region}
+                /root/service-configs.sh
+                /root/configure-server.sh
+                /root/start-master.sh
+                /root/loadtest-disk.sh
               - ClusterId:
                   "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
                 BaseInfrastructure:
@@ -1927,156 +2211,12 @@ Resources:
           "Fn::Base64":
             "Fn::Sub":
               - |
-                #!/bin/bash -xe
-                yum install -y aws-cfn-bootstrap
-
-                if [ "$(arch)" == "x86_64" ]
-                then
-                  ARCH="amd64"
-                elif [ "$(arch)" == "aarch64" ]
-                then
-                  ARCH="arm64"
-                fi
-
-                totalm=$(free -m | awk '/^Mem:/{print $2}') ; echo $totalm
-                allocatesafe=$((totalm * 75 / 100))
-
-                sysctl -p || true
-                GETH_BIN="geth-linux-$ARCH"
-                LOGS_BIN="journald-cloudwatch-logs-$ARCH"
-                aws s3 cp s3://${S3GethBucketName}/${ECGethVersion}/$GETH_BIN /usr/bin/geth
-                aws s3 cp s3://${S3GethBucketName}/$LOGS_BIN /usr/local/bin/journald-cloudwatch-logs
-                chmod +x /usr/bin/geth
-                chmod +x /usr/local/bin/journald-cloudwatch-logs
-                mkdir -p /var/lib/journald-cloudwatch-logs/
-                mkdir -p /var/lib/ethereum
-                mount -o barrier=0,data=writeback /dev/sdf /var/lib/ethereum
-                mkdir -p /var/lib/ethereum/overlay
-                resize2fs /dev/sdf
-                useradd -r geth
-
-                echo "/dev/sdf  /var/lib/ethereum    ext4   barrier=0,data=writeback,noatime  1   1" >> /etc/fstab
-
-                if [ -e /dev/sdg ]
-                then
-                  mkfs.ext4 /dev/sdg
-                  mount -o barrier=0,data=writeback /dev/sdg /var/lib/ethereum/overlay
-                  echo "/dev/sdg  /var/lib/ethereum/overlay    ext4   barrier=0,data=writeback,noatime  1   1" >> /etc/fstab
-                  OVERLAY_FLAG="--datadir.overlay=/var/lib/ethereum/overlay"
-                fi
-                ignore="$(readlink -f /dev/sd*) $(readlink -f /dev/xvd*)"
-                cutignore="$(for x in $ignore ; do echo $x | cut -c -12; done | uniq)"
-                devices="$(ls /dev/nvme* | grep -E 'n1$')"
-                cutdevices="$(for x in $devices ; do echo $x | cut -c -12; done | uniq)"
-                localnvme=$(for d in $cutdevices; do if ! $(echo "$cutignore"| grep -q $d) ; then echo $d; fi ; done)
-                if [ ! -z "$localnvme" ]
-                then
-                  mkfs.ext4 $localnvme
-                  mount -o barrier=0,data=writeback $localnvme /var/lib/ethereum/overlay
-                  echo "$localnvme  /var/lib/ethereum/overlay    ext4   barrier=0,data=writeback,noatime  1   1" >> /etc/fstab
-                  OVERLAY_FLAG="--datadir.overlay=/var/lib/ethereum/overlay"
-                fi
-
-                chown -R geth /var/lib/ethereum
-
-                yum install -y https://s3.amazonaws.com/amazoncloudwatch-agent/amazon_linux/$ARCH/latest/amazon-cloudwatch-agent.rpm jq fio || true
-
-
-                /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -c ssm:${MetricsConfigParameter} -s
-
-                crontab -l >  newcrontab || true
-                echo "5,20,35,50 * * * * /usr/bin/sh -c 'for x in \$(ls /dev/sd*) ; do echo resizing \$(readlink -f \$x) if needed; /usr/sbin/resize2fs \$(readlink -f \$x) ; done'" >> newcrontab
-                crontab newcrontab
-
-                printf "KafkaHostname=${KafkaBrokerURL}
-                KafkaTopic=${KafkaTopic}
-                NetworkId=${NetworkId}
-                infraName=${InfrastructureStack}
-                baseInfraName=${BaseInfrastructure}
-                network=${NetworkId}
-                ReplicaClusterVersion=${ReplicaClusterVersion}
-                AWS_REGION=${AWS::Region}
-                LOG_BLOCK_LIMIT=10000
-                FLUME_URL=${FlumeURL}" > /etc/systemd/system/ethcattle-vars
-
-                SEP=$(echo "${KafkaBrokerURL}" | grep -q "?" && echo "&" || echo "?")
-                SEP_ESCAPED=$(echo "${KafkaBrokerURL}" | grep -q "?" && echo "\\&" || echo "?")
-                KAFKA_ESCAPED_URL="$(printf "${KafkaBrokerURL}"| sed 's^&^\\\\&^g')"
-                printf "[Unit]
-                Description=Ethereum go client replica
-                After=syslog.target network.target
-                [Service]
-                User=geth
-                Group=geth
-                Environment=HOME=/var/lib/ethereum
-                EnvironmentFile=/etc/systemd/system/ethcattle-vars
-                Type=simple
-                LimitNOFILE=655360
-                ExecStartPre=/usr/bin/bash -c '/usr/bin/geth replica --cache=$allocatesafe ${ReplicaExtraFlags} ${FreezerFlags}  $OVERLAY_FLAG --kafka.broker=$KAFKA_ESCAPED_URL""$SEP_ESCAPED""fetch.default=8388608\\&max.waittime=25\\&avoid_leader=1  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown 2>>/tmp/geth-stderr'
-                ExecStart=/usr/bin/bash -c '/usr/bin/geth replica --cache=$allocatesafe ${ReplicaExtraFlags} ${FreezerFlags} $OVERLAY_FLAG --kafka.broker=$KAFKA_ESCAPED_URL --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --kafka.txpool.topic=\$infraName-txpool  --kafka.tx.topic=\$NetworkId-tx --replica.startup.age=45  ${ReplicaHTTPFlag} ${ReplicaGraphQLFlag} ${ReplicaWebsocketsFlag}'
-                CPUSchedulingPolicy=fifo
-                CPUSchedulingPriority=20
-                KillSignal=SIGINT
-                TimeoutStopSec=90
-                Restart=on-failure
-                TimeoutStartSec=86400
-                RestartSec=10s
-                [Install]
-                WantedBy=multi-user.target
-                " > /etc/systemd/system/geth.service
-
-                printf "[Unit]\nDescription=journald-cloudwatch-logs\nWants=basic.target\nAfter=basic.target network.target\n\n[Service]\nExecStart=/usr/local/bin/journald-cloudwatch-logs /usr/local/etc/journald-cloudwatch-logs.conf\nKillMode=process\nRestart=on-failure\nRestartSec=42s" > /etc/systemd/system/journald-cloudwatch-logs.service
-
-                printf "log_group = \"${ReplicaLG}\"\nstate_file = \"/var/lib/journald-cloudwatch-logs/state\"" > /usr/local/etc/journald-cloudwatch-logs.conf
-
-                echo "geth        hard nofile 500000" >> /etc/security/limits.conf
-                echo "geth        soft nofile 500000" >> /etc/security/limits.conf
-                sysctl -w fs.file-max=12000500
-                sysctl -w fs.nr_open=20000500
-                # Set the maximum number of open file descriptors
-                ulimit -n 20000000
-
-                # Set the memory size for TCP with minimum, default and maximum thresholds
-                sysctl -w net.ipv4.tcp_mem='10000000 10000000 10000000'
-
-                # Set the receive buffer for each TCP connection with minumum, default and maximum thresholds
-                sysctl -w net.ipv4.tcp_rmem='1024 4096 16384'
-
-                # Set the TCP send buffer space with minumum, default and maximum thresholds
-                sysctl -w net.ipv4.tcp_wmem='1024 4096 16384'
-
-                # The maximum socket receive buffer sizemem_max=16384
-                sysctl -w net.core.rmem_max=16384
-
-                # The maximum socket send buffer size
-                sysctl -w net.core.wmem_max=16384
-
-                sysctl -w vm.swappiness=0
-
-                systemctl daemon-reload
-                systemctl enable geth.service
-                sleep 5 #TODO- workaround for a deadlock on topic creation
-                sysctl -p || true
-                rm /var/lib/ethereum/geth.ipc || true
-                systemctl start geth.service || true &
-                systemctl enable amazon-cloudwatch-agent.service
-                systemctl start amazon-cloudwatch-agent.service
-                systemctl enable journald-cloudwatch-logs
-                systemctl start journald-cloudwatch-logs
-
-
-                fio --filename=/dev/sdf --rw=read --bs=128k --iodepth=32 --ioengine=libaio --prio=7 --prioclass=3 --thinktime=2 --rate_iops=$((${DiskSize} * 3 - 100 )) --direct=1 --name=volume-initialize &
-
-                /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource ReplicaLaunchTemplate --configsets cs_install --region ${AWS::Region}
-
-                if [ -f /usr/bin/replica-hook ]
-                then
-                  /usr/bin/replica-hook
-                fi
-
-                export AWS_DEFAULT_REGION=${AWS::Region}
-                VOLUME_ID=$(aws ec2 describe-volumes --filters Name=attachment.instance-id,Values="$(curl http://169.254.169.254/latest/meta-data/instance-id)" | jq '.Volumes[] | select(. | .Attachments[0].Device == "/dev/sdf") | .VolumeId' -cr)
-                aws ec2 modify-volume --volume-id $VOLUME_ID --volume-type gp2 &
+                #!/usr/bin/env bash -xe
+                /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource MasterLaunchTemplate --configsets setup --region ${AWS::Region}
+                /root/service-configs.sh
+                /root/configure-server.sh
+                /root/start-replica.sh
+                /root/loadtest-disk.sh
               - ClusterId:
                   "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
                 ReplicaHTTPFlag:
@@ -2184,7 +2324,7 @@ Resources:
                 content:
                   "Fn::Sub":
                     - |
-                      #!/usr/bin/env bash
+                      #!/usr/bin/env bash -xe
 
                       set -e
                       set -x
@@ -2254,7 +2394,7 @@ Resources:
           "Fn::Base64":
             "Fn::Sub":
               - |
-                #!/bin/bash -xe
+                #!/usr/bin/env bash -xe
                 if [ "$(arch)" == "x86_64" ]
                 then
                   ARCH="amd64"
@@ -2542,7 +2682,7 @@ Resources:
   #         "Fn::Base64":
   #           "Fn::Sub":
   #             - |
-  #               #!/bin/bash -xe
+  #               #!/usr/bin/env bash -xe
   #               if [ "$(arch)" == "x86_64" ]
   #               then
   #                 ARCH="amd64"
@@ -2792,151 +2932,12 @@ Resources:
           "Fn::Base64":
             "Fn::Sub":
               - |
-                #!/bin/bash -xe
-                yum install -y aws-cfn-bootstrap
-                if [ "$(arch)" == "x86_64" ]
-                then
-                  ARCH="amd64"
-                elif [ "$(arch)" == "aarch64" ]
-                then
-                  ARCH="arm64"
-                fi
-
-                totalm=$(free -m | awk '/^Mem:/{print $2}') ; echo $totalm
-                allocatesafe=$((totalm * 75 / 100))
-
-                sysctl -p || true
-                GETH_BIN="geth-linux-$ARCH"
-                LOGS_BIN="journald-cloudwatch-logs-$ARCH"
-                aws s3 cp s3://${S3GethBucketName}/${ECGethVersion}/$GETH_BIN /usr/bin/geth
-                aws s3 cp s3://${S3GethBucketName}/$LOGS_BIN /usr/local/bin/journald-cloudwatch-logs
-                chmod +x /usr/bin/geth
-                chmod +x /usr/local/bin/journald-cloudwatch-logs
-                mkdir -p /var/lib/journald-cloudwatch-logs/
-                mkdir -p /var/lib/ethereum
-                mount -o barrier=0,data=writeback /dev/sdf /var/lib/ethereum
-                mkdir -p /var/lib/ethereum/overlay
-                resize2fs /dev/sdf
-                useradd -r geth
-
-                echo "/dev/sdf  /var/lib/ethereum    ext4   barrier=0,data=writeback,noatime  1   1" >> /etc/fstab
-
-                if [ -e /dev/sdg ]
-                then
-                  mkfs.ext4 /dev/sdg
-                  mount -o barrier=0,data=writeback /dev/sdg /var/lib/ethereum/overlay
-                  echo "/dev/sdg  /var/lib/ethereum/overlay    ext4   barrier=0,data=writeback,noatime  1   1" >> /etc/fstab
-                  OVERLAY_FLAG="--datadir.overlay=/var/lib/ethereum/overlay"
-                fi
-                ignore="$(readlink -f /dev/sd*) $(readlink -f /dev/xvd*)"
-                cutignore="$(for x in $ignore ; do echo $x | cut -c -12; done | uniq)"
-                devices="$(ls /dev/nvme* | grep -E 'n1$')"
-                cutdevices="$(for x in $devices ; do echo $x | cut -c -12; done | uniq)"
-                localnvme=$(for d in $cutdevices; do if ! $(echo "$cutignore"| grep -q $d) ; then echo $d; fi ; done)
-                #DisableOverlay until can figure out write back to overlay support for full nodes
-                #if [ ! -z "$localnvme" ]
-                #then
-                #  mkfs.ext4 $localnvme
-                #  mount -o barrier=0,data=writeback $localnvme /var/lib/ethereum/overlay
-                #  echo "$localnvme  /var/lib/ethereum/overlay    ext4   barrier=0,data=writeback,noatime  1   1" >> /etc/fstab
-                #  OVERLAY_FLAG="--datadir.overlay=/var/lib/ethereum/overlay"
-                #fi
-
-                chown -R geth /var/lib/ethereum
-
-                yum install -y https://s3.amazonaws.com/amazoncloudwatch-agent/amazon_linux/$ARCH/latest/amazon-cloudwatch-agent.rpm jq fio || true
-
-
-                /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -c ssm:${MetricsConfigParameter} -s
-
-                crontab -l >  newcrontab || true
-                echo "5,20,35,50 * * * * /usr/bin/sh -c 'for x in \$(ls /dev/sd*) ; do echo resizing \$(readlink -f \$x) if needed; /usr/sbin/resize2fs \$(readlink -f \$x) ; done'" >> newcrontab
-                crontab newcrontab
-
-                printf "KafkaHostname=${KafkaBrokerURL}
-                KafkaTopic=${KafkaTopic}
-                NetworkId=${NetworkId}
-                infraName=${InfrastructureStack}
-                baseInfraName=${BaseInfrastructure}
-                network=${NetworkId}
-                ReplicaClusterVersion=${ReplicaClusterVersion}
-                AWS_REGION=${AWS::Region}
-                LOG_BLOCK_LIMIT=10000" > /etc/systemd/system/ethcattle-vars
-
-                SEP=$(echo "${KafkaBrokerURL}" | grep -q "?" && echo "&" || echo "?")
-                SEP_ESCAPED=$(echo "${KafkaBrokerURL}" | grep -q "?" && echo "\\&" || echo "?")
-                printf "[Unit]
-                Description=Ethereum go client replica
-                After=syslog.target network.target
-                [Service]
-                User=geth
-                Group=geth
-                Environment=HOME=/var/lib/ethereum
-                EnvironmentFile=/etc/systemd/system/ethcattle-vars
-                Type=simple
-                LimitNOFILE=655360
-
-                ExecStart=/usr/bin/bash -c '/usr/bin/geth ${FreezerFlags} --datadir=/var/lib/ethereum --light.maxpeers 0 --maxpeers 25 ${ReplicaHTTPFlag} ${ReplicaGraphQLFlag} ${ReplicaWebsocketsFlag}'
-                CPUSchedulingPolicy=fifo
-                CPUSchedulingPriority=20
-                KillSignal=SIGINT
-                TimeoutStopSec=90
-                TimeoutStartSec=86400
-                RestartSec=10s
-                [Install]
-                WantedBy=multi-user.target
-                " > /etc/systemd/system/geth.service
-
-                # ExecStartPre=/usr/bin/geth replica ${FreezerFlags} --kafka.broker=${KafkaBrokerURL}""$SEP""fetch.default=8388608&max.waittime=25&avoid_leader=1 --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown 2>>/tmp/geth-stderr || true
-                printf "[Unit]\nDescription=journald-cloudwatch-logs\nWants=basic.target\nAfter=basic.target network.target\n\n[Service]\nExecStart=/usr/local/bin/journald-cloudwatch-logs /usr/local/etc/journald-cloudwatch-logs.conf\nKillMode=process\nRestart=on-failure\nRestartSec=42s" > /etc/systemd/system/journald-cloudwatch-logs.service
-
-                printf "log_group = \"${FallBackLG}\"\nstate_file = \"/var/lib/journald-cloudwatch-logs/state\"" > /usr/local/etc/journald-cloudwatch-logs.conf
-
-                echo "geth        hard nofile 500000" >> /etc/security/limits.conf
-                echo "geth        soft nofile 500000" >> /etc/security/limits.conf
-                sysctl -w fs.file-max=12000500
-                sysctl -w fs.nr_open=20000500
-                # Set the maximum number of open file descriptors
-                ulimit -n 20000000
-
-                # Set the memory size for TCP with minimum, default and maximum thresholds
-                sysctl -w net.ipv4.tcp_mem='10000000 10000000 10000000'
-
-                # Set the receive buffer for each TCP connection with minumum, default and maximum thresholds
-                sysctl -w net.ipv4.tcp_rmem='1024 4096 16384'
-
-                # Set the TCP send buffer space with minumum, default and maximum thresholds
-                sysctl -w net.ipv4.tcp_wmem='1024 4096 16384'
-
-                # The maximum socket receive buffer sizemem_max=16384
-                sysctl -w net.core.rmem_max=16384
-
-                # The maximum socket send buffer size
-                sysctl -w net.core.wmem_max=16384
-
-                sysctl -w vm.swappiness=0
-
-                systemctl daemon-reload
-                systemctl enable geth.service
-                sleep 5 #TODO- workaround for a deadlock on topic creation
-                rm /var/lib/ethereum/geth.ipc || true
-                sysctl -p || true
-                systemctl start geth.service || true &
-                systemctl enable amazon-cloudwatch-agent.service
-                systemctl start amazon-cloudwatch-agent.service
-                systemctl enable journald-cloudwatch-logs
-                systemctl start journald-cloudwatch-logs
-
-                fio --filename=/dev/sdf --rw=read --bs=128k --iodepth=32 --ioengine=libaio --prio=7 --prioclass=3 --thinktime=2 --rate_iops=$((${DiskSize} * 3 - 100 )) --direct=1 --name=volume-initialize &
-                if [ -f /usr/bin/replica-hook ]
-                then
-                  /usr/bin/replica-hook
-                fi
-                # Metadata pulled from the Replica LT, because it's the same anyway
-                /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource ReplicaLaunchTemplate --configsets cs_install --region ${AWS::Region}
-                export AWS_DEFAULT_REGION=${AWS::Region}
-                VOLUME_ID=$(aws ec2 describe-volumes --filters Name=attachment.instance-id,Values="$(curl http://169.254.169.254/latest/meta-data/instance-id)" | jq '.Volumes[] | select(. | .Attachments[0].Device == "/dev/sdf") | .VolumeId' -cr)
-                # aws ec2 modify-volume --volume-id $VOLUME_ID --volume-type gp2 &
+                #!/usr/bin/env bash -xe
+                /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource MasterLaunchTemplate --configsets setup --region ${AWS::Region}
+                /root/service-configs.sh
+                /root/configure-server.sh
+                /root/start-fallback.sh
+                /root/loadtest-disk.sh
               - ClusterId:
                   "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
                 ReplicaHTTPFlag:
