@@ -1,5 +1,4 @@
-#!/usr/bin/env bash
-
+#!/bin/bash -xe
 printf "log_group = \"${FallBackLG}\"\nstate_file = \"/var/lib/journald-cloudwatch-logs/state\"" > /usr/local/etc/journald-cloudwatch-logs.conf
 
 rm /var/lib/ethereum/geth.ipc || true
