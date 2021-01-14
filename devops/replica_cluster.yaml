@@ -1014,7 +1014,7 @@ Resources:
                       systemctl start geth-fallback.service
 
                       /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource ReplicaLaunchTemplate --configsets cs_install --region ${AWS::Region}
-                      
+
                       if [ -f /usr/bin/replica-hook ]
                       then
                       /usr/bin/replica-hook
@@ -2918,7 +2918,7 @@ Resources:
         IamInstanceProfile:
           Name: !Ref ReplicaNodeInstanceProfile
         KeyName: !If [HasKeyName, !Ref KeyName, !Ref 'AWS::NoValue']
-        CreditSpecification: !If [SmallReplica, {CpuCredits: standard}, !Ref 'AWS::NoValue']
+        # CreditSpecification: !If [SmallReplica, {CpuCredits: standard}, !Ref 'AWS::NoValue']
         BlockDeviceMappings:
         - DeviceName: "/dev/xvda"
           Ebs:
