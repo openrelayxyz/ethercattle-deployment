@@ -3434,6 +3434,7 @@ Resources:
               - ec2:CreateTags
               - ec2:DescribeInstances
               - ec2:DeleteVolume
+              - ec2:DetachVolume
               - ec2:DescribeVolumes
               - logs:PutLogEvents
               - logs:DescribeLogStreams
@@ -3447,7 +3448,7 @@ Resources:
     Properties:
       Code:
         S3Bucket: !Ref S3GethBucketName
-        S3Key: lambdaPackage-24.zip
+        S3Key: lambdaPackage-25.zip
       Description: "Cleanup old chaindata snapshots"
       Environment:
         Variables:

@@ -21,7 +21,7 @@ def handler(event, context):
     instance_details = ec2Client.describe_instances(InstanceIds=[event["detail"]["instance-id"]])
     instance_type = instance_details["Reservations"][0]["Instances"][0]["InstanceType"]
     family, size = instance_type.split(".")
-    if family.endswith("d"):
+    if not family.endswith("d"):
         cleanup_detached_volumes()  # Run just in case something got missed previously
         return
     tags = {i["Key"]: i["Value"] for i in instance_details["Reservations"][0]["Instances"][0]["Tags"]}
