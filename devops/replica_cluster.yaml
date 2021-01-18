@@ -3465,7 +3465,7 @@ Resources:
         source:
           -  "aws.ec2"
         detail-type:
-          - "EBS Volume Notification"
+          - "EC2 Instance State-change Notification"
       State: ENABLED
       Targets:
         - Arn: !Sub ${VolumeGCLambdaFunction.Arn}
