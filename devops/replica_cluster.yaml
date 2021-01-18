@@ -3435,6 +3435,11 @@ Resources:
               - ec2:DescribeInstances
               - ec2:DeleteVolume
               - ec2:DescribeVolumes
+              - logs:PutLogEvents
+              - logs:DescribeLogStreams
+              - logs:DescribeLogGroups
+              - logs:CreateLogStream
+              - logs:CreateLogGroup
             Resource: "*"
 
   VolumeGCLambdaFunction:
