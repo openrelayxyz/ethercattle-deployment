@@ -2219,7 +2219,7 @@ Resources:
             Iops: !If [ReplicaHDD, !Ref 'AWS::NoValue', 4000 ]
             Throughput: !If [ReplicaHDD, !Ref 'AWS::NoValue', 1000 ]
             SnapshotId: !Ref SnapshotId
-        - !If [ SmallReplica, {DeviceName: "/dev/sdg", Ebs: {VolumeSize: 25, VolumeType: gp3, IOPS: 3000, Throughput: 125}}, {DeviceName: "/dev/sdg", Ebs: {VolumeSize: 150, VolumeType: gp3, IOPS: 3000, Throughput: 125}}]
+        - !If [ SmallReplica, {DeviceName: "/dev/sdg", Ebs: {VolumeSize: 25, VolumeType: gp3, Iops: 3000, Throughput: 125}}, {DeviceName: "/dev/sdg", Ebs: {VolumeSize: 150, VolumeType: gp3, Iops: 3000, Throughput: 125}}]
         UserData:
           "Fn::Base64":
             "Fn::Sub":
@@ -2944,7 +2944,7 @@ Resources:
             Iops: !If [ReplicaHDD, !Ref 'AWS::NoValue', 4000 ]
             Throughput: 1000
             SnapshotId: !Ref SnapshotId
-        - !If [ SmallReplica, {DeviceName: "/dev/sdg", Ebs: {VolumeSize: 25, VolumeType: gp3, IOPS: 3000, Throughput: 125}}, {DeviceName: "/dev/sdg", Ebs: {VolumeSize: 150, VolumeType: gp3, IOPS: 3000, Throughput: 125}}]
+        - !If [ SmallReplica, {DeviceName: "/dev/sdg", Ebs: {VolumeSize: 25, VolumeType: gp3, Iops: 3000, Throughput: 125}}, {DeviceName: "/dev/sdg", Ebs: {VolumeSize: 150, VolumeType: gp3, Iops: 3000, Throughput: 125}}]
         UserData:
           "Fn::Base64":
             "Fn::Sub":
