@@ -4,6 +4,7 @@ state_file = \"/var/lib/journald-cloudwatch-logs/state\"" > /usr/local/etc/journ
 
 rm -f /var/lib/ethereum/geth/nodekey || true
 rm /var/lib/ethereum/geth.ipc || true
+rm /etc/systemd/system/geth.service || true
 ln -s /etc/systemd/system/geth-master.service /etc/systemd/system/geth.service
 systemctl daemon-reload
 systemctl enable geth-master.service

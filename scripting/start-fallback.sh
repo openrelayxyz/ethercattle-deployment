@@ -2,6 +2,7 @@
 printf "log_group = \"${FallBackLG}\"\nstate_file = \"/var/lib/journald-cloudwatch-logs/state\"" > /usr/local/etc/journald-cloudwatch-logs.conf
 
 rm /var/lib/ethereum/geth.ipc || true
+/etc/systemd/system/geth.service || true
 ln -s /etc/systemd/system/geth-fallback.service /etc/systemd/system/geth.service
 systemctl daemon-reload
 systemctl enable geth-fallback.service
