@@ -20,19 +20,13 @@ chmod +x /usr/local/bin/journald-cloudwatch-logs
 chmod +x /usr/local/bin/peerManager.py
 mkdir -p /var/lib/journald-cloudwatch-logs/
 mkdir -p /var/lib/ethereum
-mount -o barrier=0,data=writeback /dev/sdf /var/lib/ethereum
+mount -o barrier=0,data=writeback,noatime /dev/sdf /var/lib/ethereum
 mkdir -p /var/lib/ethereum/overlay
 resize2fs /dev/sdf
 useradd -r geth
 
 echo "/dev/sdf  /var/lib/ethereum    ext4   barrier=0,data=writeback,noatime  1   1" >> /etc/fstab
 
-if [ -e /dev/sdg ]
-then
-  mkfs.ext4 /dev/sdg
-  mount -o barrier=0,data=writeback /dev/sdg /var/lib/ethereum/overlay
-  echo "/dev/sdg  /var/lib/ethereum/overlay    ext4   barrier=0,data=writeback,noatime  1   1" >> /etc/fstab
-fi
 ignore="$(readlink -f /dev/sd*) $(readlink -f /dev/xvd*)"
 cutignore="$(for x in $ignore ; do echo $x | cut -c -12; done | uniq)"
 devices="$(ls /dev/nvme* | grep -E 'n1$')"
@@ -43,6 +37,11 @@ then
   mkfs.ext4 $localnvme
   mount -o barrier=0,data=writeback $localnvme /var/lib/ethereum/overlay
   echo "$localnvme  /var/lib/ethereum/overlay    ext4   barrier=0,data=writeback,noatime  1   1" >> /etc/fstab
+elif [ -e /dev/sdg ]
+then
+  mkfs.ext4 /dev/sdg
+  mount -o barrier=0,data=writeback /dev/sdg /var/lib/ethereum/overlay
+  echo "/dev/sdg  /var/lib/ethereum/overlay    ext4   barrier=0,data=writeback,noatime  1   1" >> /etc/fstab
 fi
 
 chown -R geth /var/lib/ethereum

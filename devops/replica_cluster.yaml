@@ -15,6 +15,7 @@ Parameters:
     AllowedValues:
     - standard
     - gp2
+    - gp3
     - st1
     - sc1
     Default: gp2
@@ -374,12 +375,13 @@ Mappings:
         - InstanceType: t3a.medium
     Replica:
       full:
-        - InstanceType: m5ad.xlarge
-        - InstanceType: m5d.xlarge
-        - InstanceType: m5dn.xlarge
         - InstanceType: r5d.xlarge
         - InstanceType: r5dn.xlarge
         - InstanceType: r5ad.xlarge
+        - InstanceType: r5.xlarge
+        - InstanceType: r5n.xlarge
+        - InstanceType: r5a.xlarge
+        - InstanceType: r5b.xlarge
         # - InstanceType: c5d.xlarge
         # - InstanceType: c5ad.2xlarge
       medium:
@@ -686,6 +688,11 @@ Resources:
                       fi
 
                       sysctl -p || true
+
+                      curl "https://awscli.amazonaws.com/awscli-exe-linux-$(arch).zip" -o "awscliv2.zip"
+                      unzip awscliv2.zip
+                      ./aws/install
+
                       GETH_BIN="geth-linux-$ARCH"
                       LOGS_BIN="journald-cloudwatch-logs-$ARCH"
                       aws s3 cp s3://${S3GethBucketName}/${ECGethVersion}/$GETH_BIN /usr/bin/geth
@@ -703,12 +710,6 @@ Resources:
 
                       echo "/dev/sdf  /var/lib/ethereum    ext4   barrier=0,data=writeback,noatime  1   1" >> /etc/fstab
 
-                      if [ -e /dev/sdg ]
-                      then
-                        mkfs.ext4 /dev/sdg
-                        mount -o barrier=0,data=writeback /dev/sdg /var/lib/ethereum/overlay
-                        echo "/dev/sdg  /var/lib/ethereum/overlay    ext4   barrier=0,data=writeback,noatime  1   1" >> /etc/fstab
-                      fi
                       ignore="$(readlink -f /dev/sd*) $(readlink -f /dev/xvd*)"
                       cutignore="$(for x in $ignore ; do echo $x | cut -c -12; done | uniq)"
                       devices="$(ls /dev/nvme* | grep -E 'n1$')"
@@ -719,6 +720,11 @@ Resources:
                         mkfs.ext4 $localnvme
                         mount -o barrier=0,data=writeback $localnvme /var/lib/ethereum/overlay
                         echo "$localnvme  /var/lib/ethereum/overlay    ext4   barrier=0,data=writeback,noatime  1   1" >> /etc/fstab
+                      elif [ -e /dev/sdg ]
+                      then
+                        mkfs.ext4 /dev/sdg
+                        mount -o barrier=0,data=writeback /dev/sdg /var/lib/ethereum/overlay
+                        echo "/dev/sdg  /var/lib/ethereum/overlay    ext4   barrier=0,data=writeback,noatime  1   1" >> /etc/fstab
                       fi
 
                       chown -R geth /var/lib/ethereum
@@ -1040,11 +1046,11 @@ Resources:
                   "Fn::Sub":
                     - |
                       #!/bin/bash -xe
-                      fio --filename=/dev/sdf --rw=read --bs=128k --iodepth=32 --ioengine=libaio --prio=7 --prioclass=3 --thinktime=2 --rate_iops=$((${DiskSize} * 3 - 100 )) --direct=1 --name=volume-initialize &
+                      fio --filename=/dev/sdf --rw=read --bs=128k --iodepth=32 --ioengine=libaio --prio=7 --prioclass=3 --thinktime=2 --rate_iops=4000 --direct=1 --name=volume-initialize &
                       export AWS_DEFAULT_REGION=${AWS::Region}
                       VOLUME_ID=$(aws ec2 describe-volumes --filters Name=attachment.instance-id,Values="$(curl http://169.254.169.254/latest/meta-data/instance-id)" | jq '.Volumes[] | select(. | .Attachments[0].Device == "/dev/sdf") | .VolumeId' -cr)
                       wait
-                      aws ec2 modify-volume --volume-id $VOLUME_ID --volume-type gp2 &
+                      /usr/local/bin/aws ec2 modify-volume --volume-id $VOLUME_ID --volume-type gp3 --iops 3000 --throughput 125 &
 
                     - ClusterId:
                         "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
@@ -1090,8 +1096,9 @@ Resources:
         - DeviceName: "/dev/sdf"
           Ebs:
             VolumeSize: !Ref DiskSize
-            VolumeType: io1
-            Iops: !GetAtt VolumeIOPS.Value
+            VolumeType: gp3
+            Iops: 4000
+            Throughput: 1000
             SnapshotId: !Ref SnapshotId
         UserData:
           "Fn::Base64":
@@ -2187,6 +2194,8 @@ Resources:
             Tags:
               - Key: Name
                 Value: !Sub "${KafkaTopic}-Replica"
+              - Key: VOLUME_MGMT_GROUP
+                Value: !Sub ${AWS::StackName}
           - ResourceType: volume
             Tags:
               - Key: Name
@@ -2206,10 +2215,11 @@ Resources:
         - DeviceName: "/dev/sdf"
           Ebs:
             VolumeSize: !If [ReplicaHDD, !GetAtt HDDSize.Value, !Ref DiskSize]
-            VolumeType: !If [ReplicaHDD, !Ref ReplicaDiskType, "io1"]
-            Iops: !If [ReplicaHDD, !Ref 'AWS::NoValue', !GetAtt VolumeIOPS.Value ]
+            VolumeType: !If [ReplicaHDD, !Ref ReplicaDiskType, "gp3"]
+            Iops: !If [ReplicaHDD, !Ref 'AWS::NoValue', 4000 ]
+            Throughput: !If [ReplicaHDD, !Ref 'AWS::NoValue', 1000 ]
             SnapshotId: !Ref SnapshotId
-        - !If [ SmallReplica, {DeviceName: "/dev/sdg", Ebs: {VolumeSize: 25, VolumeType: gp2}}, !Ref 'AWS::NoValue']
+        - !If [ SmallReplica, {DeviceName: "/dev/sdg", Ebs: {VolumeSize: 25, VolumeType: gp3, IOPS: 3000, Throughput: 125}}, {DeviceName: "/dev/sdg", Ebs: {VolumeSize: 150, VolumeType: gp3, IOPS: 3000, Throughput: 125}}]
         UserData:
           "Fn::Base64":
             "Fn::Sub":
@@ -2302,7 +2312,7 @@ Resources:
     Type: AWS::Logs::SubscriptionFilter
     Properties:
       DestinationArn: !Sub ${ReplicaLogMetricsFunction.Arn}
-      FilterPattern: '{$.systemdUnit = "geth.service" || $.systemdUnit="proxy.service"}'
+      FilterPattern: '{$.systemdUnit = "geth.service" || $.systemdUnit="proxy.service" || $.systemdUnit="geth-replica.service"}'
       LogGroupName: !Ref ReplicaLG
   ReplicaLogMetricFunctionInvokePermission:
     Type: AWS::Lambda::Permission
@@ -2390,8 +2400,9 @@ Resources:
         - DeviceName: "/dev/sdf"
           Ebs:
             VolumeSize: !Ref DiskSize
-            VolumeType: io1
-            Iops: !GetAtt VolumeIOPS.Value
+            VolumeType: gp3
+            Iops: 4000
+            Throughput: 1000
             SnapshotId: !Ref SnapshotId
         UserData:
           "Fn::Base64":
@@ -2674,8 +2685,9 @@ Resources:
   #       - DeviceName: "/dev/sdf"
   #         Ebs:
   #           VolumeSize: !Ref DiskSize
-  #           VolumeType: io1
-  #           Iops: !GetAtt VolumeIOPS.Value
+  #           VolumeType: gp3
+  #           Iops:  4000
+  #           Throughput: 1000
   #           SnapshotId: !Ref SnapshotId
   #       - DeviceName: "/dev/sdg"
   #         Ebs:
@@ -2928,10 +2940,11 @@ Resources:
         - DeviceName: "/dev/sdf"
           Ebs:
             VolumeSize: !If [ReplicaHDD, !GetAtt HDDSize.Value, !Ref DiskSize]
-            VolumeType: !If [ReplicaHDD, !Ref ReplicaDiskType, "io1"]
-            Iops: !If [ReplicaHDD, !Ref 'AWS::NoValue', !GetAtt VolumeIOPS.Value ]
+            VolumeType: !If [ReplicaHDD, !Ref ReplicaDiskType, "gp3"]
+            Iops: !If [ReplicaHDD, !Ref 'AWS::NoValue', 4000 ]
+            Throughput: 1000
             SnapshotId: !Ref SnapshotId
-        - !If [ SmallReplica, {DeviceName: "/dev/sdg", Ebs: {VolumeSize: 25, VolumeType: gp2}}, !Ref 'AWS::NoValue']
+        - !If [ SmallReplica, {DeviceName: "/dev/sdg", Ebs: {VolumeSize: 25, VolumeType: gp3, IOPS: 3000, Throughput: 125}}, {DeviceName: "/dev/sdg", Ebs: {VolumeSize: 150, VolumeType: gp3, IOPS: 3000, Throughput: 125}}]
         UserData:
           "Fn::Base64":
             "Fn::Sub":
@@ -3389,6 +3402,81 @@ Resources:
       Action: 'lambda:InvokeFunction'
       Principal: events.amazonaws.com
       SourceArn: !Sub ${RemoteMetricsSchedulerRule.Arn}
+
+
+
+
+  VolumeGCLambdaRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Action:
+          - sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service:
+            - lambda.amazonaws.com
+        Version: '2012-10-17'
+  VolumeGCLambdaPolicy:
+    Type: "AWS::IAM::Policy"
+    Properties:
+      Roles:
+        - !Ref VolumeGCLambdaRole
+      PolicyName: !Sub "VolumeGCLambdaPolicy${AWS::StackName}"
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - tag:GetResources
+              - tag:TagResources
+              - ec2:CreateTags
+              - ec2:DescribeInstances
+              - ec2:DeleteVolume
+              - ec2:DescribeVolumes
+            Resource: "*"
+
+  VolumeGCLambdaFunction:
+    Type: "AWS::Lambda::Function"
+    Properties:
+      Code:
+        S3Bucket: !Ref S3GethBucketName
+        S3Key: lambdaPackage-22.zip
+      Description: "Cleanup old chaindata snapshots"
+      Environment:
+        Variables:
+          TAG_NAME: VOLUME_MGMT_GROUP
+          TAG_VALUE: !Sub ${AWS::StackName}
+          VOLUME_NAME: /dev/sdg
+      Handler: "volumeGC.handler"
+      Role: !Sub ${VolumeGCLambdaRole.Arn}
+      Runtime: python3.7
+
+  VolumeGCSchedulerRule:
+    Type: AWS::Events::Rule
+    Properties:
+      EventPattern:
+        source:
+          -  "aws.ec2"
+        detail-type:
+          - "EBS Volume Notification"
+        detail:
+          "state":
+            - "running"
+      State: ENABLED
+      Targets:
+        - Arn: !Sub ${VolumeGCLambdaFunction.Arn}
+          Id: !Sub "vgc-${KafkaTopic}"
+
+  VolumeGCInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Sub ${VolumeGCLambdaFunction.Arn}
+      Action: 'lambda:InvokeFunction'
+      Principal: events.amazonaws.com
+      SourceArn: !Sub ${VolumeGCSchedulerRule.Arn}
+
 
 
   CloudwatchDashboard:
