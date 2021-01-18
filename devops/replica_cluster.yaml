@@ -3442,7 +3442,7 @@ Resources:
     Properties:
       Code:
         S3Bucket: !Ref S3GethBucketName
-        S3Key: lambdaPackage-22.zip
+        S3Key: lambdaPackage-23.zip
       Description: "Cleanup old chaindata snapshots"
       Environment:
         Variables:
