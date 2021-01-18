@@ -32,9 +32,9 @@ def handler(event, context):
     # TODO: Tag volume, detach volume, subsequent event will watch for detach transition and delete
     ec2Client.create_tags(Resources=[volumes[os.environ["VOLUME_NAME"]]], Tags=[{"Key": "DELETE_ON_DETACH", "Value": "True"}])
     ec2Client.detach_volume(
-        Device: os.environ["VOLUME_NAME"],
-        InstanceId: event["detail"]["instance-id"],
-        VolumeId: volumes[os.environ["VOLUME_NAME"]],
+        Device=os.environ["VOLUME_NAME"],
+        InstanceId=event["detail"]["instance-id"],
+        VolumeId=volumes[os.environ["VOLUME_NAME"]],
     )
     while ec2Client.describe_volumes(VolumeIds=[volumes[os.environ["VOLUME_NAME"]]])["Volumes"][0]["State"] != "available":
         time.sleep(0.5)
