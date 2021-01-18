@@ -3466,9 +3466,6 @@ Resources:
           -  "aws.ec2"
         detail-type:
           - "EBS Volume Notification"
-        detail:
-          "state":
-            - "running"
       State: ENABLED
       Targets:
         - Arn: !Sub ${VolumeGCLambdaFunction.Arn}
