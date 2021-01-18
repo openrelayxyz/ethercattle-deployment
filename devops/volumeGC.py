@@ -29,6 +29,9 @@ def handler(event, context):
         cleanup_detached_volumes()  # Run just in case something got missed previously
         return
     volumes = {a["DeviceName"]: a["Ebs"]["VolumeId"] for a in instance_details["Reservations"][0]["Instances"][0]["BlockDeviceMappings"]}
+    if os.environ["VOLUME_NAME"] not in volumes:
+        cleanup_detached_volumes()  # Last attempt probably timed out
+        return
     # TODO: Tag volume, detach volume, subsequent event will watch for detach transition and delete
     ec2Client.create_tags(Resources=[volumes[os.environ["VOLUME_NAME"]]], Tags=[{"Key": "DELETE_ON_DETACH", "Value": "True"}])
     ec2Client.detach_volume(
