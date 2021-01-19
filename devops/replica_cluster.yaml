@@ -674,7 +674,7 @@ Resources:
                 content:
                   "Fn::Sub":
                     - |
-                      #!/usr/bin/env bash -xe
+                      #!/bin/bash -xe
                       yum install -y aws-cfn-bootstrap
 
                       if [ "$(arch)" == "x86_64" ]
@@ -684,9 +684,6 @@ Resources:
                       then
                         ARCH="arm64"
                       fi
-
-                      totalm=$(free -m | awk '/^Mem:/{print $2}') ; echo $totalm
-                      allocatesafe=$((totalm * 75 / 100))
 
                       sysctl -p || true
                       GETH_BIN="geth-linux-$ARCH"
@@ -778,7 +775,7 @@ Resources:
                 content:
                   "Fn::Sub":
                     - |
-                      #!/usr/bin/env bash -xe
+                      #!/bin/bash -xe
 
                       SEP=$(echo "${KafkaBrokerURL}" | grep -q "?" && echo "&" || echo "?")
                       SEP_ESCAPED=$(echo "${KafkaBrokerURL}" | grep -q "?" && echo "\\&" || echo "?")
@@ -797,6 +794,9 @@ Resources:
                       then
                         OVERLAY_FLAG="--datadir.overlay=/var/lib/ethereum/overlay"
                       fi
+
+                      totalm=$(free -m | awk '/^Mem:/{print $2}') ; echo $totalm
+                      allocatesafe=$((totalm * 75 / 100))
 
                       printf "KafkaHostname=${KafkaBrokerURL}
                       KafkaTopic=${KafkaTopic}
@@ -841,7 +841,7 @@ Resources:
                       Type=simple
                       LimitNOFILE=655360
                       # ExecStartPre=/usr/bin/geth replica ${FreezerFlags}  $OVERLAY_FLAG  --cache=$allocatesafe ${FreezerFlags} --kafka.broker=$KAFKA_ESCAPED_URL""$SEP_ESCAPED""fetch.default=8388608\\&max.waittime=25\\&avoid_leader=1  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown 2>>/tmp/geth-stderr || true
-                      ExecStart=/usr/bin/bash -c '/usr/bin/geth ${FreezerFlags}  $OVERLAY_FLAG  --cache=$allocatesafe ${FreezerFlags} --datadir=/var/lib/ethereum --light.maxpeers 0 --maxpeers 25 ${ReplicaHTTPFlag} ${ReplicaGraphQLFlag} ${ReplicaWebsocketsFlag}'
+                      ExecStart=/usr/bin/bash -c '/usr/bin/geth ${MasterExtraFlags} ${FreezerFlags}  $OVERLAY_FLAG  --cache=$allocatesafe ${FreezerFlags} --datadir=/var/lib/ethereum --light.maxpeers 0 --maxpeers 25 ${ReplicaHTTPFlag} ${ReplicaGraphQLFlag} ${ReplicaWebsocketsFlag}'
                       TimeoutStopSec=90
                       TimeoutStartSec=86400
                       RestartSec=10s
@@ -926,13 +926,14 @@ Resources:
                 content:
                   "Fn::Sub":
                     - |
-                      #!/usr/bin/env bash -xe
+                      #!/bin/bash -xe
                       printf "log_group = \"${MasterLG}\"
                       state_file = \"/var/lib/journald-cloudwatch-logs/state\"" > /usr/local/etc/journald-cloudwatch-logs.conf
 
                       rm -f /var/lib/ethereum/geth/nodekey || true
                       rm /var/lib/ethereum/geth.ipc || true
-
+                      systemctl daemon-reload
+                      ln -s /etc/systemd/system/geth-master.service /etc/systemd/system/geth.service
                       systemctl enable geth-master.service
                       systemctl enable geth-tx.service
                       systemctl enable geth-peer-data.service
@@ -962,11 +963,13 @@ Resources:
                 content:
                   "Fn::Sub":
                     - |
-                      #!/usr/bin/env bash -xe
+                      #!/bin/bash -xe
 
                       printf "log_group = \"${ReplicaLG}\"\nstate_file = \"/var/lib/journald-cloudwatch-logs/state\"" > /usr/local/etc/journald-cloudwatch-logs.conf
 
                       rm /var/lib/ethereum/geth.ipc || true
+                      ln -s /etc/systemd/system/geth-replica.service /etc/systemd/system/geth.service
+                      systemctl daemon-reload
                       systemctl enable geth-replica.service
                       systemctl start geth-replica.service
 
@@ -974,7 +977,7 @@ Resources:
 
                       if [ -f /usr/bin/replica-hook ]
                       then
-                        /usr/bin/replica-hook
+                      /usr/bin/replica-hook
                       fi
                     - ClusterId:
                         "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
@@ -996,22 +999,22 @@ Resources:
                 content:
                   "Fn::Sub":
                     - |
-                      #!/usr/bin/env bash -xe
+                      #!/bin/bash -xe
 
                       printf "log_group = \"${FallBackLG}\"\nstate_file = \"/var/lib/journald-cloudwatch-logs/state\"" > /usr/local/etc/journald-cloudwatch-logs.conf
 
                       rm /var/lib/ethereum/geth.ipc || true
+                      ln -s /etc/systemd/system/geth-fallback.service /etc/systemd/system/geth.service
+                      systemctl daemon-reload
                       systemctl enable geth-fallback.service
                       systemctl start geth-fallback.service
-
 
                       /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource ReplicaLaunchTemplate --configsets cs_install --region ${AWS::Region}
 
                       if [ -f /usr/bin/replica-hook ]
                       then
-                        /usr/bin/replica-hook
+                      /usr/bin/replica-hook
                       fi
-
                     - ClusterId:
                         "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
                       ReplicaHTTPFlag:
@@ -1032,7 +1035,7 @@ Resources:
                 content:
                   "Fn::Sub":
                     - |
-                      #!/usr/bin/env bash -xe
+                      #!/bin/bash -xe
                       fio --filename=/dev/sdf --rw=read --bs=128k --iodepth=32 --ioengine=libaio --prio=7 --prioclass=3 --thinktime=2 --rate_iops=$((${DiskSize} * 3 - 100 )) --direct=1 --name=volume-initialize &
                       export AWS_DEFAULT_REGION=${AWS::Region}
                       VOLUME_ID=$(aws ec2 describe-volumes --filters Name=attachment.instance-id,Values="$(curl http://169.254.169.254/latest/meta-data/instance-id)" | jq '.Volumes[] | select(. | .Attachments[0].Device == "/dev/sdf") | .VolumeId' -cr)
@@ -1090,7 +1093,7 @@ Resources:
           "Fn::Base64":
             "Fn::Sub":
               - |
-                #!/usr/bin/env bash -xe
+                #!/bin/bash -xe
                 /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource MasterLaunchTemplate --configsets setup --region ${AWS::Region}
                 /root/service-configs.sh
                 /root/configure-server.sh
@@ -2207,7 +2210,7 @@ Resources:
           "Fn::Base64":
             "Fn::Sub":
               - |
-                #!/usr/bin/env bash -xe
+                #!/bin/bash -xe
                 /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource MasterLaunchTemplate --configsets setup --region ${AWS::Region}
                 /root/service-configs.sh
                 /root/configure-server.sh
@@ -2320,7 +2323,7 @@ Resources:
                 content:
                   "Fn::Sub":
                     - |
-                      #!/usr/bin/env bash -xe
+                      #!/bin/bash -xe
 
                       set -e
                       set -x
@@ -2390,7 +2393,7 @@ Resources:
           "Fn::Base64":
             "Fn::Sub":
               - |
-                #!/usr/bin/env bash -xe
+                #!/bin/bash -xe
                 if [ "$(arch)" == "x86_64" ]
                 then
                   ARCH="amd64"
@@ -2678,7 +2681,7 @@ Resources:
   #         "Fn::Base64":
   #           "Fn::Sub":
   #             - |
-  #               #!/usr/bin/env bash -xe
+  #               #!/bin/bash -xe
   #               if [ "$(arch)" == "x86_64" ]
   #               then
   #                 ARCH="amd64"
@@ -2907,11 +2910,12 @@ Resources:
                 Value: !Sub "${KafkaTopic}-Fallback"
         SecurityGroupIds:
           - !Sub ${ReplicaNodeSecurityGroup.GroupId}
+          - !Sub ${MasterNodeSecurityGroup.GroupId}
           - !If [HasExtraSecurityGroup, !Ref ReplicaExtraSecurityGroup, !Ref 'AWS::NoValue']
         IamInstanceProfile:
           Name: !Ref ReplicaNodeInstanceProfile
         KeyName: !If [HasKeyName, !Ref KeyName, !Ref 'AWS::NoValue']
-        CreditSpecification: !If [SmallReplica, {CpuCredits: standard}, !Ref 'AWS::NoValue']
+        # CreditSpecification: !If [SmallReplica, {CpuCredits: standard}, !Ref 'AWS::NoValue']
         BlockDeviceMappings:
         - DeviceName: "/dev/xvda"
           Ebs:
@@ -2928,7 +2932,7 @@ Resources:
           "Fn::Base64":
             "Fn::Sub":
               - |
-                #!/usr/bin/env bash -xe
+                #!/bin/bash -xe
                 /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource MasterLaunchTemplate --configsets setup --region ${AWS::Region}
                 /root/service-configs.sh
                 /root/configure-server.sh

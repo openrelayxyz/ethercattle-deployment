@@ -18,6 +18,9 @@ then
   OVERLAY_FLAG="--datadir.overlay=/var/lib/ethereum/overlay"
 fi
 
+totalm=$(free -m | awk '/^Mem:/{print $2}') ; echo $totalm
+allocatesafe=$((totalm * 75 / 100))
+
 printf "KafkaHostname=${KafkaBrokerURL}
 KafkaTopic=${KafkaTopic}
 NetworkId=${NetworkId}
@@ -61,7 +64,7 @@ EnvironmentFile=/etc/systemd/system/ethcattle-vars
 Type=simple
 LimitNOFILE=655360
 # ExecStartPre=/usr/bin/geth replica ${FreezerFlags}  $OVERLAY_FLAG  --cache=$allocatesafe ${FreezerFlags} --kafka.broker=$KAFKA_ESCAPED_URL""$SEP_ESCAPED""fetch.default=8388608\\&max.waittime=25\\&avoid_leader=1  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown 2>>/tmp/geth-stderr || true
-ExecStart=/usr/bin/bash -c '/usr/bin/geth ${FreezerFlags}  $OVERLAY_FLAG  --cache=$allocatesafe ${FreezerFlags} --datadir=/var/lib/ethereum --light.maxpeers 0 --maxpeers 25 ${ReplicaHTTPFlag} ${ReplicaGraphQLFlag} ${ReplicaWebsocketsFlag}'
+ExecStart=/usr/bin/bash -c '/usr/bin/geth ${FreezerFlags} ${MasterExtraFlags} $OVERLAY_FLAG  --cache=$allocatesafe ${FreezerFlags} --datadir=/var/lib/ethereum --light.maxpeers 0 --maxpeers 25 ${ReplicaHTTPFlag} ${ReplicaGraphQLFlag} ${ReplicaWebsocketsFlag}'
 TimeoutStopSec=90
 TimeoutStartSec=86400
 RestartSec=10s
