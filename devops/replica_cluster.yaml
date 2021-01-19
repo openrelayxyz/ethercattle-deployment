@@ -1045,7 +1045,7 @@ Resources:
                   "Fn::Sub":
                     - |
                       #!/bin/bash -xe
-                      fio --filename=/dev/sdf --rw=read --bs=128k --iodepth=32 --ioengine=libaio --prio=7 --prioclass=3 --thinktime=2 --rate_iops=4000 --direct=1 --name=volume-initialize &
+                      fio --filename=/dev/sdf --rw=read --bs=128k --iodepth=32 --ioengine=libaio --prio=7 --prioclass=3 --thinktime=2 --rate_iops=$((${DiskSize} * 3 - 100 )) --direct=1 --name=volume-initialize &
                       export AWS_DEFAULT_REGION=${AWS::Region}
                       VOLUME_ID=$(aws ec2 describe-volumes --filters Name=attachment.instance-id,Values="$(curl http://169.254.169.254/latest/meta-data/instance-id)" | jq '.Volumes[] | select(. | .Attachments[0].Device == "/dev/sdf") | .VolumeId' -cr)
                       wait
@@ -1095,9 +1095,11 @@ Resources:
         - DeviceName: "/dev/sdf"
           Ebs:
             VolumeSize: !Ref DiskSize
-            VolumeType: gp3
-            Iops: 4000
-            Throughput: 1000
+            VolumeType: io1
+            Iops: !GetAtt VolumeIOPS.Value
+            # VolumeType: gp3
+            # Iops: 4000
+            # Throughput: 1000
             SnapshotId: !Ref SnapshotId
         UserData:
           "Fn::Base64":
@@ -2214,9 +2216,11 @@ Resources:
         - DeviceName: "/dev/sdf"
           Ebs:
             VolumeSize: !If [ReplicaHDD, !GetAtt HDDSize.Value, !Ref DiskSize]
-            VolumeType: !If [ReplicaHDD, !Ref ReplicaDiskType, "gp3"]
-            Iops: !If [ReplicaHDD, !Ref 'AWS::NoValue', 4000 ]
-            Throughput: !If [ReplicaHDD, !Ref 'AWS::NoValue', 1000 ]
+            VolumeType: !If [ReplicaHDD, !Ref ReplicaDiskType, "io1"]
+            Iops: !If [ReplicaHDD, !Ref 'AWS::NoValue', !GetAtt VolumeIOPS.Value ]
+            # VolumeType: !If [ReplicaHDD, !Ref ReplicaDiskType, "gp3"]
+            # Iops: !If [ReplicaHDD, !Ref 'AWS::NoValue', 4000 ]
+            # Throughput: !If [ReplicaHDD, !Ref 'AWS::NoValue', 1000 ]
             SnapshotId: !Ref SnapshotId
         - !If [ SmallReplica, {DeviceName: "/dev/sdg", Ebs: {VolumeSize: 25, VolumeType: gp3, Iops: 3000, Throughput: 125}}, {DeviceName: "/dev/sdg", Ebs: {VolumeSize: 150, VolumeType: gp3, Iops: 3000, Throughput: 125}}]
         UserData:
@@ -2399,9 +2403,11 @@ Resources:
         - DeviceName: "/dev/sdf"
           Ebs:
             VolumeSize: !Ref DiskSize
-            VolumeType: gp3
-            Iops: 4000
-            Throughput: 1000
+            VolumeType: io1
+            Iops: !GetAtt VolumeIOPS.Value
+            # VolumeType: gp3
+            # Iops: 4000
+            # Throughput: 1000
             SnapshotId: !Ref SnapshotId
         UserData:
           "Fn::Base64":
@@ -2684,9 +2690,11 @@ Resources:
   #       - DeviceName: "/dev/sdf"
   #         Ebs:
   #           VolumeSize: !Ref DiskSize
-  #           VolumeType: gp3
-  #           Iops:  4000
-  #           Throughput: 1000
+  #           VolumeType: io1
+  #           Iops: !GetAtt VolumeIOPS.Value
+  # #           VolumeType: gp3
+  # #           Iops:  4000
+  # #           Throughput: 1000
   #           SnapshotId: !Ref SnapshotId
   #       - DeviceName: "/dev/sdg"
   #         Ebs:
@@ -2939,9 +2947,11 @@ Resources:
         - DeviceName: "/dev/sdf"
           Ebs:
             VolumeSize: !If [ReplicaHDD, !GetAtt HDDSize.Value, !Ref DiskSize]
-            VolumeType: !If [ReplicaHDD, !Ref ReplicaDiskType, "gp3"]
-            Iops: !If [ReplicaHDD, !Ref 'AWS::NoValue', 4000 ]
-            Throughput: 1000
+            VolumeType: !If [ReplicaHDD, !Ref ReplicaDiskType, "io1"]
+            Iops: !If [ReplicaHDD, !Ref 'AWS::NoValue', !GetAtt VolumeIOPS.Value ]
+            # VolumeType: !If [ReplicaHDD, !Ref ReplicaDiskType, "gp3"]
+            # Iops: !If [ReplicaHDD, !Ref 'AWS::NoValue', 4000 ]
+            # Throughput: 1000
             SnapshotId: !Ref SnapshotId
         - !If [ SmallReplica, {DeviceName: "/dev/sdg", Ebs: {VolumeSize: 25, VolumeType: gp3, Iops: 3000, Throughput: 125}}, {DeviceName: "/dev/sdg", Ebs: {VolumeSize: 150, VolumeType: gp3, Iops: 3000, Throughput: 125}}]
         UserData:
