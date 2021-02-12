@@ -1730,7 +1730,7 @@ Resources:
     Type: AWS::Logs::SubscriptionFilter
     Properties:
       DestinationArn: !Sub ${MasterLogMetricsFunction.Arn}
-      FilterPattern: '{$.systemdUnit = "geth.service" || $.systemdUnit = "geth-peer-data.service"}'
+      FilterPattern: '{$.systemdUnit = "geth.service" || $.systemdUnit = "geth-master.service" || $.systemdUnit = "geth-peer-data.service"}'
       LogGroupName: !Ref MasterLG
   MasterLogMetricFunctionInvokePermission:
     Type: AWS::Lambda::Permission
