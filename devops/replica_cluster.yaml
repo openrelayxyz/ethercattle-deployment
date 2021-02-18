@@ -1243,7 +1243,7 @@ Resources:
         - !Ref ReplicaOverlayDiskSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
-      Threshold: 95
+      Threshold: 90
       TreatMissingData: missing
   ReplicaCPUSNS:
     Type: AWS::SNS::Topic
