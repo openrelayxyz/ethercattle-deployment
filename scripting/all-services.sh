@@ -84,6 +84,27 @@ Environment=HOME=/var/lib/ethereum
 EnvironmentFile=/etc/systemd/system/ethcattle-vars
 Type=simple
 LimitNOFILE=655360
+ExecStartPre=/usr/bin/bash -c '/usr/bin/geth replica --cache=$allocatesafe ${ReplicaExtraFlags} ${FreezerFlags} --kafka.broker=$KAFKA_ESCAPED_URL""$SEP_ESCAPED""fetch.default=8388608\\&max.waittime=25\\&avoid_leader=1  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown 2>>/tmp/geth-stderr'
+ExecStart=/usr/bin/geth ${MasterExtraFlags} ${FreezerFlags} --light.maxpeers 0 --maxpeers 25 --gcmode=archive --kafka.broker=${KafkaBrokerURL}""$SEP""net.maxopenrequests=1\&message.send.max.retries=20000  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --kafka.txpool.topic=${InfrastructureStack}-txpool ${EventsTopicFlag}
+TimeoutStartSec=86400
+TimeoutStopSec=90
+OnFailure=poweroff.target
+
+[Install]
+WantedBy=multi-user.target
+" > /etc/systemd/system/geth-master.service
+
+printf "[Unit]
+Description=Ethereum go client
+After=syslog.target network.target
+
+[Service]
+User=geth
+Group=geth
+Environment=HOME=/var/lib/ethereum
+EnvironmentFile=/etc/systemd/system/ethcattle-vars
+Type=simple
+LimitNOFILE=655360
 ExecStartPre=/usr/bin/bash -c '/usr/bin/geth replica --cache=$allocatesafe ${ReplicaExtraFlags} ${FreezerFlags} $OVERLAY_FLAG --kafka.broker=$KAFKA_ESCAPED_URL""$SEP_ESCAPED""fetch.default=8388608\\&max.waittime=25\\&avoid_leader=1  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown 2>>/tmp/geth-stderr'
 ExecStart=/usr/bin/geth ${MasterExtraFlags} ${FreezerFlags} $OVERLAY_FLAG --light.maxpeers 0 --maxpeers 25 --gcmode=archive --kafka.broker=${KafkaBrokerURL}""$SEP""net.maxopenrequests=1\&message.send.max.retries=20000  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --kafka.txpool.topic=${InfrastructureStack}-txpool ${EventsTopicFlag}
 TimeoutStartSec=86400
@@ -92,7 +113,7 @@ OnFailure=poweroff.target
 
 [Install]
 WantedBy=multi-user.target
-" > /etc/systemd/system/geth-master.service
+" > /etc/systemd/system/geth-master-overlay.service
 
 
 printf "[Unit]
