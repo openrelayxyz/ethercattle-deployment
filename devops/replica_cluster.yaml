@@ -1199,11 +1199,11 @@ Resources:
             "Fn::Sub":
               - |
                 #!/bin/bash -xe
-                /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource MasterLaunchTemplate --configsets setup --region ${AWS::Region}
-                /root/service-configs.sh
-                /root/configure-server.sh
-                /root/start-master.sh
-                /root/loadtest-disk.sh
+                /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource MasterLaunchTemplate --configsets setup --region ${AWS::Region} || (sleep 30; /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource MasterLaunchTemplate --configsets setup --region ${AWS::Region} || poweroff)
+                /root/service-configs.sh || (sleep 30; /root/service-configs.sh || poweroff)
+                /root/configure-server.sh || (sleep 30; /root/configure-server.sh || poweroff)
+                /root/start-master.sh  || (sleep 30; /root/start-master.sh  || poweroff)
+                /root/loadtest-disk.sh || poweroff
               - ClusterId:
                   "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
                 BaseInfrastructure:
@@ -2321,11 +2321,11 @@ Resources:
             "Fn::Sub":
               - |
                 #!/bin/bash -xe
-                /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource MasterLaunchTemplate --configsets setup --region ${AWS::Region}
-                /root/service-configs.sh
-                /root/configure-server.sh
-                /root/start-replica.sh
-                /root/loadtest-disk.sh
+                /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource MasterLaunchTemplate --configsets setup --region ${AWS::Region} || (sleep 30; /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource MasterLaunchTemplate --configsets setup --region ${AWS::Region} || poweroff)
+                /root/service-configs.sh || (sleep 30; /root/service-configs.sh || poweroff)
+                /root/configure-server.sh || (sleep 30; /root/configure-server.sh || poweroff)
+                /root/start-replica.sh || (sleep 30; /root/start-replica.sh || poweroff)
+                /root/loadtest-disk.sh || poweroff
               - ClusterId:
                   "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
                 ReplicaHTTPFlag:
@@ -3052,11 +3052,11 @@ Resources:
             "Fn::Sub":
               - |
                 #!/bin/bash -xe
-                /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource MasterLaunchTemplate --configsets setup --region ${AWS::Region}
-                /root/service-configs.sh
-                /root/configure-server.sh
-                /root/start-fallback.sh
-                /root/loadtest-disk.sh
+                /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource MasterLaunchTemplate --configsets setup --region ${AWS::Region} || (sleep 30; /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource MasterLaunchTemplate --configsets setup --region ${AWS::Region} || poweroff)
+                /root/service-configs.sh || (sleep 30; /root/service-configs.sh || poweroff)
+                /root/configure-server.sh || (sleep 30; /root/configure-server.sh || poweroff)
+                /root/start-fallback.sh || (sleep 30; /root/start-fallback.sh || poweroff)
+                /root/loadtest-disk.sh || poweroff
               - ClusterId:
                   "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
                 ReplicaHTTPFlag:
