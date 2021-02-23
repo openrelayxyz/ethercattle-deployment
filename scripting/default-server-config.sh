@@ -29,7 +29,7 @@ echo "/dev/sdf  /var/lib/ethereum    ext4   barrier=0,data=writeback,noatime  1 
 
 ignore="$(readlink -f /dev/sd*) $(readlink -f /dev/xvd*)"
 cutignore="$(for x in $ignore ; do echo $x | cut -c -12; done | uniq)"
-devices="$(ls /dev/nvme* | grep -E 'n1$')"
+devices="$(ls /dev/nvme* | grep -E 'n1$')" || devices=""
 cutdevices="$(for x in $devices ; do echo $x | cut -c -12; done | uniq)"
 localnvme=$(for d in $cutdevices; do if ! $(echo "$cutignore"| grep -q $d) ; then echo $d; fi ; done)
 if [ ! -z "$localnvme" ]
