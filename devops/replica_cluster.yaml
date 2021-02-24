@@ -847,7 +847,7 @@ Resources:
                       Type=simple
                       LimitNOFILE=655360
                       # ExecStartPre=/usr/bin/geth replica ${FreezerFlags}  $OVERLAY_FLAG  --cache=$allocatesafe ${FreezerFlags} --kafka.broker=$KAFKA_ESCAPED_URL""$SEP_ESCAPED""fetch.default=8388608\\&max.waittime=25\\&avoid_leader=1  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown 2>>/tmp/geth-stderr || true
-                      ExecStart=/usr/bin/bash -c '/usr/bin/geth ${MasterExtraFlags} ${FreezerFlags}  $OVERLAY_FLAG  --cache=$allocatesafe ${FreezerFlags} --datadir=/var/lib/ethereum --light.maxpeers 0 --maxpeers 25 ${ReplicaHTTPFlag} ${ReplicaGraphQLFlag} ${ReplicaWebsocketsFlag}'
+                      ExecStart=/usr/bin/bash -c '/usr/bin/geth ${FreezerFlags} ${MasterExtraFlags} $OVERLAY_FLAG  --cache=$allocatesafe ${FreezerFlags} --datadir=/var/lib/ethereum --light.maxpeers 0 --maxpeers 25 ${ReplicaHTTPFlag} ${ReplicaGraphQLFlag} ${ReplicaWebsocketsFlag}'
                       TimeoutStopSec=90
                       TimeoutStartSec=86400
                       RestartSec=10s
@@ -855,6 +855,27 @@ Resources:
                       WantedBy=multi-user.target
                       " > /etc/systemd/system/geth-fallback.service
 
+
+                      printf "[Unit]
+                      Description=Ethereum go client
+                      After=syslog.target network.target
+
+                      [Service]
+                      User=geth
+                      Group=geth
+                      Environment=HOME=/var/lib/ethereum
+                      EnvironmentFile=/etc/systemd/system/ethcattle-vars
+                      Type=simple
+                      LimitNOFILE=655360
+                      ExecStartPre=/usr/bin/bash -c '/usr/bin/geth replica --cache=$allocatesafe ${ReplicaExtraFlags} ${FreezerFlags} --kafka.broker=$KAFKA_ESCAPED_URL""$SEP_ESCAPED""fetch.default=8388608\\&max.waittime=25\\&avoid_leader=1  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown 2>>/tmp/geth-stderr'
+                      ExecStart=/usr/bin/geth ${MasterExtraFlags} ${FreezerFlags} --light.maxpeers 0 --maxpeers 25 --gcmode=archive --kafka.broker=${KafkaBrokerURL}""$SEP""net.maxopenrequests=1\&message.send.max.retries=20000  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --kafka.txpool.topic=${InfrastructureStack}-txpool ${EventsTopicFlag}
+                      TimeoutStartSec=86400
+                      TimeoutStopSec=90
+                      OnFailure=poweroff.target
+
+                      [Install]
+                      WantedBy=multi-user.target
+                      " > /etc/systemd/system/geth-master.service
 
                       printf "[Unit]
                       Description=Ethereum go client
@@ -875,7 +896,7 @@ Resources:
 
                       [Install]
                       WantedBy=multi-user.target
-                      " > /etc/systemd/system/geth-master.service
+                      " > /etc/systemd/system/geth-master-overlay.service
 
 
                       printf "[Unit]
@@ -911,6 +932,7 @@ Resources:
                       Restart=on-failure
                       RestartSec=10s
                       " > /etc/systemd/system/geth-peer-data.service
+
 
                     - ClusterId:
                         "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
@@ -1024,6 +1046,77 @@ Resources:
                       then
                       /usr/bin/replica-hook
                       fi
+                    - ClusterId:
+                        "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
+                      ReplicaHTTPFlag:
+                          !If [HasReplicaHTTP, "--http --http.addr 0.0.0.0 --http.port 8545", ""]
+                      ReplicaGraphQLFlag:
+                          # Wow that's a lot of escaping!
+                          !If [HasReplicaGraphQL, "--graphql --graphql.vhosts \\\\\\'*\\\\\\'", ""]
+                      ReplicaWebsocketsFlag:
+                          !If [HasReplicaWebsockets, "--ws --ws.addr 0.0.0.0 --ws.port 8546", ""]
+                      BaseInfrastructure:
+                        "Fn::ImportValue": !Sub "${InfrastructureStack}-BaseInfrastructure"
+                      FreezerFlags: !If [ EnabledFreezerBucket, {"Fn::Sub": ["--datadir.ancient=s3://${Bucket}/${NetworkId}", {Bucket: !If [ HasFreezerBucket, !Ref FreezerBucket, {"Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket"} ]} ]}, ""]
+                      EventsTopicFlag: !If [ HasEventsTopic, !Sub "--kafka.event.topic ${EventsTopic}", ""]
+                mode: "000700"
+                owner: root
+                group: root
+              /root/start-master-overlay.sh:
+                content:
+                  "Fn::Sub":
+                    - |
+                      #!/bin/bash -xe
+                      printf "log_group = \"${MasterLG}\"
+                      state_file = \"/var/lib/journald-cloudwatch-logs/state\"" > /usr/local/etc/journald-cloudwatch-logs.conf
+
+                      rm -f /var/lib/ethereum/geth/nodekey || true
+                      rm /var/lib/ethereum/geth.ipc || true
+                      rm /etc/systemd/system/geth.service || true
+                      ln -s /etc/systemd/system/geth-master-overlay.service /etc/systemd/system/geth.service
+                      systemctl daemon-reload
+                      systemctl enable geth-master-overlay.service
+                      systemctl enable geth-tx.service
+                      systemctl enable geth-peer-data.service
+
+                      systemctl start geth-master.service || true &
+                      sleep 5
+                      systemctl start geth-tx.service
+                      systemctl start geth-peer-data.service
+
+                    - ClusterId:
+                        "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
+                      ReplicaHTTPFlag:
+                          !If [HasReplicaHTTP, "--http --http.addr 0.0.0.0 --http.port 8545", ""]
+                      ReplicaGraphQLFlag:
+                          # Wow that's a lot of escaping!
+                          !If [HasReplicaGraphQL, "--graphql --graphql.vhosts \\\\\\'*\\\\\\'", ""]
+                      ReplicaWebsocketsFlag:
+                          !If [HasReplicaWebsockets, "--ws --ws.addr 0.0.0.0 --ws.port 8546", ""]
+                      BaseInfrastructure:
+                        "Fn::ImportValue": !Sub "${InfrastructureStack}-BaseInfrastructure"
+                      FreezerFlags: !If [ EnabledFreezerBucket, {"Fn::Sub": ["--datadir.ancient=s3://${Bucket}/${NetworkId}", {Bucket: !If [ HasFreezerBucket, !Ref FreezerBucket, {"Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket"} ]} ]}, ""]
+                      EventsTopicFlag: !If [ HasEventsTopic, !Sub "--kafka.event.topic ${EventsTopic}", ""]
+                mode: "000700"
+                owner: root
+                group: root
+              /root/stop-all.sh:
+                content:
+                  "Fn::Sub":
+                    - |
+                      #!/bin/bash -xe
+
+                      systemctl stop amazon-cloudwatch-agent.service || true &
+                      systemctl stop geth-fallback.service || true &
+                      systemctl stop geth-master-overlay.service  || true &
+                      systemctl stop geth-master.service  || true &
+                      systemctl stop geth-peer-data.service || true &
+                      systemctl stop geth-replica.service || true &
+                      systemctl stop geth-tx.service || true &
+                      systemctl stop journald-cloudwatch-logs || true &
+                      wait
+
+
                     - ClusterId:
                         "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
                       ReplicaHTTPFlag:
