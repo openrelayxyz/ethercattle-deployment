@@ -712,7 +712,7 @@ Resources:
 
                       ignore="$(readlink -f /dev/sd*) $(readlink -f /dev/xvd*)"
                       cutignore="$(for x in $ignore ; do echo $x | cut -c -12; done | uniq)"
-                      devices="$(ls /dev/nvme* | grep -E 'n1$')"
+                      devices="$(ls /dev/nvme* | grep -E 'n1$')" || devices=""
                       cutdevices="$(for x in $devices ; do echo $x | cut -c -12; done | uniq)"
                       localnvme=$(for d in $cutdevices; do if ! $(echo "$cutignore"| grep -q $d) ; then echo $d; fi ; done)
                       if [ ! -z "$localnvme" ]
@@ -793,7 +793,7 @@ Resources:
                       fi
                       ignore="$(readlink -f /dev/sd*) $(readlink -f /dev/xvd*)"
                       cutignore="$(for x in $ignore ; do echo $x | cut -c -12; done | uniq)"
-                      devices="$(ls /dev/nvme* | grep -E 'n1$')"
+                      devices="$(ls /dev/nvme* | grep -E 'n1$')" || devices=""
                       cutdevices="$(for x in $devices ; do echo $x | cut -c -12; done | uniq)"
                       localnvme=$(for d in $cutdevices; do if ! $(echo "$cutignore"| grep -q $d) ; then echo $d; fi ; done)
                       if [ ! -z "$localnvme" ]
@@ -1243,7 +1243,7 @@ Resources:
         - !Ref ReplicaOverlayDiskSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
-      Threshold: 95
+      Threshold: 90
       TreatMissingData: missing
   ReplicaCPUSNS:
     Type: AWS::SNS::Topic
@@ -1730,7 +1730,7 @@ Resources:
     Type: AWS::Logs::SubscriptionFilter
     Properties:
       DestinationArn: !Sub ${MasterLogMetricsFunction.Arn}
-      FilterPattern: '{$.systemdUnit = "geth.service" || $.systemdUnit = "geth-peer-data.service"}'
+      FilterPattern: '{$.systemdUnit = "geth.service" || $.systemdUnit = "geth-master.service" || $.systemdUnit = "geth-peer-data.service"}'
       LogGroupName: !Ref MasterLG
   MasterLogMetricFunctionInvokePermission:
     Type: AWS::Lambda::Permission
