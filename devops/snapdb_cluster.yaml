@@ -1,0 +1,2701 @@
+Description: A pool of Snapdb servers for Ether Cattle
+
+Parameters:
+  DiskSize:
+    Default: '250'
+    Description: Size of each node's chaindata storage volume in GiB
+    MaxValue: '1024'
+    MinValue: '8'
+    Type: Number
+  SnapdbImageAMI:
+    Default: ""
+    Description: Custom AMI to use for the Snapdb servers, empty string for default AWS AMI image
+    Type: String
+  SnapdbDiskType:
+    AllowedValues:
+    - standard
+    - gp2
+    - gp3
+    - st1
+    - sc1
+    Default: gp2
+    Description: Snapdb storage volume type
+    Type: String
+  SnapdbServeHTTP:
+    Description: Enable Snapdb to serve RPC over HTTP
+    Type: String
+    Default: 'true'
+    AllowedValues:
+    - 'true'
+    - 'false'
+  SnapdbServeGraphQL:
+    Description: Enable Snapdb to serve GraphQL over HTTP
+    Type: String
+    Default: 'true'
+    AllowedValues:
+    - 'true'
+    - 'false'
+  SnapdbServeWebsockets:
+    Description: Enable Snapdb to serve Websockets
+    Type: String
+    Default: 'true'
+    AllowedValues:
+    - 'true'
+    - 'false'
+  S3GethBucketName:
+    Default: ethercattle-binaries
+    Type: String
+    Description: The bucket containing EtherCattle Geth Binaries
+  ECGethVersion:
+    Default: v1.9.5-2
+    Type: String
+    Description: The Ether Cattle Geth Version to deploys
+  InfrastructureStack:
+    Type: String
+    Description: The infrastructure stack this cluster connects to
+  KeyName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: The name of the SSH key pair allowed to SSH into the nodes
+  KafkaBrokerURL:
+    Type: String
+    Description: The string of kafka brokers to connect to.
+  KafkaTopic:
+    Type: String
+    Description: A name for the Kafka Topic between the master and replicas. This must be unique for each cluster.
+  NetworkId:
+    Type: String
+    Description: An identifier for the network this cluster represents. This should be common across all clusters representing the same network.
+  SnapdbSize:
+    Type: String
+    Description: Whether to use full size snapdb servers or smaller ones. "full" will use a pool of large instances from the m5(ad) and r5(ad) families. "small" will use a pool of medium instances from the t3 and t3a families. For mainnet this must be full - for testnets and private networks it will depend on the network volume.
+    AllowedValues:
+      - full
+      - medium
+      - small
+    Default: full
+  SnapdbCount:
+    Type: Number
+    Description: The number of Geth snapdb servers to run with the cluster.
+    Default: 1
+  SnapdbExtraFlags:
+    Type: String
+    Description: Extra flags for the Geth snapdb (mainly for running other than mainnet)
+  SnapdbMemoryThresholdLong:
+    Type: Number
+    Default: 75
+    Description: The amount of memory which should trigger alarms if used for > 30 minutes
+  SnapdbMemoryThresholdLow:
+    Type: Number
+    Default: 10
+    Description: The amount of memory below which an alarm should triger
+  SnapdbMemoryThresholdHigh:
+    Type: Number
+    Default: 85
+    Description: The amount of memory which should trigger alarms if exceeded for > 1 minute
+  SnapdbOnDemandPercentage:
+    Type: Number
+    Default: 50
+    Description: The percentage (0 - 100) of snapdb servers that should be on-demand instead of spot instances.
+  SnapdbSpotAllocationStrategy:
+    Type: String
+    AllowedValues:
+      - "lowest-price"
+      - "capacity-optimized"
+    Default: "capacity-optimized"
+  AlternateTargetGroup:
+    Type: String
+    Description: An alternative comma-separated list of target groups that snap db servers should be assigned to.
+  NotificationEmail:
+    Type: String
+    Description: An optional e-mail address to receive notifications from alarms
+  AlarmSNSTopic:
+    Type: String
+    Description: An optional SNS topic to receive notifications from alarms
+  BackupValidationThreshold:
+    Type: Number
+    Default: 10000
+    Description: The number of state trie nodes to validate when taking a backup.
+  RemoteRPCURL:
+    Type: String
+    Description: A remote RPC URL to check against local block numbers. If provided, an alarm will go off if this cluster falls significantly behind the specified RPC endpoint. If not specified, an alarm will go off if no blocks are processed in a one minute period.
+  SnapdbExtraSecurityGroup:
+    Type: String
+    Description: An additional security to be assigned to Snapdb. Leave this blank unless you need to add additional connectivity rules.
+  DashboardExtension:
+    Type: String
+    Description: The name of a cloudformation output to be added to the dashboard
+  BackupScheduleExpression:
+    Type: String
+    Description: A schedule expression for the frequency to take backups
+    Default: "cron(55 0/6 * * ? *)"
+  S3SnapdbBackup:
+    Default: ethereum-snapdb/mainnet/snapdb-date/
+    Type: String
+    Description: "The backup bucket with path for the current backup. Do not include s3:// as that is provided in code"
+  S3GethBackup:
+    Default: ethereum-snapdb/mainnet/geth-date/
+    Type: String
+    Description: "The backup bucket with path for the current backup. Do not include s3:// as that is provided in code"
+  S3SnapdbBackupBucket:
+    Default: ethereum-snapdb
+    Type: String
+    Description: The bucket for Snapdb to store backups in
+  S3BackupLogsBucket:
+    Type: String
+    Description: A bucket that has already been created to store logs in. Will create a subirectory ethercattle folder.
+    Default: ""
+  SnapdbClusterVersion:
+    Description: A high level version number for the snapdb cluster. Used for blue / green deployments
+    Default: "1"
+    Type: String
+  ConsulEc2RetryTagKey:
+    Description:
+      The EC2 instance tag key to filter on when joining to other Consul
+      nodes.
+    Type: String
+    Default: "rivet-consul-cluster"
+    ConstraintDescription: Must match EC2 Tag Name requirements.
+  ConsulEc2RetryTagValue:
+    Description:
+      The EC2 instance tag value to filter on when joining to other Consul
+      nodes.
+    Type: String
+    Default: "rivet-consul-member"
+    ConstraintDescription: Must match EC2 Tag Name requirements.
+  ConsulPrimaryRegion:
+    Description: The AWS region of the primary Consul cluster. If not set, defaults to this region.
+    Type: String
+
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: Infrastructure
+        Parameters:
+          - InfrastructureStack
+          - AlternateTargetGroup
+          - AlarmSNSTopic
+          - NotificationEmail
+          - KeyName
+          - RemoteRPCURL
+          - BackupScheduleExpression
+          - DashboardExtension
+      - Label:
+          default: Cluster
+        Parameters:
+          - KafkaBrokerURL
+          - KafkaTopic
+          - NetworkId
+          - S3GethBucketName
+          - ECGethVersion
+          - S3SnapdbBackup
+          - S3GethBackup
+          - S3BackupLogsBucket
+      - Label:
+          default: Snapdb
+        Parameters:
+          - SnapdbSize
+          - SnapdbCount
+          - SnapdbOnDemandPercentage
+          - SnapdbSpotAllocationStrategy
+          - SnapdbExtraFlags
+          - DiskSize
+          - SnapdbMemoryThresholdLong
+          - SnapdbMemoryThresholdHigh
+          - SnapdbImageAMI
+          - SnapdbServeHTTP
+          - SnapdbServeGraphQL
+          - SnapdbServeWebsockets
+          - SnapdbDiskType
+          - BackupValidationThreshold
+          - SnapdbExtraSecurityGroup
+      - Label:
+          default: Fallback
+        Parameters:
+          - FallbackTargetCapacity
+          - FallbackMaxCapacity
+          - FallbackOnDemandPercentage
+    ParameterLabels:
+      S3BackupLogsBucket:
+        default: S3 logs backup bucket
+      SnapdbSize:
+        default: Snapdb Size
+      DiskSize:
+        default: Disk Size
+      SnapdbImageAMI:
+        default: Snapdb AMI Image
+      SnapdbServeHTTP:
+        default: Enable Snapdb RPC HTTP server
+      SnapdbServeGraphQL:
+        default: Enable Snapdb GraphQL server
+      SnapdbServeWebsockets:
+        default: Enable Snapdb Websockets server
+      SnapdbDiskType:
+        default: Disk Type
+      S3GethBucketName:
+        default: S3 Geth Bucket
+      ECGethVersion:
+        default: Ether Cattle Geth Version Number
+      InfrastructureStack:
+        default: Infrastructure CloudFormation Stack
+      KeyName:
+        default: SSH Key Pair
+      KafkaBrokerURL:
+        default: Kafka Broker URL
+      KafkaTopic:
+        default: Unique Kafka Topic Name
+      NetworkId:
+        default: Unique Network ID
+      S3SnapdbBackup:
+        default: S3 Snapdb Backup
+      S3GethBackup:
+        default: S3 Geth Backup
+      SnapdbCount:
+        default: Snapdb Count
+      SnapdbExtraFlags:
+        default: Extra Geth Flags
+      SnapdbSpotAllocationStrategy:
+        default: Spot Allocation Strategy
+      SnapdbExtraSecurityGroup:
+        default: Snapdb Extra Security Group
+      AlternateTargetGroup:
+        default: Alternate Target Group
+      NotificationEmail:
+        default: Notification Email Address
+      AlarmSNSTopic:
+        default: SNS Topic for Alarms
+      BackupValidationThreshold:
+        default: Backup Validation Threshold
+      RemoteRPCURL:
+        default: Remote RPC URL
+      DashboardExtension:
+        default: Dashboard Extension
+      BackupScheduleExpression:
+        default: Backup Schedule Expression
+      FallbackOnDemandPercentage:
+        default: Fallback On Demand Percentage
+
+Mappings:
+  InstanceSizes:
+    Snapdb:
+      full:
+        - InstanceType: m4.xlarge
+        - InstanceType: m5a.xlarge
+        - InstanceType: m5ad.xlarge
+        - InstanceType: m5.xlarge
+        - InstanceType: m5d.xlarge
+        - InstanceType: m5dn.xlarge
+        - InstanceType: r4.large
+        - InstanceType: r5.large
+        - InstanceType: r5d.large
+        - InstanceType: r5dn.large
+        - InstanceType: r5a.large
+        - InstanceType: r5ad.large
+      medium:
+        - InstanceType: t3.large
+        - InstanceType: t3a.large
+      small:
+        - InstanceType: t3.medium
+        - InstanceType: t3a.medium
+  PoolSize:
+    Size:
+      full: 11
+      medium: 6
+      small: 6
+  RegionMap:
+    us-west-1:
+      AL2AMI: ami-056ee704806822732
+    eu-central-1:
+      AL2AMI: ami-0cc293023f983ed53
+    cn-north-1:
+      AL2AMI: ami-0cad3dea07a7c36f9
+    us-east-1:
+      AL2AMI: ami-0b898040803850657
+    ap-northeast-2:
+      AL2AMI: ami-095ca789e0549777d
+    us-gov-west1:
+      AL2AMI:  ami-6b157f0a
+    sa-east-1:
+      AL2AMI: ami-058943e7d9b9cabfb
+    ap-northeast-3:
+      AL2AMI: ami-088d713d672ed235e
+    ap-northeast-1:
+      AL2AMI: ami-0c3fd0f5d33134a76
+    ap-southeast-1:
+      AL2AMI: ami-01f7527546b557442
+    us-east-2:
+      AL2AMI: ami-0d8f6eb4f641ef691
+    ap-southeast-2:
+      AL2AMI: ami-0dc96254d5535925f
+    cn-northwest-1:
+      AL2AMI: ami-094b7433620966eb5
+    eu-west-1:
+      AL2AMI: ami-0bbc25e23a7640b9b
+    eu-north-1:
+      AL2AMI: ami-d16fe6af
+    us-gov-east1:
+      AL2AMI: ami-1208ee63
+    ap-south-1:
+      AL2AMI: ami-0d2692b6acea72ee6
+    eu-west-3:
+      AL2AMI: ami-0adcddd3324248c4c
+    eu-west-2:
+      AL2AMI: ami-0d8e27447ec2c8410
+    ca-central-1:
+      AL2AMI: ami-0d4ae09ec9361d8ac
+    us-west-2:
+      AL2AMI: ami-082b5a644766e0e6f
+
+Conditions:
+  HasKeyName: !Not [!Equals [!Ref KeyName, '']]
+  HasATG: !Not [!Equals [!Ref AlternateTargetGroup, '']]
+  NoTG: !Equals [!Ref AlternateTargetGroup, 'NONE']
+  SnapdbHDD: !Or [!Equals [ !Ref SnapdbDiskType, "st1"], !Equals [ !Ref SnapdbDiskType, "sc1"]]
+  SmallDisk: !Or [
+      !Equals [ !Ref DiskSize, "75" ],
+      !Equals [ !Ref DiskSize, "200" ],
+      !Equals [ !Ref DiskSize, "250" ],
+      !Equals [ !Ref DiskSize, "300" ],
+      !Equals [ !Ref DiskSize, "350" ],
+      !Equals [ !Ref DiskSize, "400" ],
+      !Equals [ !Ref DiskSize, "450" ],
+    ]
+  HasNotificationEmail: !Not [!Equals [ !Ref NotificationEmail, "" ]]
+  HasSNSTopic: !Not [!Equals [ !Ref AlarmSNSTopic, "" ]]
+  HasSnapdbHTTP: !Equals
+    - !Ref SnapdbServeHTTP
+    - 'true'
+  HasSnapdbGraphQL: !Equals
+    - !Ref SnapdbServeGraphQL
+    - 'true'
+  HasSnapdbWebsockets: !Equals
+    - !Ref SnapdbServeWebsockets
+    - 'true'
+  HasSnapdbImageAMI: !Not [!Equals [ !Ref SnapdbImageAMI, "" ]]
+  HasRemoteRPCURL: !Not [!Equals [!Ref RemoteRPCURL, ""]]
+  NoRemoteRPCURL: !Equals [ !Ref RemoteRPCURL, ""]
+  HasExtraSecurityGroup: !Not [!Equals [ !Ref SnapdbExtraSecurityGroup, "" ]]
+  SmallSnapdb: !Equals [ !Ref SnapdbSize, "small"]
+  HasDashboardExtensions: !Not [!Equals [ !Ref DashboardExtension, "" ]]
+  SnapdbSpotLowestPrice: !Equals [!Ref SnapdbSpotAllocationStrategy, "lowest-price"]
+  SpecifiesConsulRegion: !Not [ !Equals [ !Ref ConsulPrimaryRegion, "" ] ]
+
+Resources:
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal: {Service: [lambda.amazonaws.com]}
+          Action: ['sts:AssumeRole']
+      Path: "/"
+      ManagedPolicyArns:
+      - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+  MulMin:
+    Type: AWS::Lambda::Function
+    Properties:
+      Handler: index.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Code:
+        ZipFile: !Sub |
+          var response = require('./cfn-response');
+          exports.handler = function(event, context) {
+            var result = parseInt(event.ResourceProperties.Op1) * parseInt(event.ResourceProperties.Op2);
+            if(event.ResourceProperties.Max) {
+              result = Math.min(result, parseInt(event.ResourceProperties.Max));
+            }
+            response.send(event, context, response.SUCCESS, {Value: result});
+          };
+      Runtime: nodejs12.x
+  Max:
+    Type: AWS::Lambda::Function
+    Properties:
+      Handler: index.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Code:
+        ZipFile: !Sub |
+          var response = require('./cfn-response');
+          exports.handler = function(event, context) {
+            var result = Math.max(parseInt(event.ResourceProperties.Op1), parseInt(event.ResourceProperties.Op2));
+            response.send(event, context, response.SUCCESS, {Value: result});
+          };
+      Runtime: nodejs12.x
+  HDDSize:
+    Type: Custom::Max
+    Properties:
+      ServiceToken: !GetAtt Max.Arn
+      Op1: !Ref DiskSize
+      Op2: 500
+  VolumeIOPS:
+    Type: Custom::MulMin
+    Properties:
+      ServiceToken: !GetAtt MulMin.Arn
+      Op1: !Ref DiskSize
+      Op2: 50
+      Max: 5000
+
+  GetBucketName:
+    Type: AWS::Lambda::Function
+    Properties:
+      Handler: index.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Code:
+        ZipFile: !Sub |
+          var response = require('./cfn-response');
+          exports.handler = function(event, context) {
+            response.send(event, context, response.SUCCESS, {Name: event.ResourceProperties.ObjectPath.split("/")[0]});
+          };
+      Runtime: nodejs12.x
+
+  CurrentBackupBucket:
+    Type: Custom::GetBucketName
+    Properties:
+      ServiceToken: !GetAtt GetBucketName.Arn
+      ObjectPath: !Ref S3SnapdbBackup
+
+  SnapdbLG:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays: 7
+      LogGroupName:
+        "Fn::Sub":
+          - "/${ClusterId}/${AWS::StackName}/snpadb"
+          - ClusterId:
+              "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
+  SnapdbNodeSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow internal SSH access and ETH p2p connectivity
+      VpcId:
+        "Fn::ImportValue": !Sub "${InfrastructureStack}-VpcId"
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: '22'
+        ToPort: '22'
+        CidrIp: !Join ["", ["Fn::ImportValue": !Sub "${InfrastructureStack}-VpcBaseIp", ".0.0/14"]]
+      - IpProtocol: udp
+        FromPort: '30303'
+        ToPort: '30303'
+        CidrIp: '0.0.0.0/0'
+      - IpProtocol: tcp
+        FromPort: '30303'
+        ToPort: '30303'
+        CidrIp: '0.0.0.0/0'
+      - IpProtocol: udp
+        FromPort: '30301'
+        ToPort: '30301'
+        CidrIp: '0.0.0.0/0'
+      - IpProtocol: tcp
+        FromPort: '22'
+        ToPort: '22'
+        CidrIp: !Join ["", ["Fn::ImportValue": !Sub "${InfrastructureStack}-VpcBaseIp", ".0.0/14"]]
+      - IpProtocol: tcp
+        FromPort: '8545'
+        ToPort: '8545'
+        CidrIp: !Join ["", ["Fn::ImportValue": !Sub "${InfrastructureStack}-VpcBaseIp", ".0.0/16"]]
+      - IpProtocol: tcp
+        # Consul sidecar proxy ports
+        FromPort: '21000'
+        ToPort: '21016'
+        CidrIp: !Join ["", ["Fn::ImportValue": !Sub "${InfrastructureStack}-VpcBaseIp", ".0.0/14"]]
+      - IpProtocol: tcp
+        # Consul agent gossip
+        FromPort: '8301'
+        ToPort: '8301'
+        CidrIp: !Join ["", ["Fn::ImportValue": !Sub "${InfrastructureStack}-VpcBaseIp", ".0.0/14"]]
+      - IpProtocol: udp
+        # Consul agent gossip
+        FromPort: '8301'
+        ToPort: '8301'
+        CidrIp: !Join ["", ["Fn::ImportValue": !Sub "${InfrastructureStack}-VpcBaseIp", ".0.0/14"]]
+      - IpProtocol: tcp
+        FromPort: '8546'
+        ToPort: '8546'
+        CidrIp: !Join ["", ["Fn::ImportValue": !Sub "${InfrastructureStack}-VpcBaseIp", ".0.0/16"]]
+      - IpProtocol: tcp
+        FromPort: '8547'
+        ToPort: '8547'
+        CidrIp: !Join ["", ["Fn::ImportValue": !Sub "${InfrastructureStack}-VpcBaseIp", ".0.0/16"]]
+  SnapdbNodeRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Action:
+          - sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service:
+            - ec2.amazonaws.com
+            - autoscaling.amazonaws.com
+        Version: '2012-10-17'
+  SnapdbNodePolicy:
+    Type: "AWS::IAM::Policy"
+    Properties:
+      Roles:
+        - !Ref SnapdbNodeRole
+      PolicyName: !Sub "SnapdbNode${KafkaTopic}"
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Action:
+              - cloudwatch:PutMetricData
+              - ec2:DescribeTags
+              - ec2:DescribeInstances
+              - logs:PutLogEvents
+              - logs:DescribeLogStreams
+              - logs:DescribeLogGroups
+              - logs:CreateLogStream
+              - logs:CreateLogGroup
+            Resource: "*"
+            Effect: Allow
+          - Action:
+              - s3:GetObject
+              - s3:ListBucket
+              - s3:GetBucketPolicy
+              - s3:GetObjectTagging
+              - s3:GetBucketLocation
+            Resource: !Sub arn:aws:s3:::${S3GethBucketName}/*
+            Effect: Allow
+          - Action:
+              - ssm:GetParameter
+            Resource: !Sub "arn:aws:ssm:*:*:parameter/${MetricsConfigParameter}"
+            Effect: Allow
+          - Action:
+              - ec2:ModifyVolume
+              - ec2:DescribeVolumes
+            Effect: Allow
+            Resource: "*"
+          - Action:
+              - s3:GetObject
+              - s3:ListBucket
+              - s3:GetBucketPolicy
+              - s3:GetObjectTagging
+              - s3:GetBucketLocation
+            Resource:
+              - !Sub arn:aws:s3:::${S3SnapdbBackupBucket}
+              - !Sub arn:aws:s3:::${S3SnapdbBackupBucket}/*
+            Effect: Allow
+          - Action:
+              - s3:GetObject
+              - s3:ListBucket
+              - s3:GetBucketPolicy
+              - s3:GetObjectTagging
+              - s3:GetBucketLocation
+            Resource:
+              - !Sub arn:aws:s3:::${CurrentBackupBucket.Name}
+              - !Sub arn:aws:s3:::${S3SnapdbBackup}/*
+            Effect: Allow
+  SnapdbNodeInstanceProfile:
+    Type: "AWS::IAM::InstanceProfile"
+    Properties:
+      Path: /
+      Roles:
+      - !Ref SnapdbNodeRole
+    DependsOn: SnapdbNodeRole
+  MetricsConfigParameter:
+    Type: "AWS::SSM::Parameter"
+    Properties:
+      Type: String
+      Value: '{"metrics":{"append_dimensions":{"AutoScalingGroupName":"${aws:AutoScalingGroupName}"},"metrics_collected":{"cpu":{"measurement":["cpu_usage_idle","cpu_usage_user","cpu_usage_system"],"metrics_collection_interval":60,"resources":["*"],"totalcpu":false},"disk":{"measurement":["used_percent","inodes_free"],"metrics_collection_interval":60,"resources":["/var/lib/ethereum","/var/lib/ethereum/overlay","/"]},"diskio":{"measurement":["io_time"],"metrics_collection_interval":60,"resources":["/var/lib/ethereum","/var/lib/ethereum/overlay","/"]},"mem":{"measurement":["mem_used_percent"],"metrics_collection_interval":60},"statsd":{"metrics_aggregation_interval":60,"metrics_collection_interval":10,"service_address":":8125"},"swap":{"measurement":["swap_used_percent"],"metrics_collection_interval":60}}}}'
+
+  SnapdbLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+
+    Metadata:
+      AWS::CloudFormation::Init:
+          configSets:
+            setup:
+              - setup_ethercattle_files
+            cs_install:
+              - install_and_enable_cfn_hup
+              - create_consul_group_user_dir
+              - install_consul
+              - install_consul_template
+              - consul_bootstrap
+          install_and_enable_cfn_hup:
+            files:
+              /etc/cfn/cfn-hup.conf:
+                content: !Join
+                  - ""
+                  - - |
+                      [main]
+                    - stack=
+                    - !Ref "AWS::StackId"
+                    - |+
+
+                    - region=
+                    - !Ref "AWS::Region"
+                    - |+
+                mode: "000400"
+                owner: root
+                group: root
+              /etc/cfn/hooks.d/cfn-auto-reloader.conf:
+                content: !Join
+                  - ""
+                  - - |
+                      [cfn-auto-reloader-hook]
+                    - |
+                      triggers=post.update
+                    - >
+                      path=Resources.SnapdbLaunchTemplate.Metadata.AWS::CloudFormation::Init
+                    - "action=/usr/local/bin/cfn-init -v "
+                    - "         --stack "
+                    - !Ref "AWS::StackName"
+                    - "         --resource SnapdbLaunchTemplate "
+                    - "         --configsets cs_install "
+                    - "         --region "
+                    - !Ref "AWS::Region"
+                    - |+
+
+                    - |
+                      runas=root
+              /lib/systemd/system/cfn-hup.service:
+                content: !Join
+                  - ""
+                  - - |
+                      [Unit]
+                    - |+
+                      Description=cfn-hup daemon
+
+                    - |
+                      [Service]
+                    - |
+                      Type=simple
+                    - |
+                      ExecStart=/usr/local/bin/cfn-hup
+                    - |+
+                      Restart=always
+                    - |
+                      [Install]
+                    - WantedBy=multi-user.target
+            commands:
+              01enable_cfn_hup:
+                command: systemctl enable cfn-hup.service
+              02start_cfn_hup:
+                command: systemctl start cfn-hup.service
+          create_consul_group_user_dir:
+            users:
+              consul:
+                homeDir: /srv/consul
+            commands:
+              01_create_data_dir:
+                command: mkdir -p /opt/consul/data
+          install_consul:
+            sources:
+              /usr/bin/: https://releases.hashicorp.com/consul/1.7.0/consul_1.7.0_linux_amd64.zip
+          install_consul_template:
+            sources:
+              /usr/bin/: https://releases.hashicorp.com/consul-template/0.24.0/consul-template_0.24.0_linux_amd64.zip
+          consul_bootstrap:
+            files:
+              /opt/consul/config/client.json:
+                content:
+                  "Fn::Sub":
+                    - |
+                      {
+                        "advertise_addr": "PrivateIpAddress",
+                        "bind_addr": "PrivateIpAddress",
+                        "node_name": "InstanceId",
+                        "datacenter": "${AWS::Region}",
+                        "server": false,
+                        "ui" : false,
+                        "leave_on_terminate" : true,
+                        "skip_leave_on_interrupt" : false,
+                        "disable_update_check": true,
+                        "log_level": "warn",
+                        "enable_local_script_checks": true,
+                        "data_dir": "/opt/consul/data",
+                        "client_addr": "0.0.0.0",
+                        "primary_datacenter": "${PrimaryRegion}",
+                        "retry_join": ["provider=aws region=${AWS::Region} tag_key=${ConsulEc2RetryTagKey} tag_value=${ConsulEc2RetryTagValue}"],
+                        "addresses": {
+                          "http": "0.0.0.0"
+                        },
+                        "ports": { "grpc": 8502 },
+                        "connect": {
+                          "enabled": true
+                        }
+                      }
+                    - PrimaryRegion: !If [ SpecifiesConsulRegion, !Ref ConsulPrimaryRegion, !Sub "${AWS::Region}"]
+                mode: 000644
+              /etc/systemd/system/consul.service:
+                content: !Join
+                  - ""
+                  - - |
+                      [Unit]
+                    - |
+                      Description="HashiCorp Consul - A service mesh solution"
+                    - |
+                      Documentation=https://www.consul.io/
+                    - |
+                      Requires=network-online.target
+                    - |
+                      After=network-online.target
+                    - |
+                      ConditionFileNotEmpty=/opt/consul/config/client.json
+                    - |+
+                      [Service]
+                    - |
+                      Type=notify
+                    - |
+                      User=consul
+                    - |
+                      Group=consul
+                    - |
+                      ExecStart=/usr/bin/consul agent -config-dir /opt/consul/config -data-dir /opt/consul/data
+                    - |
+                      ExecReload=/usr/bin/consul reload
+                    - |
+                      KillMode=process
+                    - |
+                      Restart=on-failure
+                    - |
+                      TimeoutSec=300s
+                    - |
+                      LimitNOFILE=65536
+                    - |+
+                      [Install]
+                    - WantedBy=multi-user.target
+            commands:
+              00_fill_consul_config_ip:
+                command: myip=`echo $(curl -s http://169.254.169.254/latest/meta-data/local-ipv4)` && sed -i "s/PrivateIpAddress/${myip}/g" /opt/consul/config/client.json
+              01_fill_consul_config_instance_id:
+                command: myid=`echo $(curl -s http://169.254.169.254/latest/meta-data/instance-id)` && sed -i "s/InstanceId/${myid}/g" /opt/consul/config/client.json
+              02_change_ownership:
+                command: chown -R consul:consul /opt/consul
+              03_reload_systemd:
+                command: systemctl daemon-reload
+              04_enable_consul:
+                command: systemctl enable consul
+              05_start_consul:
+                command: systemctl start consul
+              06_get_envoy:
+                command: curl -L https://getenvoy.io/cli | bash -s -- -b /usr/local/bin
+              07_fetch_envoy:
+                command: /usr/local/bin/getenvoy fetch standard:1.13.1
+              08_install_envoy:
+                command: mv /root/.getenvoy/builds/standard/1.13.1/linux_glibc/bin/envoy /usr/bin/envoy
+          setup_ethercattle_files:
+            files:
+              /root/configure-server.sh:
+                content:
+                  "Fn::Sub":
+                    - |
+                      #!/bin/bash -xe
+                      yum install -y aws-cfn-bootstrap
+
+                      if [ "$(arch)" == "x86_64" ]
+                      then
+                        ARCH="amd64"
+                      elif [ "$(arch)" == "aarch64" ]
+                      then
+                        ARCH="arm64"
+                      fi
+
+                      sysctl -p || true
+
+                      curl "https://awscli.amazonaws.com/awscli-exe-linux-$(arch).zip" -o "awscliv2.zip"
+                      unzip awscliv2.zip
+                      ./aws/install
+
+                      GETH_BIN="geth-linux-$ARCH"
+                      LOGS_BIN="journald-cloudwatch-logs-$ARCH"
+                      aws s3 cp s3://${S3GethBucketName}/${ECGethVersion}/$GETH_BIN /usr/bin/geth
+                      aws s3 cp s3://${S3GethBucketName}/$LOGS_BIN /usr/local/bin/journald-cloudwatch-logs
+                      aws s3 cp s3://${S3GethBucketName}/peerManagerAuth.py /usr/local/bin/peerManager.py
+                      chmod +x /usr/bin/geth
+                      chmod +x /usr/local/bin/journald-cloudwatch-logs
+                      chmod +x /usr/local/bin/peerManager.py
+                      mkdir -p /var/lib/journald-cloudwatch-logs/
+                      mkdir -p /var/lib/ethereum
+                      #mount -o barrier=0,data=writeback /dev/sdf /var/lib/ethereum
+                      mkdir -p /var/lib/ethereum/geth/chaindata/snaps
+                      #resize2fs /dev/sdf
+                      useradd -r geth
+
+                      #echo "/dev/sdf  /var/lib/ethereum    ext4   barrier=0,data=writeback,noatime  1   1" >> /etc/fstab
+
+
+                      mkfs.ext4 /dev/sdf
+                      mount -o barrier=0,data=writeback /dev/sdf /var/lib/ethereum
+                      resize2fs /dev/sdf
+                      echo "/dev/sdf  /var/lib/ethereum  ext4   barrier=0,data=writeback,noatime  1   1" >> /etc/fstab
+                      mkdir -p /var/lib/ethereum/geth/chaindata/snaps
+                      mkfs.ext4 /dev/sdg
+                      mount -o barrier=0,data=writeback /dev/sdg /var/lib/ethereum/geth/chaindata/snaps
+                      resize2fs /dev/sdg
+                      echo "/dev/sdg  /var/lib/ethereum/geth/chaindata/snaps  ext4   barrier=0,data=writeback,noatime  1   1" >> /etc/fstab
+                      chown -R geth:geth /var/lib/ethereum
+
+                      yum install -y https://s3.amazonaws.com/amazoncloudwatch-agent/amazon_linux/$ARCH/latest/amazon-cloudwatch-agent.rpm nmap-ncat jq python-pip jq fio || true
+                      pip install kafka-python
+                      /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -c ssm:${MetricsConfigParameter} -s
+
+                      crontab -l >  newcrontab || true
+                      echo "5,20,35,50 * * * * /usr/bin/sh -c 'for x in \$(ls /dev/sd*) ; do echo resizing \$(readlink -f \$x) if needed; /usr/sbin/resize2fs \$(readlink -f \$x) ; done'" >> newcrontab
+                      crontab newcrontab
+
+
+                      printf "[Unit]
+                      Description=journald-cloudwatch-logs
+                      Wants=basic.target
+                      After=basic.target network.target
+
+                      [Service]
+                      ExecStart=/usr/local/bin/journald-cloudwatch-logs /usr/local/etc/journald-cloudwatch-logs.conf
+                      KillMode=process
+                      Restart=on-failure
+                      RestartSec=42s" > /etc/systemd/system/journald-cloudwatch-logs.service
+
+                      echo "geth        hard nofile 500000" >> /etc/security/limits.conf
+                      echo "geth        soft nofile 500000" >> /etc/security/limits.conf
+
+                      systemctl daemon-reload
+
+                      sleep 5 #TODO- workaround for a deadlock on topic creation
+
+
+                      systemctl enable amazon-cloudwatch-agent.service
+                      systemctl start amazon-cloudwatch-agent.service
+                      systemctl enable journald-cloudwatch-logs
+                      systemctl start journald-cloudwatch-logs
+                    - ClusterId:
+                        "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
+                      SnapdbHTTPFlag:
+                          !If [HasSnapdbHTTP, "--http --http.addr 0.0.0.0 --http.port 8545", ""]
+                      SnapdbGraphQLFlag:
+                          # Wow that's a lot of escaping!
+                          !If [HasSnapdbGraphQL, "--graphql --graphql.vhosts \\\\\\'*\\\\\\'", ""]
+                      SnapdbWebsocketsFlag:
+                          !If [HasSnapdbWebsockets, "--ws --ws.addr 0.0.0.0 --ws.port 8546", ""]
+                      BaseInfrastructure:
+                        "Fn::ImportValue": !Sub "${InfrastructureStack}-BaseInfrastructure"
+                mode: "000700"
+                owner: root
+                group: root
+              /root/service-configs.sh:
+                content:
+                  "Fn::Sub":
+                    - |
+                      #!/bin/bash -xe
+
+                      totalm=$(free -m | awk '/^Mem:/{print $2}') ; echo $totalm
+                      allocatesafe=$((totalm * 75 / 100))
+
+                      printf "KafkaHostname=${KafkaBrokerURL}
+                      KafkaTopic=${KafkaTopic}
+                      NetworkId=${NetworkId}
+                      infraName=${InfrastructureStack}
+                      baseInfraName=${BaseInfrastructure}
+                      network=${NetworkId}
+                      SnapdbClusterVersion=${SnapdbClusterVersion}
+                      AWS_REGION=${AWS::Region}
+                      LOG_BLOCK_LIMIT=10000
+                      " > /etc/systemd/system/ethcattle-vars
+
+
+                      printf "[Unit]
+                      Description=Ethereum go client snapdb server
+                      After=syslog.target network.target
+                      [Service]
+                      User=geth
+                      Group=geth
+                      Environment=HOME=/var/lib/ethereum
+                      EnvironmentFile=/etc/systemd/system/ethcattle-vars
+                      Type=simple
+                      LimitNOFILE=655360
+                      #ExecStartPre=/usr/bin/bash -c '/usr/bin/geth  --cache=$allocatesafe   --datadir=/var/lib/ethereum  --snapshot   --exitwhensynced 2>>/tmp/geth-stderr'
+                      ExecStart=/usr/bin/bash -c '/usr/bin/geth ${SnapdbExtraFlags}  --cache=$allocatesafe --datadir=/var/lib/ethereum --light.maxpeers 0 --maxpeers 25 ${SnapdbHTTPFlag} ${SnapdbGraphQLFlag} ${SnapdbWebsocketsFlag} --snapshot '
+                      TimeoutStopSec=90
+                      TimeoutStartSec=86400
+                      RestartSec=10s
+                      [Install]
+                      WantedBy=multi-user.target
+                      " > /etc/systemd/system/geth-snapdb.service
+
+                      printf "[Unit]
+                      Description=Geth Peer Monitoring
+                      After=syslog.target network.target geth
+
+                      [Service]
+                      User=geth
+                      Group=geth
+                      Environment=HOME=/var/lib/ethereum
+                      Type=simple
+                      ExecStart=/usr/local/bin/peerManager.py /var/lib/ethereum/geth.ipc ${NetworkId}-peerlist ${KafkaBrokerURL}
+                      KillMode=process
+                      TimeoutStopSec=90
+                      Restart=on-failure
+                      RestartSec=10s
+                      " > /etc/systemd/system/geth-peer-data.service
+
+                    - ClusterId:
+                        "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
+                      SnapdbHTTPFlag:
+                          !If [HasSnapdbHTTP, "--http --http.addr 0.0.0.0 --http.port 8545", ""]
+                      SnapdbGraphQLFlag:
+                          # Wow that's a lot of escaping!
+                          !If [HasSnapdbGraphQL, "--graphql --graphql.vhosts \\\\\\'*\\\\\\'", ""]
+                      SnapdbWebsocketsFlag:
+                          !If [HasSnapdbWebsockets, "--ws --ws.addr 0.0.0.0 --ws.port 8546", ""]
+                      BaseInfrastructure:
+                        "Fn::ImportValue": !Sub "${InfrastructureStack}-BaseInfrastructure"
+                mode: "000700"
+                owner: root
+                group: root
+              /root/start-snapdb.sh:
+                content:
+                  "Fn::Sub":
+                    - |
+                      #!/bin/bash -xe
+                      printf "log_group = \"${SnapdbLG}\"
+                      state_file = \"/var/lib/journald-cloudwatch-logs/state\"" > /usr/local/etc/journald-cloudwatch-logs.conf
+
+                      ## RESTORE the snap directory
+                      export BACKUPNAME="${S3SnapdbBackup}"
+                      if ! aws s3 sync s3://$BACKUPNAME /var/lib/ethereum/geth/chaindata/snaps ; then
+                        if [ "${AggregatedNotifications}" != "" ]
+                        then
+                          aws sns publish --topic-arn=${AggregatedNotifications} --subject="${AWS::StackName} - Taking S3 Backup Failed" --message="The snapdb backup process for ${AWS::StackName} failed to pull the snap S3 backup."
+                        fi
+                        if [ "${AlarmSNSTopic}" != "" ]
+                        then
+                          aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - Taking S3 Backup Failed" --message="The snapdb backup process for ${AWS::StackName} failed to pull the snap S3 backup."
+                        fi
+                        poweroff
+                      fi
+
+                      export GETHBACKUPNAME="${S3GethBackup}"
+                      if ! aws s3 sync s3://$GETHBACKUPNAME /var/lib/ethereum/ ; then
+                        if [ "${AggregatedNotifications}" != "" ]
+                        then
+                          aws sns publish --topic-arn=${AggregatedNotifications} --subject="${AWS::StackName} - Taking S3 Backup Failed" --message="The snapdb backup process for ${AWS::StackName} failed to pull the snap S3 backup."
+                        fi
+                        if [ "${AlarmSNSTopic}" != "" ]
+                        then
+                          aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - Taking S3 Backup Failed" --message="The snapdb backup process for ${AWS::StackName} failed to pull the snap S3 backup."
+                        fi
+                        poweroff
+                      fi
+
+                      rm -f /var/lib/ethereum/geth/nodekey || true
+                      rm /var/lib/ethereum/geth.ipc || true
+                      rm /etc/systemd/system/geth.service || true
+                      ln -s /etc/systemd/system/geth-snapdb.service /etc/systemd/system/geth.service
+                      systemctl daemon-reload
+                      systemctl enable geth-snapdb.service
+                      systemctl enable geth-peer-data.service
+
+                      systemctl start geth-snapdb.service || true &
+                      sleep 5
+                      systemctl start geth-peer-data.service
+                      /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource SnapdbLaunchTemplate --configsets cs_install --region ${AWS::Region}
+
+                      if [ -f /usr/bin/replica-hook ]
+                      then
+                      /usr/bin/replica-hook
+                      fi
+
+                    - ClusterId:
+                        "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
+                      SnapdbHTTPFlag:
+                          !If [HasSnapdbHTTP, "--http --http.addr 0.0.0.0 --http.port 8545", ""]
+                      SnapdbGraphQLFlag:
+                          # Wow that's a lot of escaping!
+                          !If [HasSnapdbGraphQL, "--graphql --graphql.vhosts \\\\\\'*\\\\\\'", ""]
+                      SnapdbWebsocketsFlag:
+                          !If [HasSnapdbWebsockets, "--ws --ws.addr 0.0.0.0 --ws.port 8546", ""]
+                      BaseInfrastructure:
+                        "Fn::ImportValue": !Sub "${InfrastructureStack}-BaseInfrastructure"
+                mode: "000700"
+                owner: root
+                group: root
+
+              /root/stop-all.sh:
+                content:
+                  "Fn::Sub":
+                    - |
+                      #!/bin/bash -xe
+
+                      systemctl stop amazon-cloudwatch-agent.service || true &
+                      systemctl stop geth-fallback.service || true &
+                      systemctl stop geth-master-overlay.service  || true &
+                      systemctl stop geth-master.service  || true &
+                      systemctl stop geth-snapdb.service  || true &
+                      systemctl stop geth-peer-data.service || true &
+                      systemctl stop geth-replica.service || true &
+                      systemctl stop geth-tx.service || true &
+                      systemctl stop journald-cloudwatch-logs || true &
+                      wait
+
+
+                    - ClusterId:
+                        "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
+                      SnapdbHTTPFlag:
+                          !If [HasSnapdbHTTP, "--http --http.addr 0.0.0.0 --http.port 8545", ""]
+                      SnapdbGraphQLFlag:
+                          # Wow that's a lot of escaping!
+                          !If [HasSnapdbGraphQL, "--graphql --graphql.vhosts \\\\\\'*\\\\\\'", ""]
+                      SnapdbWebsocketsFlag:
+                          !If [HasSnapdbWebsockets, "--ws --ws.addr 0.0.0.0 --ws.port 8546", ""]
+                      BaseInfrastructure:
+                        "Fn::ImportValue": !Sub "${InfrastructureStack}-BaseInfrastructure"
+                mode: "000700"
+                owner: root
+                group: root
+              /root/loadtest-disk.sh:
+                content:
+                  "Fn::Sub":
+                    - |
+                      #!/bin/bash -xe
+                      fio --filename=/dev/sdf --rw=read --bs=128k --iodepth=32 --ioengine=libaio --prio=7 --prioclass=3 --thinktime=2 --rate_iops=4000 --direct=1 --name=volume-initialize &
+                      export AWS_DEFAULT_REGION=${AWS::Region}
+                      VOLUME_ID=$(aws ec2 describe-volumes --filters Name=attachment.instance-id,Values="$(curl http://169.254.169.254/latest/meta-data/instance-id)" | jq '.Volumes[] | select(. | .Attachments[0].Device == "/dev/sdf") | .VolumeId' -cr)
+                      wait
+                      /usr/local/bin/aws ec2 modify-volume --volume-id $VOLUME_ID --volume-type gp3 --iops 3000 --throughput 125 &
+
+                    - ClusterId:
+                        "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
+                      SnapdbHTTPFlag:
+                          !If [HasSnapdbHTTP, "--http --http.addr 0.0.0.0 --http.port 8545", ""]
+                      SnapdbGraphQLFlag:
+                          # Wow that's a lot of escaping!
+                          !If [HasSnapdbGraphQL, "--graphql --graphql.vhosts \\\\\\'*\\\\\\'", ""]
+                      SnapdbWebsocketsFlag:
+                          !If [HasSnapdbWebsockets, "--ws --ws.addr 0.0.0.0 --ws.port 8546", ""]
+                      BaseInfrastructure:
+                        "Fn::ImportValue": !Sub "${InfrastructureStack}-BaseInfrastructure"
+                mode: "000700"
+                owner: root
+                group: root
+
+    Properties:
+      LaunchTemplateData:
+        ImageId: !If [HasSnapdbImageAMI, !Ref SnapdbImageAMI, !FindInMap [RegionMap, !Ref "AWS::Region", AL2AMI]]
+        InstanceType: m5.large
+        TagSpecifications:
+          - ResourceType: instance
+            Tags:
+              - Key: Name
+                Value: !Sub "${KafkaTopic}-Snapdb"
+          - ResourceType: volume
+            Tags:
+              - Key: Name
+                Value: !Sub "${KafkaTopic}-Snapdb"
+        SecurityGroupIds:
+          - !Sub ${SnapdbNodeSecurityGroup.GroupId}
+        IamInstanceProfile:
+          Name: !Ref SnapdbNodeInstanceProfile
+        KeyName: !If [HasKeyName, !Ref KeyName, !Ref 'AWS::NoValue']
+        CreditSpecification: !If [SmallSnapdb, {CpuCredits: standard}, !Ref 'AWS::NoValue']
+        BlockDeviceMappings:
+        - DeviceName: "/dev/xvda"
+          Ebs:
+            VolumeSize: 8
+            VolumeType: gp2
+        - DeviceName: "/dev/sdf"
+          Ebs:
+            VolumeSize: !Ref DiskSize
+            VolumeType: io1
+            Iops: !GetAtt VolumeIOPS.Value
+            # VolumeType: gp3
+            # Iops: 4000
+            # Throughput: 1000
+        - DeviceName: "/dev/sdg"
+          Ebs:
+            VolumeSize: 50
+            VolumeType: gp3
+            Iops: 4000
+            Throughput: 1000
+        - DeviceName: "/dev/sds"
+          Ebs:
+            VolumeSize: 8
+            VolumeType: gp3
+            Iops: 3000
+            Throughput: 125
+
+        UserData:
+          "Fn::Base64":
+            "Fn::Sub":
+              - |
+                #!/bin/bash -xe
+                mkswap /dev/sds
+                swapon /dev/sds
+                /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource SnapdbLaunchTemplate --configsets setup --region ${AWS::Region} || (sleep 30; /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource SnapdbLaunchTemplate --configsets setup --region ${AWS::Region} || poweroff)
+                /root/service-configs.sh || (sleep 60; /root/service-configs.sh || poweroff)
+                /root/configure-server.sh || (sleep 60; /root/configure-server.sh || poweroff)
+                /root/start-snapdb.sh  || (sleep 60; /root/start-snapdb.sh  || poweroff)
+                /root/loadtest-disk.sh || poweroff
+              - ClusterId:
+                  "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
+                BaseInfrastructure:
+                  "Fn::ImportValue": !Sub "${InfrastructureStack}-BaseInfrastructure"
+
+  SnapdbAutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      VPCZoneIdentifier:
+        - "Fn::ImportValue":
+            !Sub "${InfrastructureStack}-PublicA"
+        - "Fn::ImportValue":
+            !Sub "${InfrastructureStack}-PublicB"
+        - "Fn::ImportValue":
+            !Sub "${InfrastructureStack}-PublicC"
+      # LaunchTemplate:
+      #   LaunchTemplateId: !Ref SnapdbLaunchTemplate
+      #   Version: !Sub ${SnapdbLaunchTemplate.LatestVersionNumber}
+      MinSize: !Ref SnapdbCount
+      MaxSize: 7
+      HealthCheckType: EC2
+      MixedInstancesPolicy:
+        InstancesDistribution:
+          SpotAllocationStrategy: !Ref SnapdbSpotAllocationStrategy
+          OnDemandPercentageAboveBaseCapacity: !Ref SnapdbOnDemandPercentage
+          SpotInstancePools: !If [ SnapdbSpotLowestPrice, !FindInMap [PoolSize, Size, !Ref SnapdbSize], !Ref "AWS::NoValue"]
+        LaunchTemplate:
+          LaunchTemplateSpecification:
+            LaunchTemplateId: !Ref SnapdbLaunchTemplate
+            Version: !Sub ${SnapdbLaunchTemplate.LatestVersionNumber}
+          Overrides: !FindInMap [InstanceSizes, Snapdb, !Ref SnapdbSize]
+      MetricsCollection:
+      - Granularity: 1Minute
+        Metrics:
+        - GroupInServiceInstances
+      Tags:
+      - Key: Name
+        Value: !Sub ${AWS::StackName}-Snapdb
+        PropagateAtLaunch: 'true'
+
+  AggregatedNotifications:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: Aggregated Notifications
+  AggregatedNotificationsSubscription:
+    Type: AWS::SNS::Subscription
+    Condition: HasNotificationEmail
+    Properties:
+      Endpoint: !Ref NotificationEmail
+      Protocol: email
+      TopicArn: !Ref AggregatedNotifications
+
+  SnapdbDiskSNS:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: Snapdb Disk
+  SnapdbDiskAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmActions:
+        - !Ref SnapdbDiskSNS
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+      AlarmDescription: "Alarms when the snapdb data directory > 95% full"
+      ComparisonOperator: "GreaterThanThreshold"
+      Metrics:
+        - Id: xvdf
+          MetricStat:
+            Metric:
+              MetricName: "disk_used_percent"
+              Namespace: CWAgent
+              Dimensions:
+                - Name: AutoScalingGroupName
+                  Value : !Ref SnapdbAutoScalingGroup
+                - Name: device
+                  Value : "xvdf"
+                - Name: fstype
+                  Value : "ext4"
+                - Name: path
+                  Value : "/var/lib/ethereum"
+            Period: 60
+            Stat: Maximum
+          Label: NVME Overlay Volume Disk Usage
+          ReturnData: false
+        - Id: nvme1n1
+          MetricStat:
+            Metric:
+              MetricName: "disk_used_percent"
+              Namespace: CWAgent
+              Dimensions:
+                - Name: AutoScalingGroupName
+                  Value : !Ref SnapdbAutoScalingGroup
+                - Name: device
+                  Value : "nvme1n1"
+                - Name: fstype
+                  Value : "ext4"
+                - Name: path
+                  Value : "/var/lib/ethereum"
+            Period: 60
+            Stat: Maximum
+          Label: EBS Overlay Disk Usage
+          ReturnData: false
+        - Id: delta
+          Expression: "MAX(METRICS())"
+      InsufficientDataActions:
+        - !Ref SnapdbDiskSNS
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+      EvaluationPeriods: 5
+      OKActions:
+        - !Ref SnapdbDiskSNS
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+      Threshold: 95
+      TreatMissingData: missing
+  SnapdbDiskAlarmEmergency:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmActions:
+        - !Ref SnapdbDiskSNS
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+      AlarmDescription: "Alarms when the snapdb data directory > 98% full"
+      ComparisonOperator: "GreaterThanThreshold"
+      Metrics:
+        - Id: xvdf
+          MetricStat:
+            Metric:
+              MetricName: "disk_used_percent"
+              Namespace: CWAgent
+              Dimensions:
+                - Name: AutoScalingGroupName
+                  Value : !Ref SnapdbAutoScalingGroup
+                - Name: device
+                  Value : "xvdf"
+                - Name: fstype
+                  Value : "ext4"
+                - Name: path
+                  Value : "/var/lib/ethereum"
+            Period: 60
+            Stat: Maximum
+          Label: NVME Overlay Volume Disk Usage
+          ReturnData: false
+        - Id: nvme1n1
+          MetricStat:
+            Metric:
+              MetricName: "disk_used_percent"
+              Namespace: CWAgent
+              Dimensions:
+                - Name: AutoScalingGroupName
+                  Value : !Ref SnapdbAutoScalingGroup
+                - Name: device
+                  Value : "nvme1n1"
+                - Name: fstype
+                  Value : "ext4"
+                - Name: path
+                  Value : "/var/lib/ethereum"
+            Period: 60
+            Stat: Maximum
+          Label: EBS Overlay Disk Usage
+          ReturnData: false
+        - Id: delta
+          Expression: "MAX(METRICS())"
+      InsufficientDataActions:
+        - !Ref SnapdbDiskSNS
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+      EvaluationPeriods: 5
+      OKActions:
+        - !Ref SnapdbDiskSNS
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+      Threshold: 98
+      TreatMissingData: missing
+  SnapdbMemSNS:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: Snapdb RAM
+  SnapdbMemAlarmLong:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmActions:
+        - !Ref SnapdbMemSNS
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+      AlarmDescription: !Sub "Alarms when the snapdb RAM > ${SnapdbMemoryThresholdLong} for 30 minutes"
+      ComparisonOperator: "GreaterThanThreshold"
+      Dimensions:
+        - Name: AutoScalingGroupName
+          Value : !Ref SnapdbAutoScalingGroup
+      InsufficientDataActions:
+        - !Ref SnapdbMemSNS
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+      EvaluationPeriods: 30
+      DatapointsToAlarm: 28
+      MetricName: "mem_used_percent"
+      Namespace: CWAgent
+      OKActions:
+        - !Ref SnapdbMemSNS
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+      Period: 60
+      Statistic: Maximum
+      Threshold: !Ref SnapdbMemoryThresholdLong
+      TreatMissingData: missing
+  SnapdbMemAlarmLow:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmActions:
+        - !Ref SnapdbMemSNS
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+      AlarmDescription: !Sub "Alarms when the snapdb RAM < ${SnapdbMemoryThresholdLow} for 5 minutes"
+      ComparisonOperator: "LessThanThreshold"
+      Dimensions:
+        - Name: AutoScalingGroupName
+          Value : !Ref SnapdbAutoScalingGroup
+      InsufficientDataActions:
+        - !Ref SnapdbMemSNS
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+      EvaluationPeriods: 5
+      MetricName: "mem_used_percent"
+      Namespace: CWAgent
+      OKActions:
+        - !Ref SnapdbMemSNS
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+      Period: 60
+      Statistic: Minimum
+      Threshold: !Ref SnapdbMemoryThresholdLow
+      TreatMissingData: missing
+  SnapdbMemAlarmHigh:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmActions:
+        - !Ref SnapdbMemSNS
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+      AlarmDescription: !Sub "Alarms when the snapdb RAM > ${SnapdbMemoryThresholdHigh} for 5 minutes%"
+      ComparisonOperator: "GreaterThanThreshold"
+      Dimensions:
+        - Name: AutoScalingGroupName
+          Value : !Ref SnapdbAutoScalingGroup
+      InsufficientDataActions:
+        - !Ref SnapdbMemSNS
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+      EvaluationPeriods: 5
+      MetricName: "mem_used_percent"
+      Namespace: CWAgent
+      OKActions:
+        - !Ref SnapdbMemSNS
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+      Period: 60
+      Statistic: Maximum
+      Threshold: !Ref SnapdbMemoryThresholdHigh
+      TreatMissingData: missing
+  SnapdbCPUSNS:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: Snapdb RAM
+  SnapdbCPUAlarmLong:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmActions:
+        - !Ref SnapdbCPUSNS
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+      AlarmDescription: "Alarms when the snapdb CPU > 80%"
+      ComparisonOperator: "GreaterThanThreshold"
+      Dimensions:
+        - Name: AutoScalingGroupName
+          Value : !Ref SnapdbAutoScalingGroup
+      InsufficientDataActions:
+        - !Ref SnapdbCPUSNS
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+      EvaluationPeriods: 30
+      DatapointsToAlarm: 28
+      MetricName: "CPUUtilization"
+      Namespace: AWS/EC2
+      OKActions:
+        - !Ref SnapdbCPUSNS
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+      Period: 60
+      Statistic: Maximum
+      Threshold: 80
+      TreatMissingData: missing
+  SnapdbCPUAlarmHigh:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmActions:
+        - !Ref SnapdbCPUSNS
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+      AlarmDescription: "Alarms when the snapdb CPU > 80%"
+      ComparisonOperator: "GreaterThanThreshold"
+      Dimensions:
+        - Name: AutoScalingGroupName
+          Value : !Ref SnapdbAutoScalingGroup
+      InsufficientDataActions:
+        - !Ref SnapdbCPUSNS
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+      EvaluationPeriods: 5
+      MetricName: "CPUUtilization"
+      Namespace: AWS/EC2
+      OKActions:
+        - !Ref SnapdbCPUSNS
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+      Period: 60
+      Statistic: Maximum
+      Threshold: 95
+      TreatMissingData: missing
+  SnapdbPeerCountSNS:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: Snapdb Peer Count
+  SnapdbPeerCountAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmActions:
+        - !Ref SnapdbPeerCountSNS
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+      AlarmDescription: "Alarms when the snapdb PeerCount < 10"
+      ComparisonOperator: "LessThanThreshold"
+      Dimensions:
+        - Name: clusterId
+          Value : !Ref KafkaTopic
+      InsufficientDataActions:
+        - !Ref SnapdbPeerCountSNS
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+      EvaluationPeriods: 5
+      MetricName: "peerCount"
+      Namespace: BlockData
+      OKActions:
+        - !Ref SnapdbPeerCountSNS
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+      Period: 60
+      Statistic: Maximum
+      Threshold: 10
+      TreatMissingData: missing
+  MissingTrieNodeAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmActions:
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+      AlarmDescription: "Alarms when missingTrie > 1000"
+      ComparisonOperator: "GreaterThanThreshold"
+      Dimensions:
+        - Name: clusterId
+          Value : !Ref KafkaTopic
+      InsufficientDataActions:
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+      EvaluationPeriods: 1
+      MetricName: "trieMissing"
+      Namespace: SnapdbData
+      OKActions:
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+      Period: 60
+      Statistic: Sum
+      Threshold: 1000
+      TreatMissingData: notBreaching
+  SnapdbCountAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmActions:
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+      AlarmDescription: !Sub "Alarms when the number of snapdb servers < desired capacity"
+      ComparisonOperator: "LessThanThreshold"
+
+      InsufficientDataActions:
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+      EvaluationPeriods: 5
+      DatapointsToAlarm: 2
+      Metrics:
+        - Id: instances
+          MetricStat:
+            Metric:
+              MetricName: "GroupInServiceInstances"
+              Namespace: AWS/AutoScaling
+              Dimensions:
+                - Name: AutoScalingGroupName
+                  Value : !Ref SnapdbAutoScalingGroup
+            Period: 60
+            Stat: Minimum
+          Label: Instances
+          ReturnData: false
+        - Id: measured
+          Expression: "(instances + 1)"
+      OKActions:
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+      Threshold: !Ref SnapdbCount
+      TreatMissingData: missing
+  SnapdbLogMetricsFunctionLG:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays: 7
+      LogGroupName: !Join ["", ["/aws/lambda/", !Ref SnapdbLogMetricsFunction]]
+
+  LogMetricsRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Action:
+          - sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service:
+            - lambda.amazonaws.com
+        Version: '2012-10-17'
+  LogMetricsFunctionPolicy:
+    Type: "AWS::IAM::Policy"
+    Properties:
+      Roles:
+        - !Ref LogMetricsRole
+      PolicyName: !Sub "SnapdbLogMetrics${AWS::StackName}"
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - "logs:CreateLogStream"
+              - "logs:PutLogEvents"
+            Resource: "*"
+          - Effect: Allow
+            Action:
+              - "cloudwatch:PutMetricData"
+            Resource: "*"
+          - Effect: Allow
+            Action:
+              - "logs:CreateLogGroup"
+            Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:*"
+  SnapdbLogMetricsFunction:
+    Type: "AWS::Lambda::Function"
+    Properties:
+      Code:
+        S3Bucket: !Ref S3GethBucketName
+        S3Key: lambdaPackage-22.zip
+      Description: "A lambda function to process Geth logs into metrics"
+      Environment:
+        Variables:
+          CLUSTER_ID: !Sub ${KafkaTopic}
+      Handler: "logMonitor.masterHandler"
+      Role: !Sub ${LogMetricsRole.Arn}
+      Runtime: python3.7
+  SnapdbLogMetricsSubscription:
+    Type: AWS::Logs::SubscriptionFilter
+    Properties:
+      DestinationArn: !Sub ${SnapdbLogMetricsFunction.Arn}
+      FilterPattern: '{$.systemdUnit = "geth.service" || $.systemdUnit = "geth-snapd.service" || $.systemdUnit = "geth-peer-data.service"}'
+      LogGroupName: !Ref SnapdbLG
+  SnapdbLogMetricFunctionInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Sub ${SnapdbLogMetricsFunction.Arn}
+      Action: 'lambda:InvokeFunction'
+      Principal: !Sub logs.${AWS::Region}.amazonaws.com
+      SourceAccount: !Ref 'AWS::AccountId'
+      SourceArn: !Sub ${SnapdbLG.Arn}
+
+  SnapdbBlockAgeSNS:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: Block Age
+  SnapdbBlockAgeAlarm:
+    Condition: NoRemoteRPCURL
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmActions:
+        - !Ref SnapdbBlockAgeSNS
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+      AlarmDescription: "Alarms when the block age > 120"
+      ComparisonOperator: "GreaterThanThreshold"
+      Dimensions:
+        - Name: clusterId
+          Value : !Ref KafkaTopic
+      EvaluationPeriods: 3
+      MetricName: "age"
+      Namespace: BlockData
+      OKActions:
+        - !Ref SnapdbBlockAgeSNS
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+      Period: 30
+      Statistic: Maximum
+      Threshold: 120
+      TreatMissingData: ignore
+
+  SnapdbBlockNumberSNS:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: Block Number
+  SnapdbBlockNumberAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: NoRemoteRPCURL
+    Properties:
+      AlarmActions:
+        - !Ref SnapdbBlockNumberSNS
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+      AlarmDescription: "Alarms when the block number is missing"
+      ComparisonOperator: "LessThanThreshold"
+      Dimensions:
+        - Name: clusterId
+          Value : !Ref KafkaTopic
+      EvaluationPeriods: 3
+      MetricName: "number"
+      Namespace: BlockData
+      OKActions:
+        - !Ref SnapdbBlockNumberSNS
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+      Period: 30
+      Statistic: SampleCount
+      Threshold: 1
+      TreatMissingData: breaching
+  SnapdbBlockNumberComparisonAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: HasRemoteRPCURL
+    Properties:
+      AlarmActions:
+        - !Ref SnapdbBlockNumberSNS
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+      AlarmDescription: "Alarms when the block number is missing"
+      ComparisonOperator: "GreaterThanThreshold"
+      EvaluationPeriods: 2
+      Metrics:
+        - Id: remote
+          MetricStat:
+            Metric:
+              MetricName: "RemoteBlockNumber"
+              Namespace: BlockData
+              Dimensions:
+                - Name: provider
+                  Value : !Ref RemoteRPCURL
+            Period: 60
+            Stat: Maximum
+          Label: Remote Block Number
+          ReturnData: false
+        - Id: cluster
+          MetricStat:
+            Metric:
+              MetricName: "number"
+              Namespace: BlockData
+              Dimensions:
+                - Name: clusterId
+                  Value : !Ref KafkaTopic
+            Period: 60
+            Stat: Maximum
+          Label: Cluster Block Number
+          ReturnData: false
+        - Id: delta
+          Expression: "(remote - cluster)"
+      OKActions:
+        - !Ref SnapdbBlockNumberSNS
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+      Threshold: 1
+      TreatMissingData: breaching
+
+  BackupperLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Metadata:
+      AWS::CloudFormation::Init:
+          configSets:
+            s_scripting:
+              - validate_block_catchup
+          validate_block_catchup:
+            files:
+              /tmp/validate_block_catchup.sh:
+                content:
+                  "Fn::Sub":
+                    - |
+                      #!/bin/bash -xe
+
+                      set -e
+                      set -x
+
+                      # make sure that geth is able to start as a full node and catch up with peers
+                      sudo -Eu geth /usr/bin/geth ${SnapdbExtraFlags} --cache=$allocatesafe --light.maxpeers 0 --maxpeers 25 --rpc --rpcaddr 0.0.0.0 --rpcport 8545 --datadir=/var/lib/ethereum &
+                      pid=$!
+                      test_pass=0
+                      while [ $test_pass -le 1 ]
+                      do
+                        if curl -X POST --insecure -H "Content-Type: application/json" --data '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":64}' localhost:8545
+                        then
+                          test_pass=$(( $test_pass + 1 ))
+                        else
+                          test_pass=0
+                        fi
+                        sleep 10
+                      done
+                      START_BLOCK=$(curl -X POST --insecure -H "Content-Type: application/json" --data '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":64}' localhost:8545 | jq -r '.result')
+                      END_BLOCK=$(curl -X POST --insecure -H "Content-Type: application/json" --data '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":64}' localhost:8545 | jq -r '.result')
+                      while [[ "$((END_BLOCK - START_BLOCK))" -le "10" ]]; do
+                        END_BLOCK=$(curl -X POST --insecure -H "Content-Type: application/json" --data '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":64}' localhost:8545 | jq -r '.result')
+                        sleep 10
+                      done
+
+                      kill -HUP $pid
+                    - ClusterId:
+                        "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
+                mode: "000700"
+                owner: root
+                group: root
+
+    Properties:
+      LaunchTemplateData:
+        ImageId: !If [HasSnapdbImageAMI, !Ref SnapdbImageAMI, !FindInMap [RegionMap, !Ref "AWS::Region", AL2AMI]]
+        InstanceType: r5.xlarge
+        TagSpecifications:
+          - ResourceType: instance
+            Tags:
+              - Key: Name
+                Value: !Sub "${KafkaTopic}-Snapdb-backupper"
+          - ResourceType: volume
+            Tags:
+              - Key: Name
+                Value: !Sub "${KafkaTopic}-Snapdb-backupper"
+        SecurityGroupIds:
+          - !Sub ${SnapdbNodeSecurityGroup.GroupId}
+        IamInstanceProfile:
+          Name: !Ref BackupperNodeInstanceProfile
+        KeyName: !If [HasKeyName, !Ref KeyName, !Ref 'AWS::NoValue']
+        # CreditSpecification:
+        #   CpuCredits: standard
+        InstanceInitiatedShutdownBehavior: terminate
+        BlockDeviceMappings:
+        - DeviceName: "/dev/xvda"
+          Ebs:
+            VolumeSize: 8
+            VolumeType: gp2
+        - DeviceName: "/dev/sdf"
+          Ebs:
+            VolumeSize: !Ref DiskSize
+            VolumeType: io1
+            Iops: !GetAtt VolumeIOPS.Value
+            # VolumeType: gp3
+            # Iops: 4000
+            # Throughput: 1000
+        - DeviceName: "/dev/sdg"
+          Ebs:
+            VolumeSize: 50
+            VolumeType: gp3
+            Iops: 4000
+            Throughput: 1000
+        - DeviceName: "/dev/sds"
+          Ebs:
+            VolumeSize: 8
+            VolumeType: gp3
+            Iops: 3000
+            Throughput: 125
+
+        UserData:
+          "Fn::Base64":
+            "Fn::Sub":
+              - |
+                #!/bin/bash -xe
+                if [ "$(arch)" == "x86_64" ]
+                then
+                  ARCH="amd64"
+                elif [ "$(arch)" == "aarch64" ]
+                then
+                  ARCH="arm64"
+                fi
+                sleep 21600 && if [ "${S3BackupLogsBucket}" != "" ] ; then cat /var/log/cloud-init-output.log | aws s3 cp - s3://${S3BackupLogsBucket}/ethercattle/${NetworkId}/failure-$(date '+%Y%m%d-%H%M%S').log || true; fi && poweroff &
+
+                totalm=$(free -m | awk '/^Mem:/{print $2}') ; echo $totalm
+                export allocatesafe=$((totalm * 75 / 100))
+
+                sysctl -p || true
+                GETH_BIN="geth-linux-$ARCH"
+                aws s3 cp s3://${S3GethBucketName}/${ECGethVersion}/$GETH_BIN /usr/bin/geth
+                chmod +x /usr/bin/geth
+                mkdir -p /var/lib/ethereum
+
+                useradd -r geth
+                mkfs.ext4 /dev/sdf
+                mount -o barrier=0,data=writeback /dev/sdf /var/lib/ethereum
+                resize2fs /dev/sdf
+                echo "/dev/sdf  /var/lib/ethereum  ext4   barrier=0,data=writeback,noatime  1   1" >> /etc/fstab
+                mkdir -p /var/lib/ethereum/geth/chaindata/snaps
+                mkfs.ext4 /dev/sdg
+                mount -o barrier=0,data=writeback /dev/sdg /var/lib/ethereum/geth/chaindata/snaps
+                resize2fs /dev/sdg
+                echo "/dev/sdg  /var/lib/ethereum/geth/chaindata/snaps  ext4   barrier=0,data=writeback,noatime  1   1" >> /etc/fstab
+                chown -R geth:geth /var/lib/ethereum
+
+                mkswap /dev/sds
+                swapon /dev/sds
+
+                yum install -y jq
+
+                export AWS_DEFAULT_REGION=${AWS::Region}
+                export AWS_REGION=${AWS::Region}
+                printf "SnapdbClusterVersion=${SnapdbClusterVersion}\nKafkaHostname=${KafkaBrokerURL}\nKafkaTopic=${KafkaTopic}\nNetworkId=${NetworkId}\ninfraName=${InfrastructureStack}\nAWS_REGION=${AWS::Region}\n" > /etc/systemd/system/ethcattle-vars
+
+                if [ -f /usr/bin/replica-snapshot-hook ]
+                then
+                  /usr/bin/replica-snapshot-hook
+                fi
+
+                sysctl -w fs.file-max=12000500
+                sysctl -w fs.nr_open=20000500
+                ulimit -n 20000000
+
+                /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource BackupperLaunchTemplate --configsets s_scripting --region ${AWS::Region} --role ${BackupperNodeRole}
+
+                ## RESTORE the old snap directory
+                export BACKUPNAME="${S3SnapdbBackup}"
+                if ! aws s3 sync s3://$BACKUPNAME /var/lib/ethereum/geth/chaindata/snaps ; then
+                  if [ "${AggregatedNotifications}" != "" ]
+                  then
+                    aws sns publish --topic-arn=${AggregatedNotifications} --subject="${AWS::StackName} - Taking S3 Backup Failed" --message="The snapdb backup process for ${AWS::StackName} failed to pull the snap S3 backup."
+                  fi
+                  if [ "${AlarmSNSTopic}" != "" ]
+                  then
+                    aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - Taking S3 Backup Failed" --message="The snapdb backup process for ${AWS::StackName} failed to pull the snap S3 backup."
+                  fi
+                  poweroff
+                fi
+                export GETHBACKUPNAME="${S3GethBackup}"
+                if ! aws s3 sync s3://$GETHBACKUPNAME /var/lib/ethereum/ ; then
+                  if [ "${AggregatedNotifications}" != "" ]
+                  then
+                    aws sns publish --topic-arn=${AggregatedNotifications} --subject="${AWS::StackName} - Taking S3 Backup Failed" --message="The snapdb backup process for ${AWS::StackName} failed to pull the snap S3 backup."
+                  fi
+                  if [ "${AlarmSNSTopic}" != "" ]
+                  then
+                    aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - Taking S3 Backup Failed" --message="The snapdb backup process for ${AWS::StackName} failed to pull the snap S3 backup."
+                  fi
+                  poweroff
+                fi
+                chown -R geth:geth /var/lib/ethereum
+                # Update from network
+                sudo -Eu geth /usr/bin/geth --cache=$allocatesafe ${SnapdbExtraFlags} --datadir=/var/lib/ethereum --snapshot --exitwhensynced
+                if ! sudo -Eu geth /usr/bin/geth verifystatetrie --datadir=/var/lib/ethereum ${BackupValidationThreshold}
+                then
+                  if [ "${AggregatedNotifications}" != "" ]
+                  then
+                    aws sns publish --topic-arn=${AggregatedNotifications} --subject="${AWS::StackName} - Bad State Trie" --message="State trie verification failed while taking backup for cluster '${KafkaTopic}'. No backup will be taken. This is probably unrecoverable, check previous backups)"
+                  fi
+                  if [ "${AlarmSNSTopic}" != "" ]
+                  then
+                    aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - Bad State Trie" --message="State trie verification failed while taking backup for cluster '${KafkaTopic}'. No backup will be taken. This is probably unrecoverable, check previous backups)"
+                  fi
+                  if [ "${S3BackupLogsBucket}" != "" ]
+                  then
+                    cat /var/log/cloud-init-output.log | aws s3 cp - s3://${S3BackupLogsBucket}/ethercattle/${NetworkId}/failure-$(date '+%Y%m%d-%H%M%S').log || true
+                  fi
+                  poweroff
+                fi
+
+                # sleep 21600 && poweroff &
+
+                VOLUME_ID=$(aws ec2 describe-volumes --filters Name=attachment.instance-id,Values="$(curl http://169.254.169.254/latest/meta-data/instance-id)" | jq '.Volumes[] | select(. | .Attachments[0].Device == "/dev/sdf") | .VolumeId' -cr)
+
+                if [ "$VOLUME_ID" == "" ]
+                then
+                  if [ "${AggregatedNotifications}" != "" ]
+                  then
+                    aws sns publish --topic-arn=${AggregatedNotifications} --subject="${AWS::StackName} - Volume Identification Failed" --message="The backing up process for ${KafkaTopic} failed to identify the attached volume. Could not take a backup."
+                  fi
+                  if [ "${AlarmSNSTopic}" != "" ]
+                  then
+                    aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - Volume Identification Failed" --message="The backing up process for ${KafkaTopic} failed to identify the attached volume. Could not take a backup."
+                  fi
+                  if [ "${S3BackupLogsBucket}" != "" ]
+                  then
+                    cat /var/log/cloud-init-output.log | aws s3 cp - s3://${S3BackupLogsBucket}/ethercattle/${NetworkId}/failure-$(date '+%Y%m%d-%H%M%S').log || true
+                  fi
+                  poweroff
+                fi
+
+
+                if [ "$SNAPSHOT_ID" == "null" ]; then
+                  if [ "${AggregatedNotifications}" != "" ]
+                  then
+                    aws sns publish --topic-arn=${AggregatedNotifications} --subject="${AWS::StackName} - Backing up Volume Failed" --message="The backing up process for ${KafkaTopic} failed to take a backup."
+                  fi
+                  if [ "${AlarmSNSTopic}" != "" ]
+                  then
+                    aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - Backing up Volume Failed" --message="The backing up process for ${KafkaTopic} failed to take a backup."
+                  fi
+                  if [ "${S3BackupLogsBucket}" != "" ]
+                  then
+                    cat /var/log/cloud-init-output.log | aws s3 cp - s3://${S3BackupLogsBucket}/ethercattle/${NetworkId}/failure-$(date '+%Y%m%d-%H%M%S').log || true
+                  fi
+                  poweroff
+                fi
+
+
+                ## BACKUP THE snap directory
+                export BACKUPNAME="${S3SnapdbBackupBucket}/${NetworkId}/snapdb-$(date '+%Y%m%d-%H%M%S')/"
+                if ! aws s3 sync /var/lib/ethereum/geth/chaindata/snaps s3://$BACKUPNAME; then
+                  if [ "${AggregatedNotifications}" != "" ]
+                  then
+                    aws sns publish --topic-arn=${AggregatedNotifications} --subject="${AWS::StackName} - Taking S3 Backup Failed" --message="The snapdb backup process for ${AWS::StackName} failed to upload the snap S3 backup."
+                  fi
+                  if [ "${AlarmSNSTopic}" != "" ]
+                  then
+                    aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - Taking S3 Backup Failed" --message="The snapdb backup process for ${AWS::StackName} failed to upload the snap S3 backup."
+                  fi
+                  poweroff
+                fi
+                sudo umount /var/lib/ethereum/geth/chaindata/snaps
+                export GETHBACKUPNAME="${S3SnapdbBackupBucket}/${NetworkId}/geth-$(date '+%Y%m%d-%H%M%S')/"
+                if ! aws s3 sync /var/lib/ethereum/ s3://$GETHBACKUPNAME ; then
+                  if [ "${AggregatedNotifications}" != "" ]
+                  then
+                    aws sns publish --topic-arn=${AggregatedNotifications} --subject="${AWS::StackName} - Taking S3 Backup Failed" --message="The snapdb backup process for ${AWS::StackName} failed to pull the snap S3 backup."
+                  fi
+                  if [ "${AlarmSNSTopic}" != "" ]
+                  then
+                    aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - Taking S3 Backup Failed" --message="The snapdb backup process for ${AWS::StackName} failed to pull the snap S3 backup."
+                  fi
+                  poweroff
+                fi
+
+                # After the backup completes, sync from the network. This is an extra integrity
+                # check on the backup, as it requires it to be able to validate blocks.
+                # We don't want this to end up in our final backup, but if we can't sync from
+                # the network we don't want to present this backup to the cluster.
+                if ! /tmp/validate_block_catchup.sh
+                then
+                  if [ "${AggregatedNotifications}" != "" ]
+                  then
+                    aws sns publish --topic-arn=${AggregatedNotifications} --subject="${AWS::StackName} - Backing up Volume Failed" --message="The backing up process for ${KafkaTopic} took a backup, but Geth could not sync. Not updating CloudFormation"
+                  fi
+                  if [ "${AlarmSNSTopic}" != "" ]
+                  then
+                    aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - Backing up Volume Failed" --message="The backing up process for ${KafkaTopic} took a backup, but Geth could not sync. Not updating CloudFormation"
+                  fi
+                  if [ "${S3BackupLogsBucket}" != "" ]
+                  then
+                    cat /var/log/cloud-init-output.log | aws s3 cp - s3://${S3BackupLogsBucket}/ethercattle/${NetworkId}/failure-$(date '+%Y%m%d-%H%M%S').log || true
+                  fi
+                  poweroff
+                fi
+
+                # CFN will set any parameters we don't provide back to their default values,
+                # so get all of the parameters, update Backups, and update the stack with
+                # the new parameters.
+                PARAMETERS=$(aws cloudformation describe-stacks --stack-name ${AWS::StackName} | jq '.Stacks[0].Parameters | map(if .ParameterKey == "S3GethBackup" then .ParameterValue="'$GETHBACKUPNAME'" else . end) | map(if .ParameterKey == "S3SnapdbBackup" then .ParameterValue="'$BACKUPNAME'" else . end)' -c
+
+                # Resize Disks
+                ORIGINAL_DISK_SIZE=`aws ec2 describe-volumes --volume-ids "$VOLUME_ID" | jq '.Volumes[] | .Size' -cr`
+                NEW_DISK_SIZE=$((ORIGINAL_DISK_SIZE*115/100))
+
+                ## manually grepping for sdf (mount direcotry above) because we don't really need to worry about the others.
+                df -H | grep -vE '^Filesystem|tmpfs|cdrom' | grep $(readlink -f /dev/sdf) | awk '{ print $5 " " $1 }' | while read output;
+                do
+                  echo $output
+                  usep=$(echo $output | awk '{ print $1}' | cut -d'%' -f1  )
+                  partition=$(echo $output | awk '{ print $2 }' )
+                  if [ $usep -ge 90 ]; then
+                    if [ "${AggregatedNotifications}" != "" ]
+                    then
+                      aws sns publish --topic-arn=${AggregatedNotifications} --subject="${AWS::StackName} - Upsizing Disk Size" --message="The disk for ${AWS::StackName} has reached $usep%. Resizing to $NEW_DISK_SIZE GB."
+                      if [ "${AlarmSNSTopic}" != "" ]
+                      then
+                        aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - Upsizing Disk Size" --message="The disk for ${AWS::StackName} has reached $usep%. Resizing to $NEW_DISK_SIZE GB."
+                      fi
+                      PARAMETERS_RESIZE=$(echo "$PARAMETERS" | jq 'map(if .ParameterKey == "DiskSize" then .ParameterValue="'$NEW_DISK_SIZE'" else . end)' -c)
+                      aws cloudformation update-stack --stack-name ${AWS::StackName} --use-previous-template --capabilities CAPABILITY_IAM --parameters="$PARAMETERS_RESIZE"
+                    fi
+                    else
+                      aws cloudformation update-stack --stack-name ${AWS::StackName} --use-previous-template --capabilities CAPABILITY_IAM --parameters="$PARAMETERS"
+                  fi
+                done
+
+                poweroff
+              - BackupperNodeRole: !Ref BackupperNodeRole
+                ClusterId:
+                  "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
+  BackupperNodeRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Action:
+          - sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service:
+            - ec2.amazonaws.com
+            - autoscaling.amazonaws.com
+        Version: '2012-10-17'
+  BackupperNodePolicy:
+    Type: "AWS::IAM::Policy"
+    Properties:
+      Roles:
+        - !Ref BackupperNodeRole
+      PolicyName: !Sub "BackupperNode${AWS::StackName}"
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Action:
+              - s3:GetObject
+            Resource: !Sub arn:aws:s3:::${S3GethBucketName}/*
+            Effect: Allow
+          - Action:
+              - s3:GetObject
+              - s3:ListBucket
+              - s3:GetBucketPolicy
+              - s3:GetObjectTagging
+              - s3:GetBucketLocation
+              - s3:PutObject
+            Resource: !Sub arn:aws:s3:::${S3BackupLogsBucket}/*
+            Effect: Allow
+          - Action:
+              - lambda:GetFunctionConfiguration
+              - lambda:InvokeAsync
+              - lambda:InvokeFunction
+              - lambda:GetFunction
+              - iam:ListRoles
+              - iam:ListRolePolicies
+              - iam:GetRole
+              - iam:PassRole
+              - iam:GetRolePolicy
+              - iam:ListAttachedRolePolicies
+            Resource:
+              - "*"
+            Effect: Allow
+          - Action:
+              - cloudformation:UpdateStack
+            Resource: !Sub "arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${AWS::StackName}/*"
+            Effect: Allow
+          - Action:
+              - iam:GetInstanceProfile
+            Resource:
+              - !Sub ${SnapdbNodeInstanceProfile.Arn}
+              - !Sub ${BackupperNodeInstanceProfile.Arn}
+            Effect: Allow
+          - Action:
+              - lambda:UpdateFunctionConfiguration
+              - lambda:GetFunctionConfiguration
+            Resource:
+              - !Sub ${BackupperLambdaFunction.Arn}
+              - !Sub ${BackupGCLambdaFunction.Arn}
+              - !Sub ${DiskSizeLambdaFunction.Arn}
+            Effect: Allow
+          - Action:
+              - iam:PassRole
+              - iam:GetRole
+              - iam:PutRolePolicy
+            Resource:
+              - !Sub "${SnapdbNodeRole.Arn}"
+              - !Sub "${BackupperLambdaRole.Arn}"
+              - !Sub "${BackupperNodeRole.Arn}"
+              - !Sub "${BackupGCLambdaRole.Arn}"
+            Effect: Allow
+          - Action:
+              - sns:Publish
+            Resource:
+              - !Ref AggregatedNotifications
+              - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+            Effect: Allow
+          - Action:
+              - autoscaling:EnableMetricsCollection
+              - autoscaling:DisableMetricsCollection
+              - autoscaling:UpdateAutoScalingGroup
+            Resource:
+              - "*"
+            Condition:
+              StringEquals:
+                "autoscaling:ResourceTag/aws:cloudformation:stack-id": !Sub "${AWS::StackId}"
+            Effect: Allow
+          - Action:
+              - cloudformation:DescribeStacks
+              - cloudformation:DescribeStackResource
+              - ec2:DescribeLaunchTemplates
+              - ec2:DescribeSnapshotAttribute
+              - ec2:CreateTags
+              - ec2:DescribeLaunchTemplateVersions
+              - ec2:RunInstances
+              - ec2:DescribeSnapshots
+              - ec2:CreateLaunchTemplateVersion
+              - ec2:DescribeVolumeStatus
+              - autoscaling:DescribeAutoScalingGroups
+              - autoscaling:DescribeScalingActivities
+              - ec2:DescribeVolumes
+              - ec2:CreateSnapshot
+              - ec2:DeleteSnapshot
+              - events:DescribeRule
+              - ec2:DescribeKeyPairs
+            Resource: "*"
+            Effect: Allow
+          - Action:
+              - s3:GetObject
+              - s3:ListBucket
+              - s3:GetBucketPolicy
+              - s3:GetObjectTagging
+              - s3:GetBucketLocation
+            Resource:
+              - !Sub arn:aws:s3:::${S3SnapdbBackupBucket}
+              - !Sub arn:aws:s3:::${S3SnapdbBackupBucket}/*
+            Effect: Allow
+          - Action:
+              - s3:GetObject
+              - s3:ListBucket
+              - s3:GetBucketPolicy
+              - s3:GetObjectTagging
+              - s3:GetBucketLocation
+            Resource:
+              - !Sub arn:aws:s3:::${CurrentBackupBucket.Name}
+              - !Sub arn:aws:s3:::${S3SnapdbBackup}/*
+            Effect: Allow
+  BackupperNodeInstanceProfile:
+    Type: "AWS::IAM::InstanceProfile"
+    Properties:
+      Path: /
+      Roles:
+      - !Ref BackupperNodeRole
+    DependsOn: BackupperNodeRole
+  BackupperLambdaRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Action:
+          - sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service:
+            - lambda.amazonaws.com
+        Version: '2012-10-17'
+  BackupperLambdaPolicy:
+    Type: "AWS::IAM::Policy"
+    Properties:
+      Roles:
+        - !Ref BackupperLambdaRole
+      PolicyName: !Sub "BackupperLambdaPolicy${AWS::StackName}"
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Action:
+              - logs:CreateLogStream
+              - logs:CreateLogGroup
+              - logs:PutLogEvents
+              - sns:Publish
+            Effect: Allow
+            Resource: "*"
+          - Effect: Allow
+            Action:
+              - iam:PassRole
+            Resource: !Sub "${BackupperNodeRole.Arn}"
+          - Effect: Allow
+            Action:
+              - ec2:CreateTags
+              - ec2:RunInstances
+            Resource:
+              - Fn::Sub:
+                - "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:subnet/${PublicA}"
+                - PublicA:
+                    "Fn::ImportValue":
+                      !Sub "${InfrastructureStack}-PublicA"
+              - !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:key-pair/${KeyName}"
+              - !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:instance/*"
+              - !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:volume/*"
+              - !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:security-group/${SnapdbNodeSecurityGroup.GroupId}"
+              - !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:network-interface/*"
+              - !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:launch-template/${BackupperLaunchTemplate}"
+              - "arn:aws:ec2:*::image/*"
+  BackupperLambdaFunction:
+    Type: "AWS::Lambda::Function"
+    Properties:
+      Code:
+        S3Bucket: !Ref S3GethBucketName
+        S3Key: lambdaPackage-22.zip
+      Description: "Launch instances to backup chaindata"
+      Environment:
+        Variables:
+          LAUNCH_TEMPLATE_ID: !Ref BackupperLaunchTemplate
+          LAUNCH_TEMPLATE_VERSION: !Sub "${BackupperLaunchTemplate.LatestVersionNumber}"
+          SUBNET_ID:
+            "Fn::Sub":
+              - "${PublicA},${PublicB},${PublicC}"
+              - PublicA:
+                  "Fn::ImportValue":
+                      !Sub "${InfrastructureStack}-PublicA"
+                PublicB:
+                  "Fn::ImportValue":
+                      !Sub "${InfrastructureStack}-PublicB"
+                PublicC:
+                  "Fn::ImportValue":
+                      !Sub "${InfrastructureStack}-PublicC"
+          VOLUME_SIZE: !Ref DiskSize
+      Handler: "getSnapshot.handler"
+      Role: !Sub ${BackupperLambdaRole.Arn}
+      Runtime: python3.7
+      Timeout: 30
+  BackupSchedulerRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: !Sub "Take a daily backup for the ${KafkaTopic} cluster"
+      ScheduleExpression: !Ref BackupScheduleExpression
+      Targets:
+        - Arn: !Sub ${BackupperLambdaFunction.Arn}
+          Id: !Sub "backup-${KafkaTopic}"
+  BackupperInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Sub ${BackupperLambdaFunction.Arn}
+      Action: 'lambda:InvokeFunction'
+      Principal: events.amazonaws.com
+      SourceArn: !Sub ${BackupSchedulerRule.Arn}
+
+
+  DiskSizeLambdaRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Action:
+          - sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service:
+            - lambda.amazonaws.com
+        Version: '2012-10-17'
+  DiskSizeLambdaPolicy:
+    Type: "AWS::IAM::Policy"
+    Properties:
+      Roles:
+        - !Ref DiskSizeLambdaRole
+      PolicyName: !Sub "DiskSizeLambdaPolicy${AWS::StackName}"
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - ec2:DescribeVolumes
+              - ec2:ModifyVolume
+            Resource: "*"
+  DiskSizeLambdaFunction:
+    Type: "AWS::Lambda::Function"
+    Properties:
+      Code:
+        S3Bucket: !Ref S3GethBucketName
+        S3Key: lambdaPackage-22.zip
+      Description: "Align snapd volume sizes with CloudFormation parameters"
+      Environment:
+        Variables:
+          VOLUME_SIZE: !Ref DiskSize
+          KAFKA_TOPIC: !Ref KafkaTopic
+      Handler: "masterVolumeManager.sizeHandler"
+      Role: !Sub ${DiskSizeLambdaRole.Arn}
+      Runtime: python3.7
+  DiskManagerSchedulerRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: Disk Size manager
+      ScheduleExpression: "rate(15 minutes)"
+      Targets:
+        - Arn: !Sub ${DiskSizeLambdaFunction.Arn}
+          Id: !Sub "disk-size-${KafkaTopic}"
+  DiskManagerInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Sub ${DiskSizeLambdaFunction.Arn}
+      Action: 'lambda:InvokeFunction'
+      Principal: events.amazonaws.com
+      SourceArn: !Sub ${DiskManagerSchedulerRule.Arn}
+
+  BackupGCLambdaRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Action:
+          - sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service:
+            - lambda.amazonaws.com
+        Version: '2012-10-17'
+  BackupGCLambdaPolicy:
+    Type: "AWS::IAM::Policy"
+    Properties:
+      Roles:
+        - !Ref BackupGCLambdaRole
+      PolicyName: !Sub "BackupGCLambdaPolicy${AWS::StackName}"
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - sns:Publish
+              - ec2:DescribeSnapshots
+              - ec2:DeleteSnapshot
+            Resource: "*"
+  BackupGCLambdaFunction:
+    Type: "AWS::Lambda::Function"
+    Properties:
+      Code:
+        S3Bucket: !Ref S3GethBucketName
+        S3Key: lambdaPackage-22.zip
+      Description: "Cleanup old chaindata backups"
+      Environment:
+        Variables:
+          CLUSTER_ID: !Ref KafkaTopic
+          SNS_TOPICS: !Sub "${AggregatedNotifications};${AlarmSNSTopic}"
+      Handler: "gcSnapshot.handler"
+      Role: !Sub ${BackupGCLambdaRole.Arn}
+      Runtime: python3.7
+  BackupGCSchedulerRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: !Sub "Cleanup old backups for the the ${KafkaTopic} cluster"
+      ScheduleExpression: "rate(1 hour)"
+      Targets:
+        - Arn: !Sub ${BackupGCLambdaFunction.Arn}
+          Id: !Sub "gc-${KafkaTopic}"
+  BackupGCInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Sub ${BackupGCLambdaFunction.Arn}
+      Action: 'lambda:InvokeFunction'
+      Principal: events.amazonaws.com
+      SourceArn: !Sub ${BackupGCSchedulerRule.Arn}
+
+  RemoteMetricsLambdaFunction:
+    Condition: HasRemoteRPCURL
+    Type: "AWS::Lambda::Function"
+    Properties:
+      Code:
+        S3Bucket: !Ref S3GethBucketName
+        S3Key: lambdaPackage-22.zip
+      Description: "Collect metrics for remote RPC URLs"
+      Environment:
+        Variables:
+          CLUSTER_ID: !Ref KafkaTopic
+          RPC_URL: !Ref RemoteRPCURL
+      Handler: "remote_metrics.handler"
+      Role: !Sub ${LogMetricsRole.Arn}
+      Runtime: python3.7
+  RemoteMetricsSchedulerRule:
+    Condition: HasRemoteRPCURL
+    Type: AWS::Events::Rule
+    Properties:
+      Description: !Sub "Remote metrics"
+      ScheduleExpression: "rate(1 minute)"
+      Targets:
+        - Arn: !Sub ${RemoteMetricsLambdaFunction.Arn}
+          Id: !Sub "remote-metrics-${KafkaTopic}"
+  RemoteMetricsInvokePermission:
+    Condition: HasRemoteRPCURL
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Sub ${RemoteMetricsLambdaFunction.Arn}
+      Action: 'lambda:InvokeFunction'
+      Principal: events.amazonaws.com
+      SourceArn: !Sub ${RemoteMetricsSchedulerRule.Arn}
+
+  VolumeGCLambdaRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Action:
+          - sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service:
+            - lambda.amazonaws.com
+        Version: '2012-10-17'
+  VolumeGCLambdaPolicy:
+    Type: "AWS::IAM::Policy"
+    Properties:
+      Roles:
+        - !Ref VolumeGCLambdaRole
+      PolicyName: !Sub "VolumeGCLambdaPolicy${AWS::StackName}"
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - tag:GetResources
+              - tag:TagResources
+              - ec2:CreateTags
+              - ec2:DescribeInstances
+              - ec2:DeleteVolume
+              - ec2:DetachVolume
+              - ec2:DescribeVolumes
+              - logs:PutLogEvents
+              - logs:DescribeLogStreams
+              - logs:DescribeLogGroups
+              - logs:CreateLogStream
+              - logs:CreateLogGroup
+            Resource: "*"
+  VolumeGCLambdaFunction:
+    Type: "AWS::Lambda::Function"
+    Properties:
+      Code:
+        S3Bucket: !Ref S3GethBucketName
+        S3Key: lambdaPackage-26.zip
+      Description: "Cleanup old chaindata backups"
+      Environment:
+        Variables:
+          TAG_NAME: VOLUME_MGMT_GROUP
+          TAG_VALUE: !Sub ${AWS::StackName}
+          VOLUME_NAME: /dev/sdg
+      Handler: "volumeGC.handler"
+      Role: !Sub ${VolumeGCLambdaRole.Arn}
+      Runtime: python3.7
+  VolumeGCSchedulerRule:
+    Type: AWS::Events::Rule
+    Properties:
+      EventPattern:
+        source:
+          -  "aws.ec2"
+        detail-type:
+          - "EC2 Instance State-change Notification"
+      State: ENABLED
+      Targets:
+        - Arn: !Sub ${VolumeGCLambdaFunction.Arn}
+          Id: !Sub "vgc-${KafkaTopic}"
+  VolumeGCInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Sub ${VolumeGCLambdaFunction.Arn}
+      Action: 'lambda:InvokeFunction'
+      Principal: events.amazonaws.com
+      SourceArn: !Sub ${VolumeGCSchedulerRule.Arn}
+
+  CloudwatchDashboard:
+    Type: AWS::CloudWatch::Dashboard
+    Properties:
+      DashboardName: !Sub "${AWS::StackName}-${AWS::Region}"
+      DashboardBody:
+        Fn::Sub:
+          - |
+              {
+                "widgets": [
+                    {
+                        "type": "metric",
+                        "x": 0,
+                        "y": 0,
+                        "width": 6,
+                        "height": 6,
+                        "properties": {
+                            "metrics": [
+                                [ "BlockData", "number", "clusterId", "${KafkaTopic}", { "label": "Snapdb Block Number" } ],
+                                [ "SnapdbData", "num",  "clusterId", "${KafkaTopic}", { "stat": "Average", "label": "SnapDB Block Number (avg)" } ],
+                                [ "SnapdbData", "num",  "clusterId", "${KafkaTopic}", { "stat": "Minimum", "label": "SnapDB Block Number (min)" } ]
+                            ],
+                            "view": "timeSeries",
+                            "stacked": false,
+                            "region": "${AWS::Region}",
+                            "title": "Block Number"
+                        }
+                    },
+                    {
+                        "type": "metric",
+                        "x": 12,
+                        "y": 0,
+                        "width": 6,
+                        "height": 6,
+                        "properties": {
+                            "view": "timeSeries",
+                            "stacked": false,
+                            "metrics": [
+                                [ "BlockData", "age", "clusterId", "${KafkaTopic}" ],
+                                [ "SnapdbData", "age",  "clusterId", "${KafkaTopic}", { "stat": "Average", "label": "SnapDB Block Age (avg)" } ],
+                                [ "SnapdbData", "age",  "clusterId", "${KafkaTopic}", { "stat": "Maximum", "label": "SnapDB Block Age (max)" } ]
+                            ],
+                            "region": "${AWS::Region}",
+                            "title": "Block Age"
+                        }
+                    },
+                    {
+                        "type": "metric",
+                        "x": 18,
+                        "y": 0,
+                        "width": 6,
+                        "height": 6,
+                        "properties": {
+                            "view": "timeSeries",
+                            "stacked": false,
+                            "metrics": [
+                                [ "SnapdbData", "offsetAge", "clusterId", "${KafkaTopic}" ]
+                            ],
+                            "region": "${AWS::Region}",
+                            "title": "Offset Age"
+                        }
+                    },
+                    {
+                        "type": "metric",
+                        "x": 6,
+                        "y": 6,
+                        "width": 6,
+                        "height": 6,
+                        "properties": {
+                            "view": "timeSeries",
+                            "stacked": false,
+                            "metrics": [
+                                [ "CWAgent", "disk_used_percent", "path", "/var/lib/ethereum", "AutoScalingGroupName", "${SnapdbAutoScalingGroup}", "device", "nvme1n1", "fstype", "ext4" ],
+                                [ "CWAgent", "disk_used_percent", "path", "/var/lib/ethereum", "AutoScalingGroupName", "${SnapdbAutoScalingGroup}", "device", "xvdf", "fstype", "ext4" ]
+                            ],
+                            "region": "${AWS::Region}",
+                            "title": "Disk Usage"
+                        }
+                    },
+                    {
+                        "type": "metric",
+                        "x": 0,
+                        "y": 6,
+                        "width": 6,
+                        "height": 6,
+                        "properties": {
+                            "view": "timeSeries",
+                            "stacked": false,
+                            "metrics": [
+                                [ "AWS/EC2", "CPUUtilization", "AutoScalingGroupName", "${SnapdbAutoScalingGroup}", { "stat": "Average", "label": "Snapdb" }],
+                                [ "AWS/EC2", "CPUUtilization", "AutoScalingGroupName", "${SnapdbAutoScalingGroup}", { "stat": "Average", "label": "SnapDBs (avg)" } ],
+                                [ "AWS/EC2", "CPUUtilization", "AutoScalingGroupName", "${SnapdbAutoScalingGroup}", { "stat": "Maximum", "label": "SnapDBs (max)" } ]
+                            ],
+                            "region": "${AWS::Region}",
+                            "title": "CPU Utilization"
+                        }
+                    },
+                    {
+                        "type": "metric",
+                        "x": 6,
+                        "y": 0,
+                        "width": 6,
+                        "height": 6,
+                        "properties": {
+                            "metrics": [
+                                [ { "expression": "m1-m2", "label": "Expression1", "id": "e1" } ],
+                                [ "BlockData", "number", "clusterId", "${KafkaTopic}", { "id": "m1", "visible": false } ],
+                                [ "SnapdbData", "num", "clusterId", "${KafkaTopic}", { "id": "m2", "visible": false } ]
+                            ],
+                            "view": "timeSeries",
+                            "stacked": false,
+                            "region": "${AWS::Region}",
+                            "title": "Block Lag"
+                        }
+                    },
+                    {
+                        "type": "metric",
+                        "x": 12,
+                        "y": 6,
+                        "width": 6,
+                        "height": 6,
+                        "properties": {
+                            "view": "timeSeries",
+                            "stacked": false,
+                            "metrics": [
+                                [ "CWAgent", "mem_used_percent", "AutoScalingGroupName", "${SnapdbAutoScalingGroup}" , { "stat": "Average", "label": "Snapdb" }],
+                                [ "CWAgent", "mem_used_percent", "AutoScalingGroupName", "${SnapdbAutoScalingGroup}" , { "stat": "Average", "label": "SnapDBs (avg)" } ],
+                                [ "CWAgent", "mem_used_percent", "AutoScalingGroupName", "${SnapdbAutoScalingGroup}" , { "stat": "Maximum", "label": "SnapDBs (max)" } ]
+                            ],
+                            "region": "${AWS::Region}",
+                            "title": "Memory Utilization"
+                        }
+                    },
+                    {
+                        "type": "metric",
+                        "x": 18,
+                        "y": 6,
+                        "width": 6,
+                        "height": 6,
+                        "properties": {
+                            "metrics": [
+                                [ "AWS/ApplicationELB", "RequestCountPerTarget", "TargetGroup", "${TargetGroup}", "LoadBalancer", "${LoadBalancer}", { "stat": "Sum", "period": 60 } ],
+                                [ ".", "RequestCount", ".", "${TargetGroup}", ".", "${LoadBalancer}", { "stat": "Sum", "period": 60 } ]
+                            ],
+                            "view": "timeSeries",
+                            "stacked": false,
+                            "region": "${AWS::Region}",
+                            "title": "Requests Per SnapDB",
+                            "period": 300
+                        }
+                    },
+                    {
+                        "type": "metric",
+                        "x": 0,
+                        "y": 12,
+                        "width": 6,
+                        "height": 6,
+                        "properties": {
+                            "view": "timeSeries",
+                            "stacked": false,
+                            "metrics": [
+                                [ "AWS/ApplicationELB", "TargetResponseTime", "TargetGroup", "${TargetGroup}", "LoadBalancer", "${LoadBalancer}" ]
+                            ],
+                            "region": "${AWS::Region}",
+                            "title": "Response Time"
+                        }
+                    },
+                    {
+                        "type": "metric",
+                        "x": 6,
+                        "y": 12,
+                        "width": 6,
+                        "height": 6,
+                        "properties": {
+                            "view": "timeSeries",
+                            "stacked": false,
+                            "metrics": [
+                                [ "BlockData", "peerCount", "clusterId", "${KafkaTopic}" ]
+                            ],
+                            "region": "${AWS::Region}",
+                            "title": "Snapdb Peer Count"
+                        }
+                    },
+                    {
+                        "type": "metric",
+                        "properties": {
+                            "view": "timeSeries",
+                            "stacked": false,
+                            "metrics": [
+                                [ "SnapdbData", "delta",  "clusterId", "${KafkaTopic}", { "stat": "Average", "label": "SnapDB Delta (avg)" } ],
+                                [ "SnapdbData", "delta",  "clusterId", "${KafkaTopic}", { "stat": "Maximum", "label": "SnapDB Delta (max)" } ]
+                            ],
+                            "region": "${AWS::Region}",
+                            "title": "Replication Delta"
+                        }
+                    },
+                    {
+                        "type": "metric",
+                        "properties": {
+                            "view": "timeSeries",
+                            "stacked": false,
+                            "metrics": [
+                                [ "SnapdbData", "concurrency",  "clusterId", "${KafkaTopic}", { "stat": "Average", "label": "Concurrent Requests (avg)" } ],
+                                [ "SnapdbData", "concurrency",  "clusterId", "${KafkaTopic}", { "stat": "Maximum", "label": "Concurrent Requests (max)" } ]
+                            ],
+                            "region": "${AWS::Region}",
+                            "title": "Snapdb Concurrency"
+                        }
+                    },
+                    {
+                        "type": "metric",
+                        "properties": {
+                            "view": "timeSeries",
+                            "stacked": false,
+                            "metrics": [
+                                [ "SnapdbData", "backend_error",  "clusterId", "${KafkaTopic}", { "stat": "Sum", "label": "Backend Errors (avg)" } ]
+                            ],
+                            "region": "${AWS::Region}",
+                            "title": "Backend Errors"
+                        }
+                    }${DashExt}
+                ]
+              }
+          - TargetGroup: {"Fn::ImportValue": !Sub "${InfrastructureStack}-RPCALBGroupName"}
+            LoadBalancer: {"Fn::ImportValue": !Sub "${InfrastructureStack}-RPCALBName"}
+            DashExt: !If [ HasDashboardExtensions, {"Fn::ImportValue": !Ref DashboardExtension}, "" ]
