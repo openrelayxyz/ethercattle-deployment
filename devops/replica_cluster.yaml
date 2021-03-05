@@ -846,7 +846,7 @@ Resources:
                       Type=simple
                       LimitNOFILE=655360
                       # ExecStartPre=/usr/bin/geth replica --snapshot=false ${FreezerFlags}  $OVERLAY_FLAG  --cache=$allocatesafe ${FreezerFlags} --kafka.broker=$KAFKA_ESCAPED_URL""$SEP_ESCAPED""fetch.default=8388608\\&max.waittime=25\\&avoid_leader=1  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown 2>>/tmp/geth-stderr || true
-                      ExecStart=/usr/bin/bash -c '/usr/bin/geth ${FreezerFlags} ${MasterExtraFlags} $OVERLAY_FLAG  --cache=$allocatesafe ${FreezerFlags} --datadir=/var/lib/ethereum --light.maxpeers 0 --maxpeers 25 ${ReplicaHTTPFlag} ${ReplicaGraphQLFlag} ${ReplicaWebsocketsFlag}'
+                      ExecStart=/usr/bin/bash -c '/usr/bin/geth ${FreezerFlags} ${MasterExtraFlags} --rpc.allow-unprotected-txs --snapshot=false --txlookuplimit=0 $OVERLAY_FLAG  --cache=$allocatesafe ${FreezerFlags} --datadir=/var/lib/ethereum --light.maxpeers 0 --maxpeers 25 ${ReplicaHTTPFlag} ${ReplicaGraphQLFlag} ${ReplicaWebsocketsFlag}'
                       TimeoutStopSec=90
                       TimeoutStartSec=86400
                       RestartSec=10s
@@ -867,7 +867,7 @@ Resources:
                       Type=simple
                       LimitNOFILE=655360
                       ExecStartPre=/usr/bin/bash -c '/usr/bin/geth replica --snapshot=false --cache=$allocatesafe ${ReplicaExtraFlags} ${FreezerFlags} --kafka.broker=$KAFKA_ESCAPED_URL""$SEP_ESCAPED""fetch.default=8388608\\&max.waittime=25\\&avoid_leader=1  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown 2>>/tmp/geth-stderr'
-                      ExecStart=/usr/bin/geth ${MasterExtraFlags} ${FreezerFlags} --rpc.allow-unprotected-txs --snapshot=false --light.maxpeers 0 --maxpeers 25 --gcmode=archive --kafka.broker=${KafkaBrokerURL}""$SEP""net.maxopenrequests=1\&message.send.max.retries=20000  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --kafka.txpool.topic=${InfrastructureStack}-txpool ${EventsTopicFlag}
+                      ExecStart=/usr/bin/geth ${MasterExtraFlags} ${FreezerFlags} --rpc.allow-unprotected-txs --snapshot=false --txlookuplimit=0 --light.maxpeers 0 --maxpeers 25 --gcmode=archive --kafka.broker=${KafkaBrokerURL}""$SEP""net.maxopenrequests=1\&message.send.max.retries=20000  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --kafka.txpool.topic=${InfrastructureStack}-txpool ${EventsTopicFlag}
                       TimeoutStartSec=86400
                       TimeoutStopSec=90
                       OnFailure=poweroff.target
@@ -888,7 +888,7 @@ Resources:
                       Type=simple
                       LimitNOFILE=655360
                       ExecStartPre=/usr/bin/bash -c '/usr/bin/geth replica --snapshot=false --cache=$allocatesafe ${ReplicaExtraFlags} ${FreezerFlags} $OVERLAY_FLAG --kafka.broker=$KAFKA_ESCAPED_URL""$SEP_ESCAPED""fetch.default=8388608\\&max.waittime=25\\&avoid_leader=1  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown 2>>/tmp/geth-stderr'
-                      ExecStart=/usr/bin/geth ${MasterExtraFlags} ${FreezerFlags} $OVERLAY_FLAG --light.maxpeers 0 --maxpeers 25 --gcmode=archive --kafka.broker=${KafkaBrokerURL}""$SEP""net.maxopenrequests=1\&message.send.max.retries=20000  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --kafka.txpool.topic=${InfrastructureStack}-txpool ${EventsTopicFlag}
+                      ExecStart=/usr/bin/geth ${MasterExtraFlags} ${FreezerFlags} $OVERLAY_FLAG --rpc.allow-unprotected-txs --snapshot=false --txlookuplimit=0 --light.maxpeers 0 --maxpeers 25 --gcmode=archive --kafka.broker=${KafkaBrokerURL}""$SEP""net.maxopenrequests=1\&message.send.max.retries=20000  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --kafka.txpool.topic=${InfrastructureStack}-txpool ${EventsTopicFlag}
                       TimeoutStartSec=86400
                       TimeoutStopSec=90
                       OnFailure=poweroff.target
@@ -1106,15 +1106,14 @@ Resources:
                       #!/bin/bash -xe
 
                       systemctl stop amazon-cloudwatch-agent.service || true &
-                      systemctl stop geth-fallback.service || true &
-                      systemctl stop geth-master-overlay.service  || true &
-                      systemctl stop geth-master.service  || true &
-                      systemctl stop geth-peer-data.service || true &
-                      systemctl stop geth-replica.service || true &
-                      systemctl stop geth-tx.service || true &
                       systemctl stop journald-cloudwatch-logs || true &
+                      systemctl stop geth-fallback.service || true &
+                      systemctl stop geth-master.service  || true &
+                      systemctl stop geth-master-overlay.service  || true &
+                      systemctl stop geth-peer-data.service || true &
+                      systemctl stop geth-tx.service || true &
+                      systemctl stop geth-replica.service || true &
                       wait
-
 
                     - ClusterId:
                         "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
@@ -2438,7 +2437,7 @@ Resources:
                       set -x
 
                       # make sure that geth is able to start as a full node and catch up with peers
-                      sudo -Eu geth /usr/bin/geth ${MasterExtraFlags} --cache=$allocatesafe --light.maxpeers 0 --maxpeers 25 --rpc --rpcaddr 0.0.0.0 --rpcport 8545 --datadir=/var/lib/ethereum ${FreezerFlags} &
+                      sudo -Eu geth /usr/bin/geth ${MasterExtraFlags} --rpc.allow-unprotected-txs --snapshot=false --txlookuplimit=0 --cache=$allocatesafe --light.maxpeers 0 --maxpeers 25 --rpc --rpcaddr 0.0.0.0 --rpcport 8545 --datadir=/var/lib/ethereum ${FreezerFlags} &
                       pid=$!
                       test_pass=0
                       while [ $test_pass -le 1 ]
@@ -2548,7 +2547,7 @@ Resources:
                 KAFKA_ESCAPED_URL="$(printf "${KafkaBrokerURL}"| sed 's^&^\\&^g')"
                 /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource SnapshotterLaunchTemplate --configsets s_scripting --region ${AWS::Region} --role ${SnapshotterNodeRole}
 
-                # sudo -Eu geth /usr/bin/geth ${MasterExtraFlags} --cache=$allocatesafe --light.maxpeers 0 --maxpeers 0 --rpc --rpcaddr 0.0.0.0 --rpcport 8545 --datadir=/var/lib/ethereum ${FreezerFlags} &
+                # sudo -Eu geth /usr/bin/geth ${MasterExtraFlags} --rpc.allow-unprotected-txs --snapshot=false --txlookuplimit=0 --cache=$allocatesafe --light.maxpeers 0 --maxpeers 0 --rpc --rpcaddr 0.0.0.0 --rpcport 8545 --datadir=/var/lib/ethereum ${FreezerFlags} &
                 # pid=$!
                 # test_pass=0
                 # while [ $test_pass -le 1 ]
@@ -2588,7 +2587,7 @@ Resources:
                 fi
 
                 # # Check and see if all blocks that were pulled down are actually there and not returning null.
-                # sudo -Eu geth /usr/bin/geth ${MasterExtraFlags} --cache=$allocatesafe --light.maxpeers 0 --maxpeers 0 --rpc --rpcaddr 0.0.0.0 --rpcport 8545 --datadir=/var/lib/ethereum ${FreezerFlags} &
+                # sudo -Eu geth /usr/bin/geth ${MasterExtraFlags} --rpc.allow-unprotected-txs --snapshot=false --txlookuplimit=0 --cache=$allocatesafe --light.maxpeers 0 --maxpeers 0 --rpc --rpcaddr 0.0.0.0 --rpcport 8545 --datadir=/var/lib/ethereum ${FreezerFlags} &
                 # pid=$!
                 # test_pass=0
                 # while [ $test_pass -le 1 ]
