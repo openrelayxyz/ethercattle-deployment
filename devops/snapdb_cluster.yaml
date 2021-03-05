@@ -995,9 +995,9 @@ Resources:
                       systemctl start geth-peer-data.service
                       /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource SnapdbLaunchTemplate --configsets cs_install --region ${AWS::Region}
 
-                      if [ -f /usr/bin/replica-hook ]
+                      if [ -f /usr/bin/snapdb-hook ]
                       then
-                      /usr/bin/replica-hook
+                      /usr/bin/snapdb-hook
                       fi
 
                     - ClusterId:
