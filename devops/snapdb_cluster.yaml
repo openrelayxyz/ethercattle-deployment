@@ -955,31 +955,33 @@ Resources:
                       printf "log_group = \"${SnapdbLG}\"
                       state_file = \"/var/lib/journald-cloudwatch-logs/state\"" > /usr/local/etc/journald-cloudwatch-logs.conf
 
-                      ## RESTORE the snap directory
-                      export BACKUPNAME="${S3SnapdbBackup}"
-                      if ! aws s3 sync s3://$BACKUPNAME /var/lib/ethereum/geth/chaindata/snaps ; then
-                        if [ "${AggregatedNotifications}" != "" ]
-                        then
-                          aws sns publish --topic-arn=${AggregatedNotifications} --subject="${AWS::StackName} - Taking S3 Backup Failed" --message="The snapdb backup process for ${AWS::StackName} failed to pull the snap S3 backup."
+                      if [ ! -z "${S3SnapdbBackup}" ]
+                        ## RESTORE the snap directory
+                        export BACKUPNAME="${S3SnapdbBackup}"
+                        if ! aws s3 sync s3://$BACKUPNAME /var/lib/ethereum/geth/chaindata/snaps ; then
+                          if [ "${AggregatedNotifications}" != "" ]
+                          then
+                            aws sns publish --topic-arn=${AggregatedNotifications} --subject="${AWS::StackName} - Taking S3 Backup Failed" --message="The snapdb backup process for ${AWS::StackName} failed to pull the snap S3 backup."
+                          fi
+                          if [ "${AlarmSNSTopic}" != "" ]
+                          then
+                            aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - Taking S3 Backup Failed" --message="The snapdb backup process for ${AWS::StackName} failed to pull the snap S3 backup."
+                          fi
+                          poweroff
                         fi
-                        if [ "${AlarmSNSTopic}" != "" ]
-                        then
-                          aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - Taking S3 Backup Failed" --message="The snapdb backup process for ${AWS::StackName} failed to pull the snap S3 backup."
-                        fi
-                        poweroff
-                      fi
 
-                      export GETHBACKUPNAME="${S3GethBackup}"
-                      if ! aws s3 sync s3://$GETHBACKUPNAME /var/lib/ethereum/ ; then
-                        if [ "${AggregatedNotifications}" != "" ]
-                        then
-                          aws sns publish --topic-arn=${AggregatedNotifications} --subject="${AWS::StackName} - Taking S3 Backup Failed" --message="The snapdb backup process for ${AWS::StackName} failed to pull the snap S3 backup."
+                        export GETHBACKUPNAME="${S3GethBackup}"
+                        if ! aws s3 sync s3://$GETHBACKUPNAME /var/lib/ethereum/ ; then
+                          if [ "${AggregatedNotifications}" != "" ]
+                          then
+                            aws sns publish --topic-arn=${AggregatedNotifications} --subject="${AWS::StackName} - Taking S3 Backup Failed" --message="The snapdb backup process for ${AWS::StackName} failed to pull the snap S3 backup."
+                          fi
+                          if [ "${AlarmSNSTopic}" != "" ]
+                          then
+                            aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - Taking S3 Backup Failed" --message="The snapdb backup process for ${AWS::StackName} failed to pull the snap S3 backup."
+                          fi
+                          poweroff
                         fi
-                        if [ "${AlarmSNSTopic}" != "" ]
-                        then
-                          aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - Taking S3 Backup Failed" --message="The snapdb backup process for ${AWS::StackName} failed to pull the snap S3 backup."
-                        fi
-                        poweroff
                       fi
 
                       rm -f /var/lib/ethereum/geth/nodekey || true
@@ -1855,32 +1857,34 @@ Resources:
                 ulimit -n 20000000
 
                 /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource BackupperLaunchTemplate --configsets s_scripting --region ${AWS::Region} --role ${BackupperNodeRole}
+                if [ ! -z "${S3SnapdbBackup}" ]
+                  ## RESTORE the old snap directory
+                  export BACKUPNAME="${S3SnapdbBackup}"
+                  if ! aws s3 sync s3://$BACKUPNAME /var/lib/ethereum/geth/chaindata/snaps ; then
+                    if [ "${AggregatedNotifications}" != "" ]
+                    then
+                      aws sns publish --topic-arn=${AggregatedNotifications} --subject="${AWS::StackName} - Taking S3 Backup Failed" --message="The snapdb backup process for ${AWS::StackName} failed to pull the snap S3 backup."
+                    fi
+                    if [ "${AlarmSNSTopic}" != "" ]
+                    then
+                      aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - Taking S3 Backup Failed" --message="The snapdb backup process for ${AWS::StackName} failed to pull the snap S3 backup."
+                    fi
+                    poweroff
+                  fi
+                  export GETHBACKUPNAME="${S3GethBackup}"
+                  if ! aws s3 sync s3://$GETHBACKUPNAME /var/lib/ethereum/ ; then
+                    if [ "${AggregatedNotifications}" != "" ]
+                    then
+                      aws sns publish --topic-arn=${AggregatedNotifications} --subject="${AWS::StackName} - Taking S3 Backup Failed" --message="The snapdb backup process for ${AWS::StackName} failed to pull the snap S3 backup."
+                    fi
+                    if [ "${AlarmSNSTopic}" != "" ]
+                    then
+                      aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - Taking S3 Backup Failed" --message="The snapdb backup process for ${AWS::StackName} failed to pull the snap S3 backup."
+                    fi
+                    poweroff
+                  fi
+                fi
 
-                ## RESTORE the old snap directory
-                export BACKUPNAME="${S3SnapdbBackup}"
-                if ! aws s3 sync s3://$BACKUPNAME /var/lib/ethereum/geth/chaindata/snaps ; then
-                  if [ "${AggregatedNotifications}" != "" ]
-                  then
-                    aws sns publish --topic-arn=${AggregatedNotifications} --subject="${AWS::StackName} - Taking S3 Backup Failed" --message="The snapdb backup process for ${AWS::StackName} failed to pull the snap S3 backup."
-                  fi
-                  if [ "${AlarmSNSTopic}" != "" ]
-                  then
-                    aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - Taking S3 Backup Failed" --message="The snapdb backup process for ${AWS::StackName} failed to pull the snap S3 backup."
-                  fi
-                  poweroff
-                fi
-                export GETHBACKUPNAME="${S3GethBackup}"
-                if ! aws s3 sync s3://$GETHBACKUPNAME /var/lib/ethereum/ ; then
-                  if [ "${AggregatedNotifications}" != "" ]
-                  then
-                    aws sns publish --topic-arn=${AggregatedNotifications} --subject="${AWS::StackName} - Taking S3 Backup Failed" --message="The snapdb backup process for ${AWS::StackName} failed to pull the snap S3 backup."
-                  fi
-                  if [ "${AlarmSNSTopic}" != "" ]
-                  then
-                    aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - Taking S3 Backup Failed" --message="The snapdb backup process for ${AWS::StackName} failed to pull the snap S3 backup."
-                  fi
-                  poweroff
-                fi
                 chown -R geth:geth /var/lib/ethereum
                 # Update from network
                 sudo -Eu geth /usr/bin/geth --cache=$allocatesafe ${SnapdbExtraFlags} --datadir=/var/lib/ethereum --snapshot --exitwhensynced
