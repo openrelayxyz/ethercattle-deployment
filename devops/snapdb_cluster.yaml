@@ -1785,11 +1785,11 @@ Resources:
         - DeviceName: "/dev/sdf"
           Ebs:
             VolumeSize: !Ref DiskSize
-            VolumeType: io1
-            Iops: !GetAtt VolumeIOPS.Value
-            # VolumeType: gp3
-            # Iops: 4000
-            # Throughput: 1000
+            # VolumeType: io1
+            # Iops: !GetAtt VolumeIOPS.Value
+            VolumeType: gp3
+            Iops: 4000
+            Throughput: 1000
         - DeviceName: "/dev/sdg"
           Ebs:
             VolumeSize: 50
