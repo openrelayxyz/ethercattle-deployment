@@ -2146,6 +2146,7 @@ Resources:
               - s3:GetBucketPolicy
               - s3:GetObjectTagging
               - s3:GetBucketLocation
+              - s3:PutObject
             Resource:
               - !Sub arn:aws:s3:::${S3SnapdbBackupBucket}
               - !Sub arn:aws:s3:::${S3SnapdbBackupBucket}/*
