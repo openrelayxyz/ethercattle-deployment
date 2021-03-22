@@ -215,6 +215,12 @@ Parameters:
   ConsulPrimaryRegion:
     Description: The AWS region of the primary Consul cluster. If not set, defaults to this region.
     Type: String
+  UrgentAlarmWebhook:
+    Description: URL for webhooks pertaining to urgent alarms
+    Type: String
+  WarningAlarmWebhook:
+    Description: URL for webhooks pertaining to warning alarms
+    Type: String
 
 
 Metadata:
@@ -492,6 +498,8 @@ Conditions:
   HasFreezerBucket: !Not [ !Equals [ !Ref FreezerBucket, "" ] ]
   EnabledFreezerBucket: !Equals [ !Ref EnableS3Freezer, "true" ]
   SpecifiesConsulRegion: !Not [ !Equals [ !Ref ConsulPrimaryRegion, "" ] ]
+  HasUrgentWebhook: !Not [ !Equals [ !Ref UrgentAlarmWebhook, "" ]]
+  HasWarningWebhook: !Not [ !Equals [ !Ref WarningAlarmWebhook, "" ]]
 
 Resources:
   LambdaExecutionRole:
@@ -1078,7 +1086,7 @@ Resources:
                       systemctl enable geth-tx.service
                       systemctl enable geth-peer-data.service
 
-                      systemctl start geth-master.service || true &
+                      systemctl start geth-master-overlay.service || true &
                       sleep 5
                       systemctl start geth-tx.service
                       systemctl start geth-peer-data.service
@@ -1255,6 +1263,28 @@ Resources:
       Endpoint: !Ref NotificationEmail
       Protocol: email
       TopicArn: !Ref AggregatedNotifications
+  UrgentNotifications:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: Urgent Notifications
+  UrgentNotificationsSubscription:
+    Type: AWS::SNS::Subscription
+    Condition: HasUrgentWebhook
+    Properties:
+      Endpoint: !Ref UrgentAlarmWebhook
+      Protocol: https
+      TopicArn: !Ref UrgentNotifications
+  WarningNotifications:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: Warning Notifications
+  WarningNotificationsSubscription:
+    Type: AWS::SNS::Subscription
+    Condition: HasWarningWebhook
+    Properties:
+      Endpoint: !Ref WarningAlarmWebhook
+      Protocol: https
+      TopicArn: !Ref WarningNotifications
   ReplicaOverlayDiskSNS:
     Type: AWS::SNS::Topic
     Properties:
@@ -1266,6 +1296,7 @@ Resources:
         - !Ref ReplicaOverlayDiskSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasWarningWebhook, !Ref WarningNotifications, !Ref 'AWS::NoValue' ]
       AlarmDescription: "Alarms when the overlay data directory > 95% full"
       ComparisonOperator: "GreaterThanThreshold"
       Metrics:
@@ -1329,11 +1360,13 @@ Resources:
         - !Ref ReplicaOverlayDiskSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasWarningWebhook, !Ref WarningNotifications, !Ref 'AWS::NoValue' ]
       EvaluationPeriods: 5
       OKActions:
         - !Ref ReplicaOverlayDiskSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasWarningWebhook, !Ref WarningNotifications, !Ref 'AWS::NoValue' ]
       Threshold: 90
       TreatMissingData: missing
   ReplicaCPUSNS:
@@ -1347,6 +1380,7 @@ Resources:
         - !Ref ReplicaCPUSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
       AlarmDescription: "Alarms when the replica CPU > 80%"
       ComparisonOperator: "GreaterThanThreshold"
       Dimensions:
@@ -1356,6 +1390,7 @@ Resources:
         - !Ref ReplicaCPUSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
       EvaluationPeriods: 10
       DatapointsToAlarm: 7
       MetricName: "CPUUtilization"
@@ -1364,6 +1399,7 @@ Resources:
         - !Ref ReplicaCPUSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
       Period: 60
       Statistic: Maximum
       Threshold: 80
@@ -1379,6 +1415,7 @@ Resources:
         - !Ref MasterDiskSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasWarningWebhook, !Ref WarningNotifications, !Ref 'AWS::NoValue' ]
       AlarmDescription: "Alarms when the master data directory > 95% full"
       ComparisonOperator: "GreaterThanThreshold"
       Metrics:
@@ -1424,11 +1461,13 @@ Resources:
         - !Ref MasterDiskSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasWarningWebhook, !Ref WarningNotifications, !Ref 'AWS::NoValue' ]
       EvaluationPeriods: 5
       OKActions:
         - !Ref MasterDiskSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasWarningWebhook, !Ref WarningNotifications, !Ref 'AWS::NoValue' ]
       Threshold: 95
       TreatMissingData: missing
   MasterDiskAlarmEmergency:
@@ -1438,6 +1477,7 @@ Resources:
         - !Ref MasterDiskSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
       AlarmDescription: "Alarms when the master data directory > 98% full"
       ComparisonOperator: "GreaterThanThreshold"
       Metrics:
@@ -1483,11 +1523,13 @@ Resources:
         - !Ref MasterDiskSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
       EvaluationPeriods: 5
       OKActions:
         - !Ref MasterDiskSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
       Threshold: 98
       TreatMissingData: missing
   MasterMemSNS:
@@ -1501,6 +1543,7 @@ Resources:
         - !Ref MasterMemSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
       AlarmDescription: !Sub "Alarms when the master RAM > ${MasterMemoryThresholdLong} for 30 minutes"
       ComparisonOperator: "GreaterThanThreshold"
       Dimensions:
@@ -1510,6 +1553,7 @@ Resources:
         - !Ref MasterMemSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
       EvaluationPeriods: 30
       DatapointsToAlarm: 28
       MetricName: "mem_used_percent"
@@ -1518,6 +1562,7 @@ Resources:
         - !Ref MasterMemSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
       Period: 60
       Statistic: Maximum
       Threshold: !Ref MasterMemoryThresholdLong
@@ -1529,6 +1574,7 @@ Resources:
         - !Ref MasterMemSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
       AlarmDescription: !Sub "Alarms when the master RAM < ${MasterMemoryThresholdLow} for 5 minutes"
       ComparisonOperator: "LessThanThreshold"
       Dimensions:
@@ -1538,6 +1584,7 @@ Resources:
         - !Ref MasterMemSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
       EvaluationPeriods: 5
       MetricName: "mem_used_percent"
       Namespace: CWAgent
@@ -1545,6 +1592,7 @@ Resources:
         - !Ref MasterMemSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
       Period: 60
       Statistic: Minimum
       Threshold: !Ref MasterMemoryThresholdLow
@@ -1556,6 +1604,7 @@ Resources:
         - !Ref MasterMemSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasWarningWebhook, !Ref WarningNotifications, !Ref 'AWS::NoValue' ]
       AlarmDescription: !Sub "Alarms when the master RAM > ${MasterMemoryThresholdHigh} for 5 minutes%"
       ComparisonOperator: "GreaterThanThreshold"
       Dimensions:
@@ -1565,6 +1614,7 @@ Resources:
         - !Ref MasterMemSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasWarningWebhook, !Ref WarningNotifications, !Ref 'AWS::NoValue' ]
       EvaluationPeriods: 5
       MetricName: "mem_used_percent"
       Namespace: CWAgent
@@ -1572,6 +1622,7 @@ Resources:
         - !Ref MasterMemSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasWarningWebhook, !Ref WarningNotifications, !Ref 'AWS::NoValue' ]
       Period: 60
       Statistic: Maximum
       Threshold: !Ref MasterMemoryThresholdHigh
@@ -1587,6 +1638,7 @@ Resources:
         - !Ref MasterCPUSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasWarningWebhook, !Ref WarningNotifications, !Ref 'AWS::NoValue' ]
       AlarmDescription: "Alarms when the master CPU > 80%"
       ComparisonOperator: "GreaterThanThreshold"
       Dimensions:
@@ -1596,6 +1648,7 @@ Resources:
         - !Ref MasterCPUSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasWarningWebhook, !Ref WarningNotifications, !Ref 'AWS::NoValue' ]
       EvaluationPeriods: 30
       DatapointsToAlarm: 28
       MetricName: "CPUUtilization"
@@ -1604,6 +1657,7 @@ Resources:
         - !Ref MasterCPUSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasWarningWebhook, !Ref WarningNotifications, !Ref 'AWS::NoValue' ]
       Period: 60
       Statistic: Maximum
       Threshold: 80
@@ -1615,6 +1669,7 @@ Resources:
         - !Ref MasterCPUSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
       AlarmDescription: "Alarms when the master CPU > 80%"
       ComparisonOperator: "GreaterThanThreshold"
       Dimensions:
@@ -1624,6 +1679,7 @@ Resources:
         - !Ref MasterCPUSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
       EvaluationPeriods: 5
       MetricName: "CPUUtilization"
       Namespace: AWS/EC2
@@ -1631,6 +1687,7 @@ Resources:
         - !Ref MasterCPUSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
       Period: 60
       Statistic: Maximum
       Threshold: 95
@@ -1646,6 +1703,7 @@ Resources:
         - !Ref MasterPeerCountSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasWarningWebhook, !Ref WarningNotifications, !Ref 'AWS::NoValue' ]
       AlarmDescription: "Alarms when the master PeerCount < 10"
       ComparisonOperator: "LessThanThreshold"
       Dimensions:
@@ -1655,6 +1713,7 @@ Resources:
         - !Ref MasterPeerCountSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasWarningWebhook, !Ref WarningNotifications, !Ref 'AWS::NoValue' ]
       EvaluationPeriods: 5
       MetricName: "peerCount"
       Namespace: BlockData
@@ -1662,6 +1721,37 @@ Resources:
         - !Ref MasterPeerCountSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasWarningWebhook, !Ref WarningNotifications, !Ref 'AWS::NoValue' ]
+      Period: 60
+      Statistic: Maximum
+      Threshold: 10
+      TreatMissingData: missing
+  MasterPeerCountAlarmEmergency:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmActions:
+        - !Ref MasterPeerCountSNS
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
+      AlarmDescription: "Alarms when the master PeerCount < 10"
+      ComparisonOperator: "LessThanThreshold"
+      Dimensions:
+        - Name: clusterId
+          Value : !Ref KafkaTopic
+      InsufficientDataActions:
+        - !Ref MasterPeerCountSNS
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
+      EvaluationPeriods: 5
+      MetricName: "peerCount"
+      Namespace: BlockData
+      OKActions:
+        - !Ref MasterPeerCountSNS
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
       Period: 60
       Statistic: Maximum
       Threshold: 10
@@ -1672,6 +1762,7 @@ Resources:
       AlarmActions:
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
       AlarmDescription: "Alarms when missingTrie > 1000"
       ComparisonOperator: "GreaterThanThreshold"
       Dimensions:
@@ -1680,12 +1771,14 @@ Resources:
       InsufficientDataActions:
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
       EvaluationPeriods: 1
       MetricName: "trieMissing"
       Namespace: ReplicaData
       OKActions:
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
       Period: 60
       Statistic: Sum
       Threshold: 1000
@@ -1697,12 +1790,14 @@ Resources:
       AlarmActions:
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
       AlarmDescription: !Sub "Alarms when the number of replicas < desired capacity"
       ComparisonOperator: "LessThanThreshold"
 
       InsufficientDataActions:
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
       EvaluationPeriods: 5
       DatapointsToAlarm: 2
       Metrics:
@@ -1723,6 +1818,7 @@ Resources:
       OKActions:
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
       Threshold: !Ref ReplicaTargetCapacity
       TreatMissingData: missing
   MasterCountAlarm:
@@ -1731,12 +1827,14 @@ Resources:
       AlarmActions:
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
       AlarmDescription: !Sub "Alarms when the number of replicas < desired capacity"
       ComparisonOperator: "LessThanThreshold"
 
       InsufficientDataActions:
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
       EvaluationPeriods: 5
       DatapointsToAlarm: 2
       Metrics:
@@ -1757,6 +1855,7 @@ Resources:
       OKActions:
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
       Threshold: !Ref MasterCount
       TreatMissingData: missing
   MasterLogMetricsFunctionLG:
@@ -1844,6 +1943,7 @@ Resources:
         - !Ref MasterBlockAgeSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
       AlarmDescription: "Alarms when the block age > 120"
       ComparisonOperator: "GreaterThanThreshold"
       Dimensions:
@@ -1856,6 +1956,7 @@ Resources:
         - !Ref MasterBlockAgeSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
       Period: 30
       Statistic: Maximum
       Threshold: 120
@@ -1873,6 +1974,7 @@ Resources:
         - !Ref MasterBlockNumberSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
       AlarmDescription: "Alarms when the block number is missing"
       ComparisonOperator: "LessThanThreshold"
       Dimensions:
@@ -1885,6 +1987,7 @@ Resources:
         - !Ref MasterBlockNumberSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
       Period: 30
       Statistic: SampleCount
       Threshold: 1
@@ -1897,6 +2000,7 @@ Resources:
         - !Ref MasterBlockNumberSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
       AlarmDescription: "Alarms when the block number is missing"
       ComparisonOperator: "GreaterThanThreshold"
       EvaluationPeriods: 2
@@ -1931,6 +2035,7 @@ Resources:
         - !Ref MasterBlockNumberSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
       Threshold: 1
       TreatMissingData: breaching
   FlumeBlockNumberComparisonAlarm:
@@ -1941,6 +2046,7 @@ Resources:
         - !Ref MasterBlockNumberSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
       AlarmDescription: "Alarms when the block number is missing"
       ComparisonOperator: "GreaterThanThreshold"
       EvaluationPeriods: 2
@@ -1975,6 +2081,7 @@ Resources:
         - !Ref MasterBlockNumberSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
       Threshold: 2
       TreatMissingData: breaching
 

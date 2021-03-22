@@ -46,10 +46,14 @@ Parameters:
     AllowedValues:
     - 'true'
     - 'false'
+  UrgentAlarmWebhook:
+    Description: URL for webhooks pertaining to urgent alarms
+    Type: String
 
 Conditions:
   HasSNSTopic: !Not [!Equals [ !Ref AlarmSNSTopic, "" ]]
   IncludeRegionAgnosticDNS: !Equals [ !Ref RegionAgnosticDNS, "true" ]
+  HasUrgentWebhook: !Not [ !Equals [ !Ref UrgentAlarmWebhook, "" ]]
 
 
 Resources:
@@ -372,6 +376,7 @@ Resources:
       AlarmActions:
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
       AlarmDescription: "Alarms when more than 1/4 of replicas are unhealthy"
       ComparisonOperator: "GreaterThanThreshold"
       EvaluationPeriods: 1
@@ -411,6 +416,7 @@ Resources:
       OKActions:
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
       Threshold: 0
       TreatMissingData: breaching
   TargetGroupUnroutableAlarm:
@@ -419,6 +425,7 @@ Resources:
       AlarmActions:
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
       AlarmDescription: "Alarms when all replicas are unhealthy"
       ComparisonOperator: "LessThanOrEqualToThreshold"
       EvaluationPeriods: 1
@@ -435,6 +442,7 @@ Resources:
       OKActions:
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
       Threshold: 0
       TreatMissingData: breaching
   DNSHealthCheck:
