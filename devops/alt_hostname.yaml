@@ -61,6 +61,28 @@ Resources:
     Type: AWS::SNS::Topic
     Properties:
       DisplayName: Aggregated Notifications
+  UrgentNotifications:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: Urgent Notifications
+  UrgentNotificationsSubscription:
+    Type: AWS::SNS::Subscription
+    Condition: HasUrgentWebhook
+    Properties:
+      Endpoint: !Ref UrgentAlarmWebhook
+      Protocol: https
+      TopicArn: !Ref UrgentNotifications
+  WarningNotifications:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: Warning Notifications
+  WarningNotificationsSubscription:
+    Type: AWS::SNS::Subscription
+    Condition: HasWarningWebhook
+    Properties:
+      Endpoint: !Ref WarningAlarmWebhook
+      Protocol: https
+      TopicArn: !Ref WarningNotifications
   RPCALBListenerRule:
     Type: AWS::ElasticLoadBalancingV2::ListenerRule
     Properties:
