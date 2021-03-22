@@ -76,13 +76,6 @@ Resources:
     Type: AWS::SNS::Topic
     Properties:
       DisplayName: Warning Notifications
-  WarningNotificationsSubscription:
-    Type: AWS::SNS::Subscription
-    Condition: HasWarningWebhook
-    Properties:
-      Endpoint: !Ref WarningAlarmWebhook
-      Protocol: https
-      TopicArn: !Ref WarningNotifications
   RPCALBListenerRule:
     Type: AWS::ElasticLoadBalancingV2::ListenerRule
     Properties:
