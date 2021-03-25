@@ -105,6 +105,10 @@ Parameters:
     Type: Number
     Default: 5
     Description: Maximum number of instances for replicas
+  ReplicaMemoryThresholdHigh:
+    Type: Number
+    Default: 85
+    Description: The amount of memory which should trigger alarms if exceeded for > 1 minute
   FallbackTargetCapacity:
     Type: Number
     Default: 0
@@ -1868,6 +1872,54 @@ Resources:
     Properties:
       RetentionInDays: 7
       LogGroupName: !Join ["", ["/aws/lambda/", !Ref ReplicaLogMetricsFunction]]
+
+  ReplicaMemAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmActions:
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasWarningWebhook, !Ref WarningNotifications, !Ref 'AWS::NoValue' ]
+      AlarmDescription: !Sub "Alarms when the replica RAM > ${ReplicaMemoryThresholdHigh} for 5 minutes%"
+      ComparisonOperator: "GreaterThanThreshold"
+      Dimensions:
+        - Name: AutoScalingGroupName
+          Value : !Ref ReplicaAutoScalingGroup
+      EvaluationPeriods: 5
+      MetricName: "mem_used_percent"
+      Namespace: CWAgent
+      OKActions:
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasWarningWebhook, !Ref WarningNotifications, !Ref 'AWS::NoValue' ]
+      Period: 60
+      Statistic: Maximum
+      Threshold: !Ref ReplicaMemoryThresholdHigh
+      TreatMissingData: missing
+
+  ReplicaSwapAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmActions:
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
+      AlarmDescription: !Sub "Alarms when the replica swap > 5%"
+      ComparisonOperator: "GreaterThanThreshold"
+      Dimensions:
+        - Name: AutoScalingGroupName
+          Value : !Ref ReplicaAutoScalingGroup
+      EvaluationPeriods: 1
+      MetricName: "swap_used_percent"
+      Namespace: CWAgent
+      OKActions:
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
+      Period: 60
+      Statistic: Maximum
+      Threshold: 5
+      TreatMissingData: missing
 
   LogMetricsRole:
     Type: "AWS::IAM::Role"
