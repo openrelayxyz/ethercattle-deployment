@@ -704,6 +704,9 @@ Resources:
                       unzip awscliv2.zip
                       ./aws/install
 
+                      mkswap /dev/sds
+                      swapon /dev/sds
+
                       GETH_BIN="geth-linux-$ARCH"
                       LOGS_BIN="journald-cloudwatch-logs-$ARCH"
                       aws s3 cp s3://${S3GethBucketName}/${ECGethVersion}/$GETH_BIN /usr/bin/geth
@@ -1192,6 +1195,10 @@ Resources:
         CreditSpecification: !If [SmallMaster, {CpuCredits: standard}, !Ref 'AWS::NoValue']
         BlockDeviceMappings:
         - DeviceName: "/dev/xvda"
+          Ebs:
+            VolumeSize: 8
+            VolumeType: gp2
+        - DeviceName: "/dev/sds"
           Ebs:
             VolumeSize: 8
             VolumeType: gp2
@@ -2463,6 +2470,10 @@ Resources:
           Ebs:
             VolumeSize: 8
             VolumeType: gp2
+        - DeviceName: "/dev/sds"
+          Ebs:
+            VolumeSize: 8
+            VolumeType: gp2
         - DeviceName: "/dev/sdf"
           Ebs:
             VolumeSize: !If [ReplicaHDD, !GetAtt HDDSize.Value, !Ref DiskSize]
@@ -2647,6 +2658,10 @@ Resources:
         InstanceInitiatedShutdownBehavior: terminate
         BlockDeviceMappings:
         - DeviceName: "/dev/xvda"
+          Ebs:
+            VolumeSize: 8
+            VolumeType: gp2
+        - DeviceName: "/dev/sds"
           Ebs:
             VolumeSize: 8
             VolumeType: gp2
@@ -3191,6 +3206,10 @@ Resources:
         # CreditSpecification: !If [SmallReplica, {CpuCredits: standard}, !Ref 'AWS::NoValue']
         BlockDeviceMappings:
         - DeviceName: "/dev/xvda"
+          Ebs:
+            VolumeSize: 8
+            VolumeType: gp2
+        - DeviceName: "/dev/sds"
           Ebs:
             VolumeSize: 8
             VolumeType: gp2
