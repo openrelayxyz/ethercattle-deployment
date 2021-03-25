@@ -1201,7 +1201,7 @@ Resources:
         - DeviceName: "/dev/sds"
           Ebs:
             VolumeSize: 8
-            VolumeType: gp2
+            VolumeType: gp3
         - DeviceName: "/dev/sdf"
           Ebs:
             VolumeSize: !Ref DiskSize
@@ -2473,7 +2473,7 @@ Resources:
         - DeviceName: "/dev/sds"
           Ebs:
             VolumeSize: 8
-            VolumeType: gp2
+            VolumeType: gp3
         - DeviceName: "/dev/sdf"
           Ebs:
             VolumeSize: !If [ReplicaHDD, !GetAtt HDDSize.Value, !Ref DiskSize]
@@ -2664,7 +2664,7 @@ Resources:
         - DeviceName: "/dev/sds"
           Ebs:
             VolumeSize: 8
-            VolumeType: gp2
+            VolumeType: gp3
         - DeviceName: "/dev/sdf"
           Ebs:
             VolumeSize: !Ref DiskSize
@@ -3212,7 +3212,7 @@ Resources:
         - DeviceName: "/dev/sds"
           Ebs:
             VolumeSize: 8
-            VolumeType: gp2
+            VolumeType: gp3
         - DeviceName: "/dev/sdf"
           Ebs:
             VolumeSize: !If [ReplicaHDD, !GetAtt HDDSize.Value, !Ref DiskSize]
