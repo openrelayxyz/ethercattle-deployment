@@ -2437,6 +2437,11 @@ Resources:
                 command: systemctl enable consul
               05_start_consul:
                 command: systemctl start consul
+              06_fetch_envoy:
+                command: !Sub aws s3 cp s3://${S3GethBucketName}/envoy/v1.16.0/envoy-amd64 /usr/bin/envoy
+              07_install_envoy:
+                command: chmod +x /usr/bin/envoy
+
               06_get_envoy:
                 command: curl -L https://getenvoy.io/cli | bash -s -- -b /usr/local/bin
               07_fetch_envoy:
