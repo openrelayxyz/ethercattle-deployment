@@ -2441,13 +2441,6 @@ Resources:
                 command: !Sub aws s3 cp s3://${S3GethBucketName}/envoy/v1.16.0/envoy-amd64 /usr/bin/envoy
               07_install_envoy:
                 command: chmod +x /usr/bin/envoy
-
-              06_get_envoy:
-                command: curl -L https://getenvoy.io/cli | bash -s -- -b /usr/local/bin
-              07_fetch_envoy:
-                command: /usr/local/bin/getenvoy fetch standard:1.16.0
-              08_install_envoy:
-                command: mv /root/.getenvoy/builds/standard/1.16.0/linux_glibc/bin/envoy /usr/bin/envoy
     Properties:
       LaunchTemplateData:
         ImageId: !If [HasReplicaImageAMI, !Ref ReplicaImageAMI, !FindInMap [RegionMap, !Ref "AWS::Region", AL2AMI]]
