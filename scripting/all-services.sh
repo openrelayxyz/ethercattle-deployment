@@ -43,8 +43,8 @@ Environment=HOME=/var/lib/ethereum
 EnvironmentFile=/etc/systemd/system/ethcattle-vars
 Type=simple
 LimitNOFILE=655360
-ExecStartPre=/usr/bin/bash -c '/usr/bin/geth replica --cache=$allocatesafe ${ReplicaExtraFlags} ${FreezerFlags}  $OVERLAY_FLAG --kafka.broker=$KAFKA_ESCAPED_URL""$SEP_ESCAPED""fetch.default=8388608\\&max.waittime=25\\&avoid_leader=1  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown 2>>/tmp/geth-stderr'
-ExecStart=/usr/bin/bash -c '/usr/bin/geth replica --cache=$allocatesafe ${ReplicaExtraFlags} ${FreezerFlags} $OVERLAY_FLAG --kafka.broker=$KAFKA_ESCAPED_URL --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --kafka.txpool.topic=\$infraName-txpool  --kafka.tx.topic=\$NetworkId-tx --replica.startup.age=45  ${ReplicaHTTPFlag} ${ReplicaGraphQLFlag} ${ReplicaWebsocketsFlag}'
+ExecStartPre=/usr/bin/bash -c '/usr/bin/geth replica --snapshot=false --cache=$allocatesafe ${ReplicaExtraFlags} ${FreezerFlags}  $OVERLAY_FLAG --kafka.broker=$KAFKA_ESCAPED_URL""$SEP_ESCAPED""fetch.default=8388608\\&max.waittime=25\\&avoid_leader=1  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown 2>>/tmp/geth-stderr'
+ExecStart=/usr/bin/bash -c '/usr/bin/geth replica --snapshot=false --cache=$allocatesafe ${ReplicaExtraFlags} ${FreezerFlags} $OVERLAY_FLAG --kafka.broker=$KAFKA_ESCAPED_URL --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --kafka.txpool.topic=\$infraName-txpool  --kafka.tx.topic=\$NetworkId-tx --replica.startup.age=45  ${ReplicaHTTPFlag} ${ReplicaGraphQLFlag} ${ReplicaWebsocketsFlag}'
 TimeoutStopSec=90
 Restart=on-failure
 TimeoutStartSec=86400
@@ -63,8 +63,8 @@ Environment=HOME=/var/lib/ethereum
 EnvironmentFile=/etc/systemd/system/ethcattle-vars
 Type=simple
 LimitNOFILE=655360
-# ExecStartPre=/usr/bin/geth replica ${FreezerFlags}  $OVERLAY_FLAG  --cache=$allocatesafe ${FreezerFlags} --kafka.broker=$KAFKA_ESCAPED_URL""$SEP_ESCAPED""fetch.default=8388608\\&max.waittime=25\\&avoid_leader=1  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown 2>>/tmp/geth-stderr || true
-ExecStart=/usr/bin/bash -c '/usr/bin/geth ${FreezerFlags} ${MasterExtraFlags} $OVERLAY_FLAG  --cache=$allocatesafe ${FreezerFlags} --datadir=/var/lib/ethereum --light.maxpeers 0 --maxpeers 25 ${ReplicaHTTPFlag} ${ReplicaGraphQLFlag} ${ReplicaWebsocketsFlag}'
+# ExecStartPre=/usr/bin/geth replica --snapshot=false ${FreezerFlags}  $OVERLAY_FLAG  --cache=$allocatesafe ${FreezerFlags} --kafka.broker=$KAFKA_ESCAPED_URL""$SEP_ESCAPED""fetch.default=8388608\\&max.waittime=25\\&avoid_leader=1  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown 2>>/tmp/geth-stderr || true
+ExecStart=/usr/bin/bash -c '/usr/bin/geth ${FreezerFlags} ${MasterExtraFlags} --rpc.allow-unprotected-txs --snapshot=false --txlookuplimit=0 $OVERLAY_FLAG  --cache=$allocatesafe ${FreezerFlags} --datadir=/var/lib/ethereum --light.maxpeers 0 --maxpeers 25 ${ReplicaHTTPFlag} ${ReplicaGraphQLFlag} ${ReplicaWebsocketsFlag}'
 TimeoutStopSec=90
 TimeoutStartSec=86400
 RestartSec=10s
@@ -84,8 +84,8 @@ Environment=HOME=/var/lib/ethereum
 EnvironmentFile=/etc/systemd/system/ethcattle-vars
 Type=simple
 LimitNOFILE=655360
-ExecStartPre=/usr/bin/bash -c '/usr/bin/geth replica --cache=$allocatesafe ${ReplicaExtraFlags} ${FreezerFlags} --kafka.broker=$KAFKA_ESCAPED_URL""$SEP_ESCAPED""fetch.default=8388608\\&max.waittime=25\\&avoid_leader=1  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown 2>>/tmp/geth-stderr'
-ExecStart=/usr/bin/geth ${MasterExtraFlags} ${FreezerFlags} --light.maxpeers 0 --maxpeers 25 --gcmode=archive --kafka.broker=${KafkaBrokerURL}""$SEP""net.maxopenrequests=1\&message.send.max.retries=20000  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --kafka.txpool.topic=${InfrastructureStack}-txpool ${EventsTopicFlag}
+ExecStartPre=/usr/bin/bash -c '/usr/bin/geth replica --snapshot=false --cache=$allocatesafe ${ReplicaExtraFlags} ${FreezerFlags} --kafka.broker=$KAFKA_ESCAPED_URL""$SEP_ESCAPED""fetch.default=8388608\\&max.waittime=25\\&avoid_leader=1  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown 2>>/tmp/geth-stderr'
+ExecStart=/usr/bin/geth ${MasterExtraFlags} ${FreezerFlags} --rpc.allow-unprotected-txs --snapshot=false --txlookuplimit=0 --light.maxpeers 0 --maxpeers 25 --gcmode=archive --kafka.broker=${KafkaBrokerURL}""$SEP""net.maxopenrequests=1\&message.send.max.retries=20000  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --kafka.txpool.topic=${InfrastructureStack}-txpool ${EventsTopicFlag}
 TimeoutStartSec=86400
 TimeoutStopSec=90
 OnFailure=poweroff.target
@@ -105,8 +105,8 @@ Environment=HOME=/var/lib/ethereum
 EnvironmentFile=/etc/systemd/system/ethcattle-vars
 Type=simple
 LimitNOFILE=655360
-ExecStartPre=/usr/bin/bash -c '/usr/bin/geth replica --cache=$allocatesafe ${ReplicaExtraFlags} ${FreezerFlags} $OVERLAY_FLAG --kafka.broker=$KAFKA_ESCAPED_URL""$SEP_ESCAPED""fetch.default=8388608\\&max.waittime=25\\&avoid_leader=1  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown 2>>/tmp/geth-stderr'
-ExecStart=/usr/bin/geth ${MasterExtraFlags} ${FreezerFlags} $OVERLAY_FLAG --light.maxpeers 0 --maxpeers 25 --gcmode=archive --kafka.broker=${KafkaBrokerURL}""$SEP""net.maxopenrequests=1\&message.send.max.retries=20000  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --kafka.txpool.topic=${InfrastructureStack}-txpool ${EventsTopicFlag}
+ExecStartPre=/usr/bin/bash -c '/usr/bin/geth replica --snapshot=false --cache=$allocatesafe ${ReplicaExtraFlags} ${FreezerFlags} $OVERLAY_FLAG --kafka.broker=$KAFKA_ESCAPED_URL""$SEP_ESCAPED""fetch.default=8388608\\&max.waittime=25\\&avoid_leader=1  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown 2>>/tmp/geth-stderr'
+ExecStart=/usr/bin/geth ${MasterExtraFlags} ${FreezerFlags} $OVERLAY_FLAG --rpc.allow-unprotected-txs --snapshot=false --txlookuplimit=0 --light.maxpeers 0 --maxpeers 25 --gcmode=archive --kafka.broker=${KafkaBrokerURL}""$SEP""net.maxopenrequests=1\&message.send.max.retries=20000  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --kafka.txpool.topic=${InfrastructureStack}-txpool ${EventsTopicFlag}
 TimeoutStartSec=86400
 TimeoutStopSec=90
 OnFailure=poweroff.target

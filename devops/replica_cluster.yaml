@@ -4,7 +4,6 @@ Parameters:
   DiskSize:
     Default: '250'
     Description: Size of each node's chaindata storage volume in GiB
-    MaxValue: '1024'
     MinValue: '8'
     Type: Number
   ReplicaImageAMI:
@@ -106,6 +105,10 @@ Parameters:
     Type: Number
     Default: 5
     Description: Maximum number of instances for replicas
+  ReplicaMemoryThresholdHigh:
+    Type: Number
+    Default: 85
+    Description: The amount of memory which should trigger alarms if exceeded for > 1 minute
   FallbackTargetCapacity:
     Type: Number
     Default: 0
@@ -215,6 +218,12 @@ Parameters:
     ConstraintDescription: Must match EC2 Tag Name requirements.
   ConsulPrimaryRegion:
     Description: The AWS region of the primary Consul cluster. If not set, defaults to this region.
+    Type: String
+  UrgentAlarmWebhook:
+    Description: URL for webhooks pertaining to urgent alarms
+    Type: String
+  WarningAlarmWebhook:
+    Description: URL for webhooks pertaining to warning alarms
     Type: String
 
 
@@ -493,6 +502,8 @@ Conditions:
   HasFreezerBucket: !Not [ !Equals [ !Ref FreezerBucket, "" ] ]
   EnabledFreezerBucket: !Equals [ !Ref EnableS3Freezer, "true" ]
   SpecifiesConsulRegion: !Not [ !Equals [ !Ref ConsulPrimaryRegion, "" ] ]
+  HasUrgentWebhook: !Not [ !Equals [ !Ref UrgentAlarmWebhook, "" ]]
+  HasWarningWebhook: !Not [ !Equals [ !Ref WarningAlarmWebhook, "" ]]
 
 Resources:
   LambdaExecutionRole:
@@ -693,6 +704,9 @@ Resources:
                       unzip awscliv2.zip
                       ./aws/install
 
+                      mkswap /dev/sds
+                      swapon /dev/sds
+
                       GETH_BIN="geth-linux-$ARCH"
                       LOGS_BIN="journald-cloudwatch-logs-$ARCH"
                       aws s3 cp s3://${S3GethBucketName}/${ECGethVersion}/$GETH_BIN /usr/bin/geth
@@ -826,8 +840,8 @@ Resources:
                       EnvironmentFile=/etc/systemd/system/ethcattle-vars
                       Type=simple
                       LimitNOFILE=655360
-                      ExecStartPre=/usr/bin/bash -c '/usr/bin/geth replica --cache=$allocatesafe ${ReplicaExtraFlags} ${FreezerFlags}  $OVERLAY_FLAG --kafka.broker=$KAFKA_ESCAPED_URL""$SEP_ESCAPED""fetch.default=8388608\\&max.waittime=25\\&avoid_leader=1  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown 2>>/tmp/geth-stderr'
-                      ExecStart=/usr/bin/bash -c '/usr/bin/geth replica --cache=$allocatesafe ${ReplicaExtraFlags} ${FreezerFlags} $OVERLAY_FLAG --kafka.broker=$KAFKA_ESCAPED_URL --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --kafka.txpool.topic=\$infraName-txpool  --kafka.tx.topic=\$NetworkId-tx --replica.startup.age=45  ${ReplicaHTTPFlag} ${ReplicaGraphQLFlag} ${ReplicaWebsocketsFlag}'
+                      ExecStartPre=/usr/bin/bash -c '/usr/bin/geth replica --snapshot=false --cache=$allocatesafe ${ReplicaExtraFlags} ${FreezerFlags}  $OVERLAY_FLAG --kafka.broker=$KAFKA_ESCAPED_URL""$SEP_ESCAPED""fetch.default=8388608\\&max.waittime=25\\&avoid_leader=1  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown 2>>/tmp/geth-stderr'
+                      ExecStart=/usr/bin/bash -c '/usr/bin/geth replica --snapshot=false --cache=$allocatesafe ${ReplicaExtraFlags} ${FreezerFlags} $OVERLAY_FLAG --kafka.broker=$KAFKA_ESCAPED_URL --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --kafka.txpool.topic=\$infraName-txpool  --kafka.tx.topic=\$NetworkId-tx --replica.startup.age=45  ${ReplicaHTTPFlag} ${ReplicaGraphQLFlag} ${ReplicaWebsocketsFlag}'
                       TimeoutStopSec=90
                       Restart=on-failure
                       TimeoutStartSec=86400
@@ -846,8 +860,8 @@ Resources:
                       EnvironmentFile=/etc/systemd/system/ethcattle-vars
                       Type=simple
                       LimitNOFILE=655360
-                      # ExecStartPre=/usr/bin/geth replica ${FreezerFlags}  $OVERLAY_FLAG  --cache=$allocatesafe ${FreezerFlags} --kafka.broker=$KAFKA_ESCAPED_URL""$SEP_ESCAPED""fetch.default=8388608\\&max.waittime=25\\&avoid_leader=1  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown 2>>/tmp/geth-stderr || true
-                      ExecStart=/usr/bin/bash -c '/usr/bin/geth ${FreezerFlags} ${MasterExtraFlags} $OVERLAY_FLAG  --cache=$allocatesafe ${FreezerFlags} --datadir=/var/lib/ethereum --light.maxpeers 0 --maxpeers 25 ${ReplicaHTTPFlag} ${ReplicaGraphQLFlag} ${ReplicaWebsocketsFlag}'
+                      # ExecStartPre=/usr/bin/geth replica --snapshot=false ${FreezerFlags}  $OVERLAY_FLAG  --cache=$allocatesafe ${FreezerFlags} --kafka.broker=$KAFKA_ESCAPED_URL""$SEP_ESCAPED""fetch.default=8388608\\&max.waittime=25\\&avoid_leader=1  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown 2>>/tmp/geth-stderr || true
+                      ExecStart=/usr/bin/bash -c '/usr/bin/geth ${FreezerFlags} ${MasterExtraFlags} --rpc.allow-unprotected-txs --snapshot=false --txlookuplimit=0 $OVERLAY_FLAG  --cache=$allocatesafe ${FreezerFlags} --datadir=/var/lib/ethereum --light.maxpeers 0 --maxpeers 25 ${ReplicaHTTPFlag} ${ReplicaGraphQLFlag} ${ReplicaWebsocketsFlag}'
                       TimeoutStopSec=90
                       TimeoutStartSec=86400
                       RestartSec=10s
@@ -867,8 +881,8 @@ Resources:
                       EnvironmentFile=/etc/systemd/system/ethcattle-vars
                       Type=simple
                       LimitNOFILE=655360
-                      ExecStartPre=/usr/bin/bash -c '/usr/bin/geth replica --cache=$allocatesafe ${ReplicaExtraFlags} ${FreezerFlags} --kafka.broker=$KAFKA_ESCAPED_URL""$SEP_ESCAPED""fetch.default=8388608\\&max.waittime=25\\&avoid_leader=1  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown 2>>/tmp/geth-stderr'
-                      ExecStart=/usr/bin/geth ${MasterExtraFlags} ${FreezerFlags} --light.maxpeers 0 --maxpeers 25 --gcmode=archive --kafka.broker=${KafkaBrokerURL}""$SEP""net.maxopenrequests=1\&message.send.max.retries=20000  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --kafka.txpool.topic=${InfrastructureStack}-txpool ${EventsTopicFlag}
+                      ExecStartPre=/usr/bin/bash -c '/usr/bin/geth replica --snapshot=false --cache=$allocatesafe ${ReplicaExtraFlags} ${FreezerFlags} --kafka.broker=$KAFKA_ESCAPED_URL""$SEP_ESCAPED""fetch.default=8388608\\&max.waittime=25\\&avoid_leader=1  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown 2>>/tmp/geth-stderr'
+                      ExecStart=/usr/bin/geth ${MasterExtraFlags} ${FreezerFlags} --rpc.allow-unprotected-txs --snapshot=false --txlookuplimit=0 --light.maxpeers 0 --maxpeers 25 --gcmode=archive --kafka.broker=${KafkaBrokerURL}""$SEP""net.maxopenrequests=1\&message.send.max.retries=20000  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --kafka.txpool.topic=${InfrastructureStack}-txpool ${EventsTopicFlag}
                       TimeoutStartSec=86400
                       TimeoutStopSec=90
                       OnFailure=poweroff.target
@@ -888,8 +902,8 @@ Resources:
                       EnvironmentFile=/etc/systemd/system/ethcattle-vars
                       Type=simple
                       LimitNOFILE=655360
-                      ExecStartPre=/usr/bin/bash -c '/usr/bin/geth replica --cache=$allocatesafe ${ReplicaExtraFlags} ${FreezerFlags} $OVERLAY_FLAG --kafka.broker=$KAFKA_ESCAPED_URL""$SEP_ESCAPED""fetch.default=8388608\\&max.waittime=25\\&avoid_leader=1  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown 2>>/tmp/geth-stderr'
-                      ExecStart=/usr/bin/geth ${MasterExtraFlags} ${FreezerFlags} $OVERLAY_FLAG --light.maxpeers 0 --maxpeers 25 --gcmode=archive --kafka.broker=${KafkaBrokerURL}""$SEP""net.maxopenrequests=1\&message.send.max.retries=20000  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --kafka.txpool.topic=${InfrastructureStack}-txpool ${EventsTopicFlag}
+                      ExecStartPre=/usr/bin/bash -c '/usr/bin/geth replica --snapshot=false --cache=$allocatesafe ${ReplicaExtraFlags} ${FreezerFlags} $OVERLAY_FLAG --kafka.broker=$KAFKA_ESCAPED_URL""$SEP_ESCAPED""fetch.default=8388608\\&max.waittime=25\\&avoid_leader=1  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown 2>>/tmp/geth-stderr'
+                      ExecStart=/usr/bin/geth ${MasterExtraFlags} ${FreezerFlags} $OVERLAY_FLAG --rpc.allow-unprotected-txs --snapshot=false --txlookuplimit=0 --light.maxpeers 0 --maxpeers 25 --gcmode=archive --kafka.broker=${KafkaBrokerURL}""$SEP""net.maxopenrequests=1\&message.send.max.retries=20000  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --kafka.txpool.topic=${InfrastructureStack}-txpool ${EventsTopicFlag}
                       TimeoutStartSec=86400
                       TimeoutStopSec=90
                       OnFailure=poweroff.target
@@ -1079,7 +1093,7 @@ Resources:
                       systemctl enable geth-tx.service
                       systemctl enable geth-peer-data.service
 
-                      systemctl start geth-master.service || true &
+                      systemctl start geth-master-overlay.service || true &
                       sleep 5
                       systemctl start geth-tx.service
                       systemctl start geth-peer-data.service
@@ -1107,15 +1121,14 @@ Resources:
                       #!/bin/bash -xe
 
                       systemctl stop amazon-cloudwatch-agent.service || true &
-                      systemctl stop geth-fallback.service || true &
-                      systemctl stop geth-master-overlay.service  || true &
-                      systemctl stop geth-master.service  || true &
-                      systemctl stop geth-peer-data.service || true &
-                      systemctl stop geth-replica.service || true &
-                      systemctl stop geth-tx.service || true &
                       systemctl stop journald-cloudwatch-logs || true &
+                      systemctl stop geth-fallback.service || true &
+                      systemctl stop geth-master.service  || true &
+                      systemctl stop geth-master-overlay.service  || true &
+                      systemctl stop geth-peer-data.service || true &
+                      systemctl stop geth-tx.service || true &
+                      systemctl stop geth-replica.service || true &
                       wait
-
 
                     - ClusterId:
                         "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
@@ -1185,6 +1198,10 @@ Resources:
           Ebs:
             VolumeSize: 8
             VolumeType: gp2
+        - DeviceName: "/dev/sds"
+          Ebs:
+            VolumeSize: 8
+            VolumeType: gp3
         - DeviceName: "/dev/sdf"
           Ebs:
             VolumeSize: !Ref DiskSize
@@ -1257,6 +1274,28 @@ Resources:
       Endpoint: !Ref NotificationEmail
       Protocol: email
       TopicArn: !Ref AggregatedNotifications
+  UrgentNotifications:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: Urgent Notifications
+  UrgentNotificationsSubscription:
+    Type: AWS::SNS::Subscription
+    Condition: HasUrgentWebhook
+    Properties:
+      Endpoint: !Ref UrgentAlarmWebhook
+      Protocol: https
+      TopicArn: !Ref UrgentNotifications
+  WarningNotifications:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: Warning Notifications
+  WarningNotificationsSubscription:
+    Type: AWS::SNS::Subscription
+    Condition: HasWarningWebhook
+    Properties:
+      Endpoint: !Ref WarningAlarmWebhook
+      Protocol: https
+      TopicArn: !Ref WarningNotifications
   ReplicaOverlayDiskSNS:
     Type: AWS::SNS::Topic
     Properties:
@@ -1268,6 +1307,7 @@ Resources:
         - !Ref ReplicaOverlayDiskSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasWarningWebhook, !Ref WarningNotifications, !Ref 'AWS::NoValue' ]
       AlarmDescription: "Alarms when the overlay data directory > 95% full"
       ComparisonOperator: "GreaterThanThreshold"
       Metrics:
@@ -1331,11 +1371,13 @@ Resources:
         - !Ref ReplicaOverlayDiskSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasWarningWebhook, !Ref WarningNotifications, !Ref 'AWS::NoValue' ]
       EvaluationPeriods: 5
       OKActions:
         - !Ref ReplicaOverlayDiskSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasWarningWebhook, !Ref WarningNotifications, !Ref 'AWS::NoValue' ]
       Threshold: 90
       TreatMissingData: missing
   ReplicaCPUSNS:
@@ -1349,6 +1391,7 @@ Resources:
         - !Ref ReplicaCPUSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
       AlarmDescription: "Alarms when the replica CPU > 80%"
       ComparisonOperator: "GreaterThanThreshold"
       Dimensions:
@@ -1358,6 +1401,7 @@ Resources:
         - !Ref ReplicaCPUSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
       EvaluationPeriods: 10
       DatapointsToAlarm: 7
       MetricName: "CPUUtilization"
@@ -1366,6 +1410,7 @@ Resources:
         - !Ref ReplicaCPUSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
       Period: 60
       Statistic: Maximum
       Threshold: 80
@@ -1381,6 +1426,7 @@ Resources:
         - !Ref MasterDiskSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasWarningWebhook, !Ref WarningNotifications, !Ref 'AWS::NoValue' ]
       AlarmDescription: "Alarms when the master data directory > 95% full"
       ComparisonOperator: "GreaterThanThreshold"
       Metrics:
@@ -1426,11 +1472,13 @@ Resources:
         - !Ref MasterDiskSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasWarningWebhook, !Ref WarningNotifications, !Ref 'AWS::NoValue' ]
       EvaluationPeriods: 5
       OKActions:
         - !Ref MasterDiskSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasWarningWebhook, !Ref WarningNotifications, !Ref 'AWS::NoValue' ]
       Threshold: 95
       TreatMissingData: missing
   MasterDiskAlarmEmergency:
@@ -1440,6 +1488,7 @@ Resources:
         - !Ref MasterDiskSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
       AlarmDescription: "Alarms when the master data directory > 98% full"
       ComparisonOperator: "GreaterThanThreshold"
       Metrics:
@@ -1485,11 +1534,13 @@ Resources:
         - !Ref MasterDiskSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
       EvaluationPeriods: 5
       OKActions:
         - !Ref MasterDiskSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
       Threshold: 98
       TreatMissingData: missing
   MasterMemSNS:
@@ -1503,6 +1554,7 @@ Resources:
         - !Ref MasterMemSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
       AlarmDescription: !Sub "Alarms when the master RAM > ${MasterMemoryThresholdLong} for 30 minutes"
       ComparisonOperator: "GreaterThanThreshold"
       Dimensions:
@@ -1512,6 +1564,7 @@ Resources:
         - !Ref MasterMemSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
       EvaluationPeriods: 30
       DatapointsToAlarm: 28
       MetricName: "mem_used_percent"
@@ -1520,6 +1573,7 @@ Resources:
         - !Ref MasterMemSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
       Period: 60
       Statistic: Maximum
       Threshold: !Ref MasterMemoryThresholdLong
@@ -1531,6 +1585,7 @@ Resources:
         - !Ref MasterMemSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
       AlarmDescription: !Sub "Alarms when the master RAM < ${MasterMemoryThresholdLow} for 5 minutes"
       ComparisonOperator: "LessThanThreshold"
       Dimensions:
@@ -1540,6 +1595,7 @@ Resources:
         - !Ref MasterMemSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
       EvaluationPeriods: 5
       MetricName: "mem_used_percent"
       Namespace: CWAgent
@@ -1547,6 +1603,7 @@ Resources:
         - !Ref MasterMemSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
       Period: 60
       Statistic: Minimum
       Threshold: !Ref MasterMemoryThresholdLow
@@ -1558,6 +1615,7 @@ Resources:
         - !Ref MasterMemSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasWarningWebhook, !Ref WarningNotifications, !Ref 'AWS::NoValue' ]
       AlarmDescription: !Sub "Alarms when the master RAM > ${MasterMemoryThresholdHigh} for 5 minutes%"
       ComparisonOperator: "GreaterThanThreshold"
       Dimensions:
@@ -1567,6 +1625,7 @@ Resources:
         - !Ref MasterMemSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasWarningWebhook, !Ref WarningNotifications, !Ref 'AWS::NoValue' ]
       EvaluationPeriods: 5
       MetricName: "mem_used_percent"
       Namespace: CWAgent
@@ -1574,6 +1633,7 @@ Resources:
         - !Ref MasterMemSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasWarningWebhook, !Ref WarningNotifications, !Ref 'AWS::NoValue' ]
       Period: 60
       Statistic: Maximum
       Threshold: !Ref MasterMemoryThresholdHigh
@@ -1589,6 +1649,7 @@ Resources:
         - !Ref MasterCPUSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasWarningWebhook, !Ref WarningNotifications, !Ref 'AWS::NoValue' ]
       AlarmDescription: "Alarms when the master CPU > 80%"
       ComparisonOperator: "GreaterThanThreshold"
       Dimensions:
@@ -1598,6 +1659,7 @@ Resources:
         - !Ref MasterCPUSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasWarningWebhook, !Ref WarningNotifications, !Ref 'AWS::NoValue' ]
       EvaluationPeriods: 30
       DatapointsToAlarm: 28
       MetricName: "CPUUtilization"
@@ -1606,6 +1668,7 @@ Resources:
         - !Ref MasterCPUSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasWarningWebhook, !Ref WarningNotifications, !Ref 'AWS::NoValue' ]
       Period: 60
       Statistic: Maximum
       Threshold: 80
@@ -1617,6 +1680,7 @@ Resources:
         - !Ref MasterCPUSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
       AlarmDescription: "Alarms when the master CPU > 80%"
       ComparisonOperator: "GreaterThanThreshold"
       Dimensions:
@@ -1626,6 +1690,7 @@ Resources:
         - !Ref MasterCPUSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
       EvaluationPeriods: 5
       MetricName: "CPUUtilization"
       Namespace: AWS/EC2
@@ -1633,6 +1698,7 @@ Resources:
         - !Ref MasterCPUSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
       Period: 60
       Statistic: Maximum
       Threshold: 95
@@ -1648,6 +1714,7 @@ Resources:
         - !Ref MasterPeerCountSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasWarningWebhook, !Ref WarningNotifications, !Ref 'AWS::NoValue' ]
       AlarmDescription: "Alarms when the master PeerCount < 10"
       ComparisonOperator: "LessThanThreshold"
       Dimensions:
@@ -1657,6 +1724,7 @@ Resources:
         - !Ref MasterPeerCountSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasWarningWebhook, !Ref WarningNotifications, !Ref 'AWS::NoValue' ]
       EvaluationPeriods: 5
       MetricName: "peerCount"
       Namespace: BlockData
@@ -1664,6 +1732,37 @@ Resources:
         - !Ref MasterPeerCountSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasWarningWebhook, !Ref WarningNotifications, !Ref 'AWS::NoValue' ]
+      Period: 60
+      Statistic: Maximum
+      Threshold: 10
+      TreatMissingData: missing
+  MasterPeerCountAlarmEmergency:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmActions:
+        - !Ref MasterPeerCountSNS
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
+      AlarmDescription: "Alarms when the master PeerCount < 10"
+      ComparisonOperator: "LessThanThreshold"
+      Dimensions:
+        - Name: clusterId
+          Value : !Ref KafkaTopic
+      InsufficientDataActions:
+        - !Ref MasterPeerCountSNS
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
+      EvaluationPeriods: 5
+      MetricName: "peerCount"
+      Namespace: BlockData
+      OKActions:
+        - !Ref MasterPeerCountSNS
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
       Period: 60
       Statistic: Maximum
       Threshold: 10
@@ -1674,6 +1773,7 @@ Resources:
       AlarmActions:
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
       AlarmDescription: "Alarms when missingTrie > 1000"
       ComparisonOperator: "GreaterThanThreshold"
       Dimensions:
@@ -1682,12 +1782,14 @@ Resources:
       InsufficientDataActions:
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
       EvaluationPeriods: 1
       MetricName: "trieMissing"
       Namespace: ReplicaData
       OKActions:
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
       Period: 60
       Statistic: Sum
       Threshold: 1000
@@ -1699,12 +1801,14 @@ Resources:
       AlarmActions:
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
       AlarmDescription: !Sub "Alarms when the number of replicas < desired capacity"
       ComparisonOperator: "LessThanThreshold"
 
       InsufficientDataActions:
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
       EvaluationPeriods: 5
       DatapointsToAlarm: 2
       Metrics:
@@ -1725,6 +1829,7 @@ Resources:
       OKActions:
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
       Threshold: !Ref ReplicaTargetCapacity
       TreatMissingData: missing
   MasterCountAlarm:
@@ -1733,12 +1838,14 @@ Resources:
       AlarmActions:
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
       AlarmDescription: !Sub "Alarms when the number of replicas < desired capacity"
       ComparisonOperator: "LessThanThreshold"
 
       InsufficientDataActions:
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
       EvaluationPeriods: 5
       DatapointsToAlarm: 2
       Metrics:
@@ -1759,6 +1866,7 @@ Resources:
       OKActions:
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
       Threshold: !Ref MasterCount
       TreatMissingData: missing
   MasterLogMetricsFunctionLG:
@@ -1771,6 +1879,54 @@ Resources:
     Properties:
       RetentionInDays: 7
       LogGroupName: !Join ["", ["/aws/lambda/", !Ref ReplicaLogMetricsFunction]]
+
+  ReplicaMemAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmActions:
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasWarningWebhook, !Ref WarningNotifications, !Ref 'AWS::NoValue' ]
+      AlarmDescription: !Sub "Alarms when the replica RAM > ${ReplicaMemoryThresholdHigh} for 5 minutes%"
+      ComparisonOperator: "GreaterThanThreshold"
+      Dimensions:
+        - Name: AutoScalingGroupName
+          Value : !Ref ReplicaAutoScalingGroup
+      EvaluationPeriods: 5
+      MetricName: "mem_used_percent"
+      Namespace: CWAgent
+      OKActions:
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasWarningWebhook, !Ref WarningNotifications, !Ref 'AWS::NoValue' ]
+      Period: 60
+      Statistic: Maximum
+      Threshold: !Ref ReplicaMemoryThresholdHigh
+      TreatMissingData: missing
+
+  ReplicaSwapAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmActions:
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
+      AlarmDescription: !Sub "Alarms when the replica swap > 5%"
+      ComparisonOperator: "GreaterThanThreshold"
+      Dimensions:
+        - Name: AutoScalingGroupName
+          Value : !Ref ReplicaAutoScalingGroup
+      EvaluationPeriods: 1
+      MetricName: "swap_used_percent"
+      Namespace: CWAgent
+      OKActions:
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
+      Period: 60
+      Statistic: Maximum
+      Threshold: 5
+      TreatMissingData: missing
 
   LogMetricsRole:
     Type: "AWS::IAM::Role"
@@ -1846,6 +2002,7 @@ Resources:
         - !Ref MasterBlockAgeSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
       AlarmDescription: "Alarms when the block age > 120"
       ComparisonOperator: "GreaterThanThreshold"
       Dimensions:
@@ -1858,6 +2015,7 @@ Resources:
         - !Ref MasterBlockAgeSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
       Period: 30
       Statistic: Maximum
       Threshold: 120
@@ -1875,6 +2033,7 @@ Resources:
         - !Ref MasterBlockNumberSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
       AlarmDescription: "Alarms when the block number is missing"
       ComparisonOperator: "LessThanThreshold"
       Dimensions:
@@ -1887,6 +2046,7 @@ Resources:
         - !Ref MasterBlockNumberSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
       Period: 30
       Statistic: SampleCount
       Threshold: 1
@@ -1899,6 +2059,7 @@ Resources:
         - !Ref MasterBlockNumberSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
       AlarmDescription: "Alarms when the block number is missing"
       ComparisonOperator: "GreaterThanThreshold"
       EvaluationPeriods: 2
@@ -1933,6 +2094,7 @@ Resources:
         - !Ref MasterBlockNumberSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
       Threshold: 1
       TreatMissingData: breaching
   FlumeBlockNumberComparisonAlarm:
@@ -1943,6 +2105,7 @@ Resources:
         - !Ref MasterBlockNumberSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
       AlarmDescription: "Alarms when the block number is missing"
       ComparisonOperator: "GreaterThanThreshold"
       EvaluationPeriods: 2
@@ -1977,6 +2140,7 @@ Resources:
         - !Ref MasterBlockNumberSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
       Threshold: 2
       TreatMissingData: breaching
 
@@ -2186,7 +2350,7 @@ Resources:
                 command: mkdir -p /opt/consul/data
           install_consul:
             sources:
-              /usr/bin/: https://releases.hashicorp.com/consul/1.7.0/consul_1.7.0_linux_amd64.zip
+              /usr/bin/: https://releases.hashicorp.com/consul/1.9.1/consul_1.9.1_linux_amd64.zip
           install_consul_template:
             sources:
               /usr/bin/: https://releases.hashicorp.com/consul-template/0.24.0/consul-template_0.24.0_linux_amd64.zip
@@ -2273,12 +2437,10 @@ Resources:
                 command: systemctl enable consul
               05_start_consul:
                 command: systemctl start consul
-              06_get_envoy:
-                command: curl -L https://getenvoy.io/cli | bash -s -- -b /usr/local/bin
-              07_fetch_envoy:
-                command: /usr/local/bin/getenvoy fetch standard:1.13.1
-              08_install_envoy:
-                command: mv /root/.getenvoy/builds/standard/1.13.1/linux_glibc/bin/envoy /usr/bin/envoy
+              06_fetch_envoy:
+                command: !Sub aws s3 cp s3://${S3GethBucketName}/envoy/v1.16.0/envoy-amd64 /usr/bin/envoy
+              07_install_envoy:
+                command: chmod +x /usr/bin/envoy
     Properties:
       LaunchTemplateData:
         ImageId: !If [HasReplicaImageAMI, !Ref ReplicaImageAMI, !FindInMap [RegionMap, !Ref "AWS::Region", AL2AMI]]
@@ -2306,6 +2468,10 @@ Resources:
           Ebs:
             VolumeSize: 8
             VolumeType: gp2
+        - DeviceName: "/dev/sds"
+          Ebs:
+            VolumeSize: 8
+            VolumeType: gp3
         - DeviceName: "/dev/sdf"
           Ebs:
             VolumeSize: !If [ReplicaHDD, !GetAtt HDDSize.Value, !Ref DiskSize]
@@ -2439,7 +2605,7 @@ Resources:
                       set -x
 
                       # make sure that geth is able to start as a full node and catch up with peers
-                      sudo -Eu geth /usr/bin/geth ${MasterExtraFlags} --cache=$allocatesafe --light.maxpeers 0 --maxpeers 25 --rpc --rpcaddr 0.0.0.0 --rpcport 8545 --datadir=/var/lib/ethereum ${FreezerFlags} &
+                      sudo -Eu geth /usr/bin/geth ${MasterExtraFlags} --rpc.allow-unprotected-txs --snapshot=false --txlookuplimit=0 --cache=$allocatesafe --light.maxpeers 0 --maxpeers 25 --rpc --rpcaddr 0.0.0.0 --rpcport 8545 --datadir=/var/lib/ethereum ${FreezerFlags} &
                       pid=$!
                       test_pass=0
                       while [ $test_pass -le 1 ]
@@ -2493,6 +2659,10 @@ Resources:
           Ebs:
             VolumeSize: 8
             VolumeType: gp2
+        - DeviceName: "/dev/sds"
+          Ebs:
+            VolumeSize: 8
+            VolumeType: gp3
         - DeviceName: "/dev/sdf"
           Ebs:
             VolumeSize: !Ref DiskSize
@@ -2549,7 +2719,7 @@ Resources:
                 KAFKA_ESCAPED_URL="$(printf "${KafkaBrokerURL}"| sed 's^&^\\&^g')"
                 /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource SnapshotterLaunchTemplate --configsets s_scripting --region ${AWS::Region} --role ${SnapshotterNodeRole}
 
-                # sudo -Eu geth /usr/bin/geth ${MasterExtraFlags} --cache=$allocatesafe --light.maxpeers 0 --maxpeers 0 --rpc --rpcaddr 0.0.0.0 --rpcport 8545 --datadir=/var/lib/ethereum ${FreezerFlags} &
+                # sudo -Eu geth /usr/bin/geth ${MasterExtraFlags} --rpc.allow-unprotected-txs --snapshot=false --txlookuplimit=0 --cache=$allocatesafe --light.maxpeers 0 --maxpeers 0 --rpc --rpcaddr 0.0.0.0 --rpcport 8545 --datadir=/var/lib/ethereum ${FreezerFlags} &
                 # pid=$!
                 # test_pass=0
                 # while [ $test_pass -le 1 ]
@@ -2570,7 +2740,7 @@ Resources:
 
                 # Update from kafka
 
-                sudo -Eu geth /usr/bin/geth replica --cache=$allocatesafe ${ReplicaExtraFlags} ${FreezerFlags} --kafka.broker=$KAFKA_ESCAPED_URL""$SEP""avoid_leader=1 --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown
+                sudo -Eu geth /usr/bin/geth replica --snapshot=false --cache=$allocatesafe ${ReplicaExtraFlags} ${FreezerFlags} --kafka.broker=$KAFKA_ESCAPED_URL""$SEP""avoid_leader=1 --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown
                 if ! sudo -Eu geth /usr/bin/geth verifystatetrie ${FreezerFlags} --datadir=/var/lib/ethereum ${SnapshotValidationThreshold}
                 then
                   if [ "${AggregatedNotifications}" != "" ]
@@ -2589,7 +2759,7 @@ Resources:
                 fi
 
                 # # Check and see if all blocks that were pulled down are actually there and not returning null.
-                # sudo -Eu geth /usr/bin/geth ${MasterExtraFlags} --cache=$allocatesafe --light.maxpeers 0 --maxpeers 0 --rpc --rpcaddr 0.0.0.0 --rpcport 8545 --datadir=/var/lib/ethereum ${FreezerFlags} &
+                # sudo -Eu geth /usr/bin/geth ${MasterExtraFlags} --rpc.allow-unprotected-txs --snapshot=false --txlookuplimit=0 --cache=$allocatesafe --light.maxpeers 0 --maxpeers 0 --rpc --rpcaddr 0.0.0.0 --rpcport 8545 --datadir=/var/lib/ethereum ${FreezerFlags} &
                 # pid=$!
                 # test_pass=0
                 # while [ $test_pass -le 1 ]
@@ -2840,7 +3010,7 @@ Resources:
   #
   #               SEP=$(echo "${KafkaBrokerURL}" | grep -q "?" && echo "&" || echo "?")
   #               SEP_ESCAPED=$(echo "${KafkaBrokerURL}" | grep -q "?" && echo "\\&" || echo "?")
-  #               sudo -Eu geth /usr/bin/geth replica --cache=$allocatesafe ${ReplicaExtraFlags} ${FreezerFlags} --kafka.broker=$(printf "${KafkaBrokerURL}")""$SEP""fetch.default=8388608\&max.waittime=25 --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown
+  #               sudo -Eu geth /usr/bin/geth replica --snapshot=false --cache=$allocatesafe ${ReplicaExtraFlags} ${FreezerFlags} --kafka.broker=$(printf "${KafkaBrokerURL}")""$SEP""fetch.default=8388608\&max.waittime=25 --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown
   #               if ! sudo -Eu geth /usr/bin/geth verifystatetrie --datadir=/var/lib/ethereum ${SnapshotValidationThreshold}
   #               then
   #                 if [ "${AggregatedNotifications}" != "" ]
@@ -2902,7 +3072,7 @@ Resources:
   #               fi
   #
   #               # Sync from Kafka, then verify again. This should catch any reorgs from the block we pruned
-  #               sudo -Eu geth /usr/bin/geth replica --cache=$allocatesafe ${ReplicaExtraFlags} ${FreezerFlags} --kafka.broker=$(printf "${KafkaBrokerURL}")""$SEP""fetch.default=8388608\&max.waittime=25 --datadir=/tmp/new --kafka.topic=${KafkaTopic} --replica.syncshutdown
+  #               sudo -Eu geth /usr/bin/geth replica --snapshot=false --cache=$allocatesafe ${ReplicaExtraFlags} ${FreezerFlags} --kafka.broker=$(printf "${KafkaBrokerURL}")""$SEP""fetch.default=8388608\&max.waittime=25 --datadir=/tmp/new --kafka.topic=${KafkaTopic} --replica.syncshutdown
   #               if ! sudo -Eu geth /usr/bin/geth verifystatetrie --datadir=/tmp/new ${SnapshotValidationThreshold}
   #               then
   #                 if [ "${AggregatedNotifications}" != "" ]
@@ -3037,6 +3207,10 @@ Resources:
           Ebs:
             VolumeSize: 8
             VolumeType: gp2
+        - DeviceName: "/dev/sds"
+          Ebs:
+            VolumeSize: 8
+            VolumeType: gp3
         - DeviceName: "/dev/sdf"
           Ebs:
             VolumeSize: !If [ReplicaHDD, !GetAtt HDDSize.Value, !Ref DiskSize]

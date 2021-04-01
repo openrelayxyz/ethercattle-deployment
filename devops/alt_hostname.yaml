@@ -46,10 +46,14 @@ Parameters:
     AllowedValues:
     - 'true'
     - 'false'
+  UrgentAlarmWebhook:
+    Description: URL for webhooks pertaining to urgent alarms
+    Type: String
 
 Conditions:
   HasSNSTopic: !Not [!Equals [ !Ref AlarmSNSTopic, "" ]]
   IncludeRegionAgnosticDNS: !Equals [ !Ref RegionAgnosticDNS, "true" ]
+  HasUrgentWebhook: !Not [ !Equals [ !Ref UrgentAlarmWebhook, "" ]]
 
 
 Resources:
@@ -57,6 +61,21 @@ Resources:
     Type: AWS::SNS::Topic
     Properties:
       DisplayName: Aggregated Notifications
+  UrgentNotifications:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: Urgent Notifications
+  UrgentNotificationsSubscription:
+    Type: AWS::SNS::Subscription
+    Condition: HasUrgentWebhook
+    Properties:
+      Endpoint: !Ref UrgentAlarmWebhook
+      Protocol: https
+      TopicArn: !Ref UrgentNotifications
+  WarningNotifications:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: Warning Notifications
   RPCALBListenerRule:
     Type: AWS::ElasticLoadBalancingV2::ListenerRule
     Properties:
@@ -290,12 +309,89 @@ Resources:
       ListenerArn:
         "Fn::ImportValue": !Sub "${InfrastructureStack}-RPCALBListener"
       Priority: !Sub "40${Priority}"
+  CompatALBGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckIntervalSeconds: 30
+      UnhealthyThresholdCount: 2
+      HealthyThresholdCount: 5
+      Port: 8001
+      HealthCheckPort: !Ref WSHealthCheckPort
+      Protocol: HTTP
+      VpcId:
+        "Fn::ImportValue":
+            !Sub "${InfrastructureStack}-VpcId"
+      Tags:
+        - Key: Service
+          Value: !Sub "${ServiceName}.compat.${HostedZone}"
+  CompatALBDNS:
+    Condition: IncludeRegionAgnosticDNS
+    Type: "AWS::Route53::RecordSet"
+    Properties:
+      AliasTarget:
+        DNSName:
+          "Fn::ImportValue": !Sub "${InfrastructureStack}-RPCALBDNS"
+        EvaluateTargetHealth: False
+        HostedZoneId:
+          "Fn::ImportValue": !Sub "${InfrastructureStack}-RPCALBCanonicalHostedZoneId"
+      HostedZoneName: !Sub "${HostedZone}."
+      Name: !Sub "${ServiceName}.compat.${HostedZone}"
+      Region: !Sub ${AWS::Region}
+      HealthCheckId: !Ref DNSHealthCheck
+      Type: A
+      SetIdentifier: !Sub "${AWS::StackName}-${AWS::Region}"
+  CompatALBRegionalDNS:
+    Type: "AWS::Route53::RecordSet"
+    Properties:
+      AliasTarget:
+        DNSName:
+          "Fn::ImportValue": !Sub "${InfrastructureStack}-RPCALBDNS"
+        EvaluateTargetHealth: False
+        HostedZoneId:
+          "Fn::ImportValue": !Sub "${InfrastructureStack}-RPCALBCanonicalHostedZoneId"
+      HostedZoneName: !Sub "${HostedZone}."
+      Name: !Sub "${ServiceName}.compat.${AWS::Region}.${HostedZone}"
+      Type: A
+      Weight: 1
+      SetIdentifier: !Sub "${AWS::StackName}-${AWS::Region}"
+  CompatALBWildcardDNS:
+    Condition: IncludeRegionAgnosticDNS
+    Type: "AWS::Route53::RecordSet"
+    Properties:
+      AliasTarget:
+        DNSName:
+          "Fn::ImportValue": !Sub "${InfrastructureStack}-RPCALBDNS"
+        EvaluateTargetHealth: False
+        HostedZoneId:
+          "Fn::ImportValue": !Sub "${InfrastructureStack}-RPCALBCanonicalHostedZoneId"
+      HostedZoneName: !Sub "${HostedZone}."
+      Name: !Sub "*.${ServiceName}.compat.${HostedZone}"
+      Type: A
+      HealthCheckId: !Ref DNSHealthCheck
+      Region: !Sub ${AWS::Region}
+      SetIdentifier: !Sub "${AWS::StackName}-${AWS::Region}"
+  CompatALBListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      Actions:
+      - Type: forward
+        TargetGroupArn: !Ref CompatALBGroup
+      Conditions:
+      - Field: host-header
+        HostHeaderConfig:
+          Values:
+          - !Sub "*${ServiceName}.compat.${HostedZone}"
+          - !Sub "*${ServiceName}.compat.${AWS::Region}.${HostedZone}"
+      ListenerArn:
+        "Fn::ImportValue": !Sub "${InfrastructureStack}-RPCALBListener"
+      Priority: !Sub "50${Priority}"
   UnHealthyHostCountAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
       AlarmActions:
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
       AlarmDescription: "Alarms when more than 1/4 of replicas are unhealthy"
       ComparisonOperator: "GreaterThanThreshold"
       EvaluationPeriods: 1
@@ -335,6 +431,7 @@ Resources:
       OKActions:
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
       Threshold: 0
       TreatMissingData: breaching
   TargetGroupUnroutableAlarm:
@@ -343,6 +440,7 @@ Resources:
       AlarmActions:
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
       AlarmDescription: "Alarms when all replicas are unhealthy"
       ComparisonOperator: "LessThanOrEqualToThreshold"
       EvaluationPeriods: 1
@@ -359,6 +457,7 @@ Resources:
       OKActions:
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
       Threshold: 0
       TreatMissingData: breaching
   DNSHealthCheck:
@@ -409,6 +508,11 @@ Outputs:
     Value: !Sub ${GraphQLALBGroup.TargetGroupFullName}
     Export:
       Name: !Sub "${AWS::StackName}-GraphQLALBGroupName"
+  CompatALBGroup:
+    Description: The ARN of the alb target group for the GraphQL load balancer
+    Value: !Ref CompatALBGroup
+    Export:
+      Name: !Sub "${AWS::StackName}-CompatALBGroup"
   WebsocketsALBGroup:
     Description: The ARN of the alb target group for the Websockets load balancer
     Value: !Ref WebsocketsALBGroup
