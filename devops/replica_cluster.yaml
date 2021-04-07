@@ -1154,9 +1154,6 @@ Resources:
                       fio --filename=/dev/sdf --rw=read --bs=128k --iodepth=32 --ioengine=libaio --prio=7 --prioclass=3 --thinktime=2 --rate_iops=4000 --direct=1 --name=volume-initialize &
                       export AWS_DEFAULT_REGION=${AWS::Region}
                       VOLUME_ID=$(aws ec2 describe-volumes --filters Name=attachment.instance-id,Values="$(curl http://169.254.169.254/latest/meta-data/instance-id)" | jq '.Volumes[] | select(. | .Attachments[0].Device == "/dev/sdf") | .VolumeId' -cr)
-                      wait
-                      /usr/local/bin/aws ec2 modify-volume --volume-id $VOLUME_ID --volume-type gp3 --iops 3000 --throughput 125 &
-
                     - ClusterId:
                         "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
                       ReplicaHTTPFlag:
@@ -1205,11 +1202,9 @@ Resources:
         - DeviceName: "/dev/sdf"
           Ebs:
             VolumeSize: !Ref DiskSize
-            VolumeType: io1
-            Iops: !GetAtt VolumeIOPS.Value
-            # VolumeType: gp3
-            # Iops: 4000
-            # Throughput: 1000
+            VolumeType: gp3
+            Iops: 3000
+            Throughput: 125
             SnapshotId: !Ref SnapshotId
         UserData:
           "Fn::Base64":
@@ -2536,7 +2531,7 @@ Resources:
         - DeviceName: "/dev/xvda"
           Ebs:
             VolumeSize: 8
-            VolumeType: gp2
+            VolumeType: gp3
         - DeviceName: "/dev/sds"
           Ebs:
             VolumeSize: 8
@@ -2544,8 +2539,9 @@ Resources:
         - DeviceName: "/dev/sdf"
           Ebs:
             VolumeSize: !If [ReplicaHDD, !GetAtt HDDSize.Value, !Ref DiskSize]
-            VolumeType: !If [ReplicaHDD, !Ref ReplicaDiskType, "io1"]
-            Iops: !If [ReplicaHDD, !Ref 'AWS::NoValue', !GetAtt VolumeIOPS.Value ]
+            VolumeType: !If [ReplicaHDD, !Ref ReplicaDiskType, "gp3"]
+            Iops: !If [ReplicaHDD, !Ref 'AWS::NoValue', 3000 ]
+            Throughput: !If [ReplicaHDD, !Ref 'AWS::NoValue', 125 ]
             # VolumeType: !If [ReplicaHDD, !Ref ReplicaDiskType, "gp3"]
             # Iops: !If [ReplicaHDD, !Ref 'AWS::NoValue', 4000 ]
             # Throughput: !If [ReplicaHDD, !Ref 'AWS::NoValue', 1000 ]
@@ -3626,7 +3622,7 @@ Resources:
     Properties:
       Code:
         S3Bucket: !Ref S3GethBucketName
-        S3Key: lambdaPackage-22.zip
+        S3Key: lambdaPackage-27.zip
       Description: "Align master volume sizes with CloudFormation parameters"
       Environment:
         Variables:
