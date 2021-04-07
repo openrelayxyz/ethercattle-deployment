@@ -2731,11 +2731,9 @@ Resources:
         - DeviceName: "/dev/sdf"
           Ebs:
             VolumeSize: !Ref DiskSize
-            VolumeType: io1
-            Iops: !GetAtt VolumeIOPS.Value
-            # VolumeType: gp3
-            # Iops: 4000
-            # Throughput: 1000
+            VolumeType: gp3
+            Iops: 3000
+            Throughput: 125
             SnapshotId: !Ref SnapshotId
         UserData:
           "Fn::Base64":
@@ -3018,10 +3016,9 @@ Resources:
   #       - DeviceName: "/dev/sdf"
   #         Ebs:
   #           VolumeSize: !Ref DiskSize
-  #           VolumeType: io1
-  #           Iops: !GetAtt VolumeIOPS.Value
-  # #           VolumeType: gp3
-  # #           Iops:  4000
+  #           VolumeType: gp3
+  #           Iops: 3000
+  #           Throughput: 125
   # #           Throughput: 1000
   #           SnapshotId: !Ref SnapshotId
   #       - DeviceName: "/dev/sdg"
@@ -3279,8 +3276,9 @@ Resources:
         - DeviceName: "/dev/sdf"
           Ebs:
             VolumeSize: !If [ReplicaHDD, !GetAtt HDDSize.Value, !Ref DiskSize]
-            VolumeType: !If [ReplicaHDD, !Ref ReplicaDiskType, "io1"]
-            Iops: !If [ReplicaHDD, !Ref 'AWS::NoValue', !GetAtt VolumeIOPS.Value ]
+            VolumeType: !If [ReplicaHDD, !Ref ReplicaDiskType, "gp3"]
+            Iops: !If [ReplicaHDD, !Ref 'AWS::NoValue', 3000 ]
+            Throughput: !If [ReplicaHDD, !Ref 'AWS::NoValue', 125]
             # VolumeType: !If [ReplicaHDD, !Ref ReplicaDiskType, "gp3"]
             # Iops: !If [ReplicaHDD, !Ref 'AWS::NoValue', 4000 ]
             # Throughput: 1000
