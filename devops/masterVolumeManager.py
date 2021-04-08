@@ -15,3 +15,7 @@ def sizeHandler(event, context):
                 VolumeId = volume["VolumeId"],
                 Size = target_size,
             )
+            break # Only do one at a time to avoid the optimizing performance penalties hitting all masters at once
+
+
+# TODO: Upload
