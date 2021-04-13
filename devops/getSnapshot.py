@@ -17,8 +17,10 @@ instance_types = [
 
 
 def handler(event, context):
-    for instance_type in instance_types:
-        for subnet in os.environ.get("SUBNET_ID").split(","):
+    if os.environ.get("INSTANCE_TYPES"):
+        instance_types = os.environ.get("INSTANCE_TYPES").split(",")
+    for subnet in os.environ.get("SUBNET_ID").split(","):
+        for instance_type in instance_types:
             try:
                 ec2.create_instances(
                     InstanceType=instance_type,
