@@ -3620,7 +3620,7 @@ Resources:
     Properties:
       Code:
         S3Bucket: !Ref S3GethBucketName
-        S3Key: lambdaPackage-29.zip
+        S3Key: lambdaPackage-30.zip
       Description: "Align master volume sizes with CloudFormation parameters"
       Environment:
         Variables:
