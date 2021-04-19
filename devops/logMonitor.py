@@ -115,11 +115,17 @@ def masterHandler(event, context):
         except ValueError:
             pass
 
-        if metricData:
+        if len(metricData) >= 20:
             client.put_metric_data(
                 Namespace='BlockData',
-                MetricData=metricData
+                MetricData=metricData[:20]
             )
+            metricData = metricData[20:]
+    if metricData:
+        client.put_metric_data(
+            Namespace='BlockData',
+            MetricData=metricData[:20]
+        )
 
 
 def replicaHandler(event, context):
@@ -185,8 +191,14 @@ def replicaHandler(event, context):
         if "missing trie node" in item["message"]:
             appendMetric(item, metricData, "trieMissing", 1)
 
-        if metricData:
+        if len(metricData) >= 20:
             client.put_metric_data(
                 Namespace='ReplicaData',
-                MetricData=metricData
+                MetricData=metricData[:20]
             )
+            metricData = metricData[20:]
+    if metricData:
+        client.put_metric_data(
+            Namespace='ReplicaData',
+            MetricData=metricData[:20]
+        )
