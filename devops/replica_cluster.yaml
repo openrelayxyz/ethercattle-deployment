@@ -2763,6 +2763,9 @@ Resources:
                   mkfs.ext4 /dev/sdf
                 fi
 
+                export AWS_DEFAULT_REGION=${AWS::Region}
+                export AWS_REGION=${AWS::Region}
+
                 AVAILABILITY_ZONE=$(curl -s http://169.254.169.254/latest/meta-data/placement/availability-zone)
                 INSTANCE_ID=$(curl -s http://169.254.169.254/2012-01-12/meta-data/instance-id)
 
@@ -2793,8 +2796,6 @@ Resources:
 
                 yum install -y jq
 
-                export AWS_DEFAULT_REGION=${AWS::Region}
-                export AWS_REGION=${AWS::Region}
                 printf "ReplicaClusterVersion=${ReplicaClusterVersion}\nKafkaHostname=${KafkaBrokerURL}\nKafkaTopic=${KafkaTopic}\nNetworkId=${NetworkId}\ninfraName=${InfrastructureStack}\nAWS_REGION=${AWS::Region}\n" > /etc/systemd/system/ethcattle-vars
 
                 if [ -f /usr/bin/replica-snapshot-hook ]
@@ -3465,6 +3466,7 @@ Resources:
               - !Sub ${SnapshotterLambdaFunction.Arn}
               - !Sub ${SnapshotGCLambdaFunction.Arn}
               - !Sub ${DiskSizeLambdaFunction.Arn}
+              - !Sub ${SnapDiskSizeLambdaFunction.Arn}
             Effect: Allow
           - Action:
               - iam:PassRole
@@ -3668,6 +3670,29 @@ Resources:
       Targets:
         - Arn: !Sub ${DiskSizeLambdaFunction.Arn}
           Id: !Sub "disk-size-${KafkaTopic}"
+  SnapDiskSizeLambdaFunction:
+    Type: "AWS::Lambda::Function"
+    Properties:
+      Code:
+        S3Bucket: !Ref S3GethBucketName
+        S3Key: lambdaPackage-30.zip
+      Description: "Align master volume sizes with CloudFormation parameters"
+      Environment:
+        Variables:
+          VOLUME_SIZE: !Ref DiskSize
+          VOLUME_NAME: !Sub "${AWS::StackName}-SnapshotVolume"
+          ATTACHMENT_DEVICE: "/dev/sdf"
+      Handler: "masterVolumeManager.sizeHandler"
+      Role: !Sub ${DiskSizeLambdaRole.Arn}
+      Runtime: python3.7
+  SnapDiskManagerSchedulerRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: Disk Size manager
+      ScheduleExpression: "rate(15 minutes)"
+      Targets:
+        - Arn: !Sub ${SnapDiskSizeLambdaFunction.Arn}
+          Id: !Sub "disk-size-${KafkaTopic}"
 
   DiskManagerInvokePermission:
     Type: AWS::Lambda::Permission
@@ -3676,6 +3701,13 @@ Resources:
       Action: 'lambda:InvokeFunction'
       Principal: events.amazonaws.com
       SourceArn: !Sub ${DiskManagerSchedulerRule.Arn}
+  SnapDiskManagerInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Sub ${SnapDiskSizeLambdaFunction.Arn}
+      Action: 'lambda:InvokeFunction'
+      Principal: events.amazonaws.com
+      SourceArn: !Sub ${SnapDiskManagerSchedulerRule.Arn}
 
   SnapshotGCLambdaRole:
     Type: "AWS::IAM::Role"
