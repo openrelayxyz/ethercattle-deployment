@@ -2670,6 +2670,7 @@ Resources:
                       set -x
 
                       mkdir -p /tmp/overlay
+                      chown -R geth /tmp/overlay
 
                       # make sure that geth is able to start as a full node and catch up with peers
                       sudo -Eu geth /usr/bin/geth ${MasterExtraFlags} --datadir.overlay=/tmp/overlay --rpc.allow-unprotected-txs --snapshot=false --txlookuplimit=0 --cache=$allocatesafe --light.maxpeers 0 --maxpeers 25 --rpc --rpcaddr 0.0.0.0 --rpcport 8545 --datadir=/var/lib/ethereum ${FreezerFlags} &
