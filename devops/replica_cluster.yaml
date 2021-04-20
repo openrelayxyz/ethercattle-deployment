@@ -2728,13 +2728,13 @@ Resources:
           Ebs:
             VolumeSize: 8
             VolumeType: gp3
-        - DeviceName: "/dev/sdf"
-          Ebs:
-            VolumeSize: !Ref DiskSize
-            VolumeType: gp3
-            Iops: 3000
-            Throughput: 125
-            SnapshotId: !Ref SnapshotId
+        # - DeviceName: "/dev/sdf"
+        #   Ebs:
+        #     VolumeSize: !Ref DiskSize
+        #     VolumeType: gp3
+        #     Iops: 3000
+        #     Throughput: 125
+        #     SnapshotId: !Ref SnapshotId
         UserData:
           "Fn::Base64":
             "Fn::Sub":
@@ -2756,9 +2756,38 @@ Resources:
                 GETH_BIN="geth-linux-$ARCH"
                 aws s3 cp s3://${S3GethBucketName}/${ECGethVersion}/$GETH_BIN /usr/bin/geth
                 chmod +x /usr/bin/geth
+
+
+                if [ -e /dev/sdf ]
+                then
+                  mkfs.ext4 /dev/sdf
+                fi
+
+                AVAILABILITY_ZONE=$(curl -s http://169.254.169.254/latest/meta-data/placement/availability-zone)
+                INSTANCE_ID=$(curl -s http://169.254.169.254/2012-01-12/meta-data/instance-id)
+
+                VOLUME_ID=$(aws ec2 describe-volumes --filters Name=tag:SnapshotVolume,Values=${AWS::StackName}-${AWS::Region} Name=status,Values=available Name=availability-zone,Values=$AVAILABILITY_ZONE | jq -r .Volumes[0].VolumeId)
+
+                if [ "$VOLUME_ID" == "null"  ]
+                then
+                  VOLUME_ID=$(aws ec2 create-volume --snapshot-id ${SnapshotId} --availability-zone $AVAILABILITY_ZONE --iops 3000  --throughput 125 --size ${DiskSize} --volume-type gp3 --tag-specifications '{"ResourceType": "volume", "Tags": [{"Key": "SnapshotVolume","Value": "${AWS::StackName}-${AWS::Region}"}, {"Key": "Name": "${AWS::StackName}-SnapshotVolume"}]}' | jq -r .VolumeId)
+                  while [ "$(aws ec2 describe-volumes --volume-id $VOLUME_ID | jq -r .Volumes[0].State)" != "available" ]
+                  do
+                    sleep 3
+                  done
+                fi
+                aws ec2 attach-volume --device=/dev/sdf --instance-id=$INSTANCE_ID --volume-id=$VOLUME_ID
+
+                while [ "$(aws ec2 describe-volumes --volume-id $VOLUME_ID | jq -r .Volumes[0].State)" != "in-use" ]
+                do
+                  sleep 3
+                done
+
+                dd if=/dev/sdf of=/dev/null &
+
                 mkdir -p /var/lib/ethereum
-                mount -o barrier=0,data=writeback /dev/nvme1n1 /var/lib/ethereum
-                resize2fs /dev/nvme1n1
+                mount -o barrier=0,data=writeback /dev/sdf /var/lib/ethereum
+                resize2fs /dev/sdf
                 useradd -r geth
                 chown -R geth /var/lib/ethereum
 
@@ -3478,6 +3507,7 @@ Resources:
               - autoscaling:DescribeAutoScalingGroups
               - autoscaling:DescribeScalingActivities
               - ec2:DescribeVolumes
+              - ec2:CreateVolume
               - ec2:CreateSnapshot
               - ec2:DeleteSnapshot
               - events:DescribeRule
