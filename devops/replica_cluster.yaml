@@ -3510,6 +3510,7 @@ Resources:
               - autoscaling:DescribeScalingActivities
               - ec2:DescribeVolumes
               - ec2:CreateVolume
+              - ec2:AttachVolume
               - ec2:CreateSnapshot
               - ec2:DeleteSnapshot
               - events:DescribeRule
