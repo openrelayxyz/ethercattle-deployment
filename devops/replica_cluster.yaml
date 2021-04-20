@@ -2773,7 +2773,7 @@ Resources:
 
                 if [ "$VOLUME_ID" == "null"  ]
                 then
-                  VOLUME_ID=$(aws ec2 create-volume --snapshot-id ${SnapshotId} --availability-zone $AVAILABILITY_ZONE --size ${DiskSize} --volume-type gp3 --tag-specifications '{"ResourceType": "volume", "Tags": [{"Key": "SnapshotVolume","Value": "${AWS::StackName}-${AWS::Region}"}, {"Key": "Name": "${AWS::StackName}-SnapshotVolume"}]}' | jq -r .VolumeId)
+                  VOLUME_ID=$(aws ec2 create-volume --snapshot-id ${SnapshotId} --availability-zone $AVAILABILITY_ZONE --size ${DiskSize} --volume-type gp3 --tag-specifications '{"ResourceType": "volume", "Tags": [{"Key": "SnapshotVolume","Value": "${AWS::StackName}-${AWS::Region}"}, {"Key": "Name", "Value": "${AWS::StackName}-SnapshotVolume"}]}' | jq -r .VolumeId)
                   while [ "$(aws ec2 describe-volumes --volume-id $VOLUME_ID | jq -r .Volumes[0].State)" != "available" ]
                   do
                     sleep 3
