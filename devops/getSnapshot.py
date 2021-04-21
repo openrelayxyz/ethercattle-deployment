@@ -4,7 +4,7 @@ import datetime
 
 ec2 = boto3.resource('ec2')
 
-instance_types = [
+INSTANCE_TYPES = [
     "m5a.large",
     "m5.large",
     "m5d.large",
@@ -19,6 +19,8 @@ instance_types = [
 def handler(event, context):
     if os.environ.get("INSTANCE_TYPES"):
         instance_types = os.environ.get("INSTANCE_TYPES").split(",")
+    else:
+        instance_types = INSTANCE_TYPES
     for subnet in os.environ.get("SUBNET_ID").split(","):
         for instance_type in instance_types:
             try:
