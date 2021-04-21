@@ -3090,8 +3090,10 @@ Resources:
                 useradd -r geth
                 chown -R geth /var/lib/ethereum
 
-                cp -a /var/lib/ethereum/ethash /var/lib/ethereum-pruned/ethash
-                cp -a /var/lib/ethereum/nodes /var/lib/ethereum-pruned/nodes
+                cp -a /var/lib/ethereum/keystore /var/lib/ethereum-pruned/keystore || true
+                cp -a /var/lib/ethereum/geth/keystore /var/lib/ethereum-pruned/geth/keystore || true
+                cp -a /var/lib/ethereum/geth/ethash /var/lib/ethereum-pruned/geth/ethash || true
+                cp -a /var/lib/ethereum/geth/nodes /var/lib/ethereum-pruned/geth/nodes || true
 
                 yum install -y jq
 
