@@ -230,6 +230,11 @@ Parameters:
   WarningAlarmWebhook:
     Description: URL for webhooks pertaining to warning alarms
     Type: String
+  PrunerGeneration:
+    Description: How many times have the volumes on this stack been pruned (this is managed by the stack, and can be ignored)
+    Default: 0
+    Type: Number
+
 
 
 Metadata:
@@ -552,6 +557,25 @@ Resources:
             response.send(event, context, response.SUCCESS, {Value: result});
           };
       Runtime: nodejs12.x
+  Sum:
+    Type: AWS::Lambda::Function
+    Properties:
+      Handler: index.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Code:
+        ZipFile: !Sub |
+          var response = require('./cfn-response');
+          exports.handler = function(event, context) {
+            response.send(event, context, response.SUCCESS, {Sum: event.ResourceProperties.Values.reduce((a,b) => parseInt(a)+parseInt(b))});
+          };
+      Runtime: nodejs12.x
+  NextPrunerGeneration:
+    Type: Custom::Sum
+    Properties:
+      ServiceToken: !GetAtt Sum.Arn
+      Values:
+        - !Ref PrunerGeneration
+        - 1
   HDDSize:
     Type: Custom::Max
     Properties:
@@ -2777,11 +2801,11 @@ Resources:
                 AVAILABILITY_ZONE=$(curl -s http://169.254.169.254/latest/meta-data/placement/availability-zone)
                 INSTANCE_ID=$(curl -s http://169.254.169.254/2012-01-12/meta-data/instance-id)
 
-                VOLUME_ID=$(aws ec2 describe-volumes --filters Name=tag:SnapshotVolume,Values=${AWS::StackName}-${AWS::Region} Name=status,Values=available Name=availability-zone,Values=$AVAILABILITY_ZONE | jq -r .Volumes[0].VolumeId)
+                VOLUME_ID=$(aws ec2 describe-volumes --filters Name=tag:SnapshotVolume,Values=${AWS::StackName}-${AWS::Region}-${PrunerGeneration} Name=status,Values=available Name=availability-zone,Values=$AVAILABILITY_ZONE | jq -r .Volumes[0].VolumeId)
 
                 if [ "$VOLUME_ID" == "null"  ]
                 then
-                  VOLUME_ID=$(aws ec2 create-volume --snapshot-id ${SnapshotId} --availability-zone $AVAILABILITY_ZONE --size ${DiskSize} --volume-type gp3 --tag-specifications '{"ResourceType": "volume", "Tags": [{"Key": "SnapshotVolume","Value": "${AWS::StackName}-${AWS::Region}"}, {"Key": "Name", "Value": "${AWS::StackName}-SnapshotVolume"}]}' | jq -r .VolumeId)
+                  VOLUME_ID=$(aws ec2 create-volume --snapshot-id ${SnapshotId} --availability-zone $AVAILABILITY_ZONE --size ${DiskSize} --volume-type gp3 --tag-specifications '{"ResourceType": "volume", "Tags": [{"Key": "SnapshotVolume","Value": "${AWS::StackName}-${AWS::Region}-${PrunerGeneration}"}, {"Key": "Name", "Value": "${AWS::StackName}-SnapshotVolume"}]}' | jq -r .VolumeId)
                   while [ "$(aws ec2 describe-volumes --volume-id $VOLUME_ID | jq -r .Volumes[0].State)" != "available" ]
                   do
                     sleep 3
@@ -3048,7 +3072,7 @@ Resources:
                 AVAILABILITY_ZONE=$(curl -s http://169.254.169.254/latest/meta-data/placement/availability-zone)
                 INSTANCE_ID=$(curl -s http://169.254.169.254/2012-01-12/meta-data/instance-id)
 
-                SOURCE_VOLUME_ID=$(aws ec2 describe-volumes --filters Name=tag:SnapshotVolume,Values=${AWS::StackName}-${AWS::Region} Name=status,Values=available Name=availability-zone,Values=$AVAILABILITY_ZONE | jq -r .Volumes[0].VolumeId)
+                SOURCE_VOLUME_ID=$(aws ec2 describe-volumes --filters Name=tag:SnapshotVolume,Values=${AWS::StackName}-${AWS::Region}-${PrunerGeneration} Name=status,Values=available Name=availability-zone,Values=$AVAILABILITY_ZONE | jq -r .Volumes[0].VolumeId)
 
                 if [ "$SOURCE_VOLUME_ID" == "null"  ]
                 then
@@ -3063,7 +3087,7 @@ Resources:
                   poweroff
                 fi
                 aws ec2 attach-volume --device=/dev/sdf --instance-id=$INSTANCE_ID --volume-id=$SOURCE_VOLUME_ID
-                DEST_VOLUME_ID=$(aws ec2 create-volume --availability-zone $AVAILABILITY_ZONE --size ${DiskSize} --volume-type gp3 --tag-specifications '{"ResourceType": "volume", "Tags": [{"Key": "SnapshotVolume","Value": "${AWS::StackName}-${AWS::Region}"}, {"Key": "Name", "Value": "${AWS::StackName}-SnapshotVolume"}]}' | jq -r .VolumeId)
+                DEST_VOLUME_ID=$(aws ec2 create-volume --availability-zone $AVAILABILITY_ZONE --size ${DiskSize} --volume-type gp3 --tag-specifications '{"ResourceType": "volume", "Tags": [{"Key": "SnapshotVolume","Value": "${AWS::StackName}-${AWS::Region}-${NextPrunerGeneration.Sum}"}, {"Key": "Name", "Value": "${AWS::StackName}-SnapshotVolume"}]}' | jq -r .VolumeId)
                 while [ "$(aws ec2 describe-volumes --volume-id $DEST_VOLUME_ID | jq -r .Volumes[0].State)" != "available" ]
                 do
                   sleep 3
@@ -3139,6 +3163,8 @@ Resources:
                 mkdir -p /var/lib/ethereum-pruned/geth/chaindata
                 chown -R geth /var/lib/ethereum-pruned
                 chown -R geth /var/lib/ethereum
+
+                fio --filename=/dev/sdf --rw=read --bs=128k --iodepth=32 --ioengine=libaio --prio=7 --prioclass=3 --thinktime=2 --rate_iops=4000 --direct=1 --name=volume-initialize &
 
                 if ! sudo -Eu geth /usr/bin/geth migratestate ${FreezerLocation} /var/lib/ethereum/geth/chaindata /var/lib/ethereum-pruned/geth/chaindata ${KafkaTopic}
                 then
@@ -3217,8 +3243,6 @@ Resources:
                 done
 
                 aws ec2 detach-volume --volume-id $SOURCE_VOLUME_ID
-                # Removing tags makes sure other volumes won't be considered
-                aws ec2 describe-volumes --filters Name=tag:SnapshotVolume,Values=${AWS::StackName}-${AWS::Region} Name=status,Values=available Name=availability-zone,Values=$AVAILABILITY_ZONE | jq -r .Volumes[].VolumeId | xargs -I % aws ec2 delete-tags --resources %
 
                 ## STEP 7: Before we update cloudformation, ensure this snapshot is valid by running it for a few blocks
 
@@ -3263,7 +3287,8 @@ Resources:
                   else
                     PARAMETERS_RESIZE=$(echo "$PARAMETERS" | jq 'map(if .ParameterKey == "DiskSize" then .ParameterValue="'$ORIGINAL_DISK_SIZE'" else . end)' -c)
                   fi
-                  aws cloudformation update-stack --stack-name ${AWS::StackName} --use-previous-template --capabilities CAPABILITY_IAM --parameters="$PARAMETERS_RESIZE"
+                  PARAMETERS_FINAL=$(echo "$PARAMETERS_RESIZE" | jq 'map(if .ParameterKey == "PrunerGeneration" then .ParameterValue="'${NextPrunerGeneration.Sum}'" else . end)' -c)
+                  aws cloudformation update-stack --stack-name ${AWS::StackName} --use-previous-template --capabilities CAPABILITY_IAM --parameters="$PARAMETERS_FINAL"
                 done
 
 
