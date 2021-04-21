@@ -3585,6 +3585,7 @@ Resources:
               - !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:security-group/${ReplicaNodeSecurityGroup.GroupId}"
               - !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:network-interface/*"
               - !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:launch-template/${SnapshotterLaunchTemplate}"
+              - !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:launch-template/${PrunerLaunchTemplate}"
               - "arn:aws:ec2:*::image/*"
 
   SnapshotterLambdaFunction:
