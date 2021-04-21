@@ -3064,6 +3064,10 @@ Resources:
                 fi
                 aws ec2 attach-volume --device=/dev/sdf --instance-id=$INSTANCE_ID --volume-id=$SOURCE_VOLUME_ID
                 DEST_VOLUME_ID=$(aws ec2 create-volume --availability-zone $AVAILABILITY_ZONE --size ${DiskSize} --volume-type gp3 --tag-specifications '{"ResourceType": "volume", "Tags": [{"Key": "SnapshotVolume","Value": "${AWS::StackName}-${AWS::Region}"}, {"Key": "Name", "Value": "${AWS::StackName}-SnapshotVolume"}]}' | jq -r .VolumeId)
+                while [ "$(aws ec2 describe-volumes --volume-id $DEST_VOLUME_ID | jq -r .Volumes[0].State)" != "available" ]
+                do
+                  sleep 3
+                done
                 aws ec2 attach-volume --device=/dev/sdg --instance-id=$INSTANCE_ID --volume-id=$DEST_VOLUME_ID
 
                 while [ "$(aws ec2 describe-volumes --volume-id $SOURCE_VOLUME_ID | jq -r .Volumes[0].State)" != "in-use" ]
