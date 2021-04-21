@@ -3613,6 +3613,16 @@ Resources:
                 - PublicA:
                     "Fn::ImportValue":
                       !Sub "${InfrastructureStack}-PublicA"
+              - Fn::Sub:
+                - "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:subnet/${PublicB}"
+                - PublicB:
+                    "Fn::ImportValue":
+                      !Sub "${InfrastructureStack}-PublicB"
+              - Fn::Sub:
+                - "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:subnet/${PublicC}"
+                - PublicC:
+                    "Fn::ImportValue":
+                      !Sub "${InfrastructureStack}-PublicC"
               - !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:key-pair/${KeyName}"
               - !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:instance/*"
               - !Sub "arn:aws:ec2:*::snapshot/${SnapshotId}"
@@ -3635,17 +3645,8 @@ Resources:
           LAUNCH_TEMPLATE_ID: !Ref SnapshotterLaunchTemplate
           LAUNCH_TEMPLATE_VERSION: !Sub "${SnapshotterLaunchTemplate.LatestVersionNumber}"
           SUBNET_ID:
-            "Fn::Sub":
-              - "${PublicA},${PublicB},${PublicC}"
-              - PublicA:
-                  "Fn::ImportValue":
-                      !Sub "${InfrastructureStack}-PublicA"
-                PublicB:
-                  "Fn::ImportValue":
-                      !Sub "${InfrastructureStack}-PublicB"
-                PublicC:
-                  "Fn::ImportValue":
-                      !Sub "${InfrastructureStack}-PublicC"
+            "Fn::ImportValue":
+                !Sub "${InfrastructureStack}-PublicA"
           VOLUME_SIZE: !Ref DiskSize
       Handler: "getSnapshot.handler"
       Role: !Sub ${SnapshotterLambdaRole.Arn}
@@ -3663,17 +3664,8 @@ Resources:
           LAUNCH_TEMPLATE_ID: !Ref PrunerLaunchTemplate
           LAUNCH_TEMPLATE_VERSION: !Sub "${PrunerLaunchTemplate.LatestVersionNumber}"
           SUBNET_ID:
-            "Fn::Sub":
-              - "${PublicA},${PublicB},${PublicC}"
-              - PublicA:
-                  "Fn::ImportValue":
-                      !Sub "${InfrastructureStack}-PublicA"
-                PublicB:
-                  "Fn::ImportValue":
-                      !Sub "${InfrastructureStack}-PublicB"
-                PublicC:
-                  "Fn::ImportValue":
-                      !Sub "${InfrastructureStack}-PublicC"
+            "Fn::ImportValue":
+                !Sub "${InfrastructureStack}-PublicA"
           VOLUME_SIZE: !Ref DiskSize
       Handler: "getSnapshot.handler"
       Role: !Sub ${SnapshotterLambdaRole.Arn}
