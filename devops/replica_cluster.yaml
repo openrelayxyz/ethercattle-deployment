@@ -2789,12 +2789,6 @@ Resources:
                 aws s3 cp s3://${S3GethBucketName}/${ECGethVersion}/$GETH_BIN /usr/bin/geth
                 chmod +x /usr/bin/geth
 
-
-                if [ -e /dev/sdf ]
-                then
-                  mkfs.ext4 /dev/sdf
-                fi
-
                 export AWS_DEFAULT_REGION=${AWS::Region}
                 export AWS_REGION=${AWS::Region}
 
@@ -2805,6 +2799,7 @@ Resources:
 
                 if [ "$VOLUME_ID" == "null"  ]
                 then
+                VOLUME_CREATED="yes"
                   VOLUME_ID=$(aws ec2 create-volume --snapshot-id ${SnapshotId} --availability-zone $AVAILABILITY_ZONE --size ${DiskSize} --volume-type gp3 --tag-specifications '{"ResourceType": "volume", "Tags": [{"Key": "SnapshotVolume","Value": "${AWS::StackName}-${AWS::Region}-${PrunerGeneration}"}, {"Key": "Name", "Value": "${AWS::StackName}-SnapshotVolume"}]}' | jq -r .VolumeId)
                   while [ "$(aws ec2 describe-volumes --volume-id $VOLUME_ID | jq -r .Volumes[0].State)" != "available" ]
                   do
@@ -2817,6 +2812,11 @@ Resources:
                 do
                   sleep 3
                 done
+
+                if [ "$VOLUME_CREATED" == "yes" ]
+                then
+                  mkfs.ext4 /dev/sdf
+                fi
 
                 dd if=/dev/sdf of=/dev/null &
 
