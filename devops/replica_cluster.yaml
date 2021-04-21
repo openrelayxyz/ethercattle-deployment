@@ -3136,7 +3136,11 @@ Resources:
 
                 ## STEP 3: Migrate data to the new volume. This will take a loooooooooooonnnnnng time (days).
 
-                if ! sudo -Eu geth /usr/bin/geth migratestate ${FreezerLocation} /var/lib/ethereum/chaindata /var/lib/ethereum-pruned/chaindata ${KafkaTopic}
+                mkdir -p /var/lib/ethereum-pruned/geth/chaindata
+                chown -R geth /var/lib/ethereum-pruned
+                chown -R geth /var/lib/ethereum
+
+                if ! sudo -Eu geth /usr/bin/geth migratestate ${FreezerLocation} /var/lib/ethereum/geth/chaindata /var/lib/ethereum-pruned/geth/chaindata ${KafkaTopic}
                 then
                   if [ "${AggregatedNotifications}" != "" ]
                   then
