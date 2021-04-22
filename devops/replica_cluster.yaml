@@ -3237,13 +3237,6 @@ Resources:
                 umount /var/lib/ethereum-pruned
                 mount /dev/sdg /var/lib/ethereum
 
-                while [ "$(aws ec2 describe-volumes --volume-id $SOURCE_VOLUME_ID | jq -r .Volumes[0].State)" != "available" ]
-                do
-                  sleep 3
-                done
-
-                aws ec2 detach-volume --volume-id $SOURCE_VOLUME_ID
-
                 ## STEP 7: Before we update cloudformation, ensure this snapshot is valid by running it for a few blocks
 
                 # After the snapshot completes, sync from the network. This is an extra integrity
