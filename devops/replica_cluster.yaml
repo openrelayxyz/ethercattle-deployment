@@ -3087,7 +3087,7 @@ Resources:
                   poweroff
                 fi
                 aws ec2 attach-volume --device=/dev/sdf --instance-id=$INSTANCE_ID --volume-id=$SOURCE_VOLUME_ID
-                DEST_VOLUME_ID=$(aws ec2 create-volume --availability-zone $AVAILABILITY_ZONE --size ${DiskSize} --volume-type gp3 --tag-specifications '{"ResourceType": "volume", "Tags": [{"Key": "SnapshotVolume","Value": "${AWS::StackName}-${AWS::Region}-${NextPrunerGeneration.Sum}"}, {"Key": "Name", "Value": "${AWS::StackName}-SnapshotVolume"}]}' | jq -r .VolumeId)
+                DEST_VOLUME_ID=$(aws ec2 create-volume --availability-zone $AVAILABILITY_ZONE --size ${PrunedDiskSize} --volume-type gp3 --tag-specifications '{"ResourceType": "volume", "Tags": [{"Key": "SnapshotVolume","Value": "${AWS::StackName}-${AWS::Region}-${NextPrunerGeneration.Sum}"}, {"Key": "Name", "Value": "${AWS::StackName}-SnapshotVolume"}]}' | jq -r .VolumeId)
                 while [ "$(aws ec2 describe-volumes --volume-id $DEST_VOLUME_ID | jq -r .Volumes[0].State)" != "available" ]
                 do
                   sleep 3
@@ -3266,7 +3266,7 @@ Resources:
                 PARAMETERS=$(aws cloudformation describe-stacks --stack-name ${AWS::StackName} | jq '.Stacks[0].Parameters | map(if .ParameterKey == "SnapshotId" then .ParameterValue="'$SNAPSHOT_ID'" else . end)' -c)
 
                 # Resize Disks
-                ORIGINAL_DISK_SIZE=`aws ec2 describe-volumes --volume-ids "$DEST_VOLUME_ID" | jq '.Volumes[] | .Size' -cr`
+                ORIGINAL_DISK_SIZE=`aws ec2 describe-volumes --volume-id "$DEST_VOLUME_ID" | jq '.Volumes[] | .Size' -cr`
                 NEW_DISK_SIZE=$((ORIGINAL_DISK_SIZE*115/100))
 
                 ## manually grepping for sdf (mount direcotry above) because we don't really need to worry about the others.
