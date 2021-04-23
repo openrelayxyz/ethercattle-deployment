@@ -2813,11 +2813,6 @@ Resources:
                   sleep 3
                 done
 
-                if [ "$VOLUME_CREATED" == "yes" ]
-                then
-                  mkfs.ext4 /dev/sdf
-                fi
-
                 dd if=/dev/sdf of=/dev/null &
 
                 mkdir -p /var/lib/ethereum
