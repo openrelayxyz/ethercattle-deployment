@@ -3540,6 +3540,7 @@ Resources:
               - lambda:GetFunctionConfiguration
             Resource:
               - !Sub ${SnapshotterLambdaFunction.Arn}
+              - !Sub ${PrunerLambdaFunction.Arn}
               - !Sub ${SnapshotGCLambdaFunction.Arn}
               - !Sub ${DiskSizeLambdaFunction.Arn}
               - !Sub ${SnapDiskSizeLambdaFunction.Arn}
