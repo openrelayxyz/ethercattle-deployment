@@ -3332,8 +3332,8 @@ Resources:
                 ClusterId:
                   "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
                 FreezerFlags: !If [ EnabledFreezerBucket, {"Fn::Sub": ["--datadir.ancient=s3://${Bucket}/${NetworkId}", {Bucket: !If [ HasFreezerBucket, !Ref FreezerBucket, {"Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket"} ]} ]}, ""]
-                FreezerLocation: !If [ EnabledFreezerBucket, {"Fn::Sub": ["s3://${Bucket}/${NetworkId}", {Bucket: !If [ HasFreezerBucket, !Ref FreezerBucket, {"Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket"} ]} ]}, "/var/lib/ethereum/chaindata/ancient"]
-                PrunedFreezerLocation: !If [ EnabledFreezerBucket, {"Fn::Sub": ["s3://${Bucket}/${NetworkId}", {Bucket: !If [ HasFreezerBucket, !Ref FreezerBucket, {"Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket"} ]} ]}, "/var/lib/ethereum-pruned/chaindata/ancient"]
+                FreezerLocation: !If [ EnabledFreezerBucket, {"Fn::Sub": ["s3://${Bucket}/${NetworkId}", {Bucket: !If [ HasFreezerBucket, !Ref FreezerBucket, {"Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket"} ]} ]}, "/var/lib/ethereum/geth/chaindata/ancient"]
+                PrunedFreezerLocation: !If [ EnabledFreezerBucket, {"Fn::Sub": ["s3://${Bucket}/${NetworkId}", {Bucket: !If [ HasFreezerBucket, !Ref FreezerBucket, {"Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket"} ]} ]}, "/var/lib/ethereum-pruned/geth/chaindata/ancient"]
 
 
 
