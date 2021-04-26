@@ -3308,7 +3308,7 @@ Resources:
                 NEW_DISK_SIZE=$((ORIGINAL_DISK_SIZE*115/100))
 
                 ## manually grepping for sdf (mount direcotry above) because we don't really need to worry about the others.
-                df -H | grep -vE '^Filesystem|tmpfs|cdrom' | grep $(readlink -f /dev/sdf) | awk '{ print $5 " " $1 }' | while read output;
+                df -H | grep -vE '^Filesystem|tmpfs|cdrom' | grep $(readlink -f /dev/sdg) | awk '{ print $5 " " $1 }' | while read output;
                 do
                   echo $output
                   usep=$(echo $output | awk '{ print $1}' | cut -d'%' -f1  )
