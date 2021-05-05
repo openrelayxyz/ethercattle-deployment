@@ -234,6 +234,10 @@ Parameters:
     Description: How many times have the volumes on this stack been pruned (this is managed by the stack, and can be ignored)
     Default: 0
     Type: Number
+  SnapshotTimestamp:
+    Description: The time the last timestamp was taken (this is managed by the stack and can be ignored)
+    Default: 0
+    Type: Number
 
 
 
@@ -1180,9 +1184,7 @@ Resources:
                   "Fn::Sub":
                     - |
                       #!/bin/bash -xe
-                      fio --filename=/dev/sdf --rw=read --bs=128k --iodepth=32 --ioengine=libaio --prio=7 --prioclass=3 --thinktime=2 --rate_iops=4000 --direct=1 --name=volume-initialize &
-                      export AWS_DEFAULT_REGION=${AWS::Region}
-                      VOLUME_ID=$(aws ec2 describe-volumes --filters Name=attachment.instance-id,Values="$(curl http://169.254.169.254/latest/meta-data/instance-id)" | jq '.Volumes[] | select(. | .Attachments[0].Device == "/dev/sdf") | .VolumeId' -cr)
+                      fio --filename=/dev/sdf --rw=read --bs=128k --iodepth=32 --ioengine=libaio --prio=7 --prioclass=3 --thinktime=2 --rate_iops=4000 --direct=1 --name=volume-initialize
                     - ClusterId:
                         "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
                       ReplicaHTTPFlag:
@@ -1231,9 +1233,8 @@ Resources:
         - DeviceName: "/dev/sdf"
           Ebs:
             VolumeSize: !Ref DiskSize
-            VolumeType: gp3
-            Iops: 3000
-            Throughput: 125
+            VolumeType: io1
+            Iops: !GetAtt VolumeIOPS.Value
             SnapshotId: !Ref SnapshotId
         UserData:
           "Fn::Base64":
@@ -1245,6 +1246,9 @@ Resources:
                 /root/configure-server.sh || (sleep 30; /root/configure-server.sh || poweroff)
                 /root/start-master.sh  || (sleep 30; /root/start-master.sh  || poweroff)
                 /root/loadtest-disk.sh || poweroff
+                export AWS_DEFAULT_REGION=${AWS::Region}
+                VOLUME_ID=$(aws ec2 describe-volumes --filters Name=attachment.instance-id,Values="$(curl http://169.254.169.254/latest/meta-data/instance-id)" | jq '.Volumes[] | select(. | .Attachments[0].Device == "/dev/sdf") | .VolumeId' -cr)
+                /usr/local/bin/aws ec2 modify-volume --volume-id $VOLUME_ID --volume-type gp3 --iops 3000 --throughput 125 &
               - ClusterId:
                   "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
                 BaseInfrastructure:
@@ -2236,6 +2240,34 @@ Resources:
         - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
       Threshold: 2
       TreatMissingData: breaching
+  SnapshotAgeWarning:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmActions:
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasWarningWebhook, !Ref WarningNotifications, !Ref 'AWS::NoValue' ]
+      AlarmDescription: "Alarms when the latest snapshot exceeds a certain age"
+      ComparisonOperator: "GreaterThanThreshold"
+      EvaluationPeriods: 2
+      Metrics:
+        - Id: current
+          MetricStat:
+            Metric:
+              MetricName: "UnixTimestamp"
+              Namespace: Consul
+            Period: 60
+            Stat: Maximum
+          Label: Unix Timestamp
+          ReturnData: false
+        - Id: delta
+          Expression: !Sub "(current - ${SnapshotTimestamp})"
+      OKActions:
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasWarningWebhook, !Ref WarningNotifications, !Ref 'AWS::NoValue' ]
+      Threshold: 43200 # 12 hours in seconds
+      TreatMissingData: breaching
 
   ReplicaLG:
     Type: AWS::Logs::LogGroup
@@ -2953,7 +2985,7 @@ Resources:
                 # CFN will set any parameters we don't provide back to their default values,
                 # so get all of the parameters, update SnapshotID, and update the stack with
                 # the new parameters.
-                PARAMETERS=$(aws cloudformation describe-stacks --stack-name ${AWS::StackName} | jq '.Stacks[0].Parameters | map(if .ParameterKey == "SnapshotId" then .ParameterValue="'$SNAPSHOT_ID'" else . end)' -c)
+                PARAMETERS=$(aws cloudformation describe-stacks --stack-name ${AWS::StackName} | jq '.Stacks[0].Parameters | map(if .ParameterKey == "SnapshotId" then .ParameterValue="'$SNAPSHOT_ID'" else . end)' -c | map(if .ParameterKey == "SnapshotTimestamp" then .ParameterValue="'$(date +%s)'" else . end)' -c)
 
                 # Resize Disks
                 ORIGINAL_DISK_SIZE=`aws ec2 describe-volumes --volume-ids "$VOLUME_ID" | jq '.Volumes[] | .Size' -cr`
@@ -2995,7 +3027,7 @@ Resources:
                   # CFN will set any parameters we don't provide back to their default values,
                   # so get all of the parameters, update SnapshotID, and update the stack with
                   # the new parameters.
-                  PARAMETERS=$(aws cloudformation describe-stacks --stack-name ${AWS::StackName} | jq '.Stacks[0].Parameters | map(if .ParameterKey == "SnapshotId" then .ParameterValue="'$NEW_SNAPSHOT_ID'" else . end)' -c)
+                  PARAMETERS=$(aws cloudformation describe-stacks --stack-name ${AWS::StackName} | jq '.Stacks[0].Parameters | map(if .ParameterKey == "SnapshotId" then .ParameterValue="'$NEW_SNAPSHOT_ID'" else . end)' -c | map(if .ParameterKey == "SnapshotTimestamp" then .ParameterValue="'$(date +%s)'" else . end)' -c)
                   aws cloudformation update-stack --stack-name ${AWS::StackName} --use-previous-template --capabilities CAPABILITY_IAM --parameters="$PARAMETERS"
 
                   #DELETE OLD SNAPSHOT ONCE EVERYTHING UPDATED
@@ -3221,6 +3253,7 @@ Resources:
                   poweroff
                 fi
                 cp -r ${FreezerLocation} ${PrunedFreezerLocation} || true
+                chown -R geth /var/lib/ethereum-pruned/
 
 
                 ## STEP 4: Sync the new volume up to date so we're snapshotting the latest available data
@@ -3301,7 +3334,7 @@ Resources:
                 # CFN will set any parameters we don't provide back to their default values,
                 # so get all of the parameters, update SnapshotID, and update the stack with
                 # the new parameters.
-                PARAMETERS=$(aws cloudformation describe-stacks --stack-name ${AWS::StackName} | jq '.Stacks[0].Parameters | map(if .ParameterKey == "SnapshotId" then .ParameterValue="'$SNAPSHOT_ID'" else . end)' -c)
+                PARAMETERS=$(aws cloudformation describe-stacks --stack-name ${AWS::StackName} | jq '.Stacks[0].Parameters | map(if .ParameterKey == "SnapshotId" then .ParameterValue="'$SNAPSHOT_ID'" else . end)' -c | map(if .ParameterKey == "SnapshotTimestamp" then .ParameterValue="'$(date +%s)'" else . end)' -c)
 
                 # Resize Disks
                 ORIGINAL_DISK_SIZE=`aws ec2 describe-volumes --volume-id "$DEST_VOLUME_ID" | jq '.Volumes[] | .Size' -cr`
