@@ -1184,9 +1184,7 @@ Resources:
                   "Fn::Sub":
                     - |
                       #!/bin/bash -xe
-                      fio --filename=/dev/sdf --rw=read --bs=128k --iodepth=32 --ioengine=libaio --prio=7 --prioclass=3 --thinktime=2 --rate_iops=4000 --direct=1 --name=volume-initialize &
-                      export AWS_DEFAULT_REGION=${AWS::Region}
-                      VOLUME_ID=$(aws ec2 describe-volumes --filters Name=attachment.instance-id,Values="$(curl http://169.254.169.254/latest/meta-data/instance-id)" | jq '.Volumes[] | select(. | .Attachments[0].Device == "/dev/sdf") | .VolumeId' -cr)
+                      fio --filename=/dev/sdf --rw=read --bs=128k --iodepth=32 --ioengine=libaio --prio=7 --prioclass=3 --thinktime=2 --rate_iops=4000 --direct=1 --name=volume-initialize
                     - ClusterId:
                         "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
                       ReplicaHTTPFlag:
@@ -1235,9 +1233,8 @@ Resources:
         - DeviceName: "/dev/sdf"
           Ebs:
             VolumeSize: !Ref DiskSize
-            VolumeType: gp3
-            Iops: 3000
-            Throughput: 125
+            VolumeType: io1
+            Iops: !GetAtt VolumeIOPS.Value
             SnapshotId: !Ref SnapshotId
         UserData:
           "Fn::Base64":
@@ -1249,6 +1246,9 @@ Resources:
                 /root/configure-server.sh || (sleep 30; /root/configure-server.sh || poweroff)
                 /root/start-master.sh  || (sleep 30; /root/start-master.sh  || poweroff)
                 /root/loadtest-disk.sh || poweroff
+                export AWS_DEFAULT_REGION=${AWS::Region}
+                VOLUME_ID=$(aws ec2 describe-volumes --filters Name=attachment.instance-id,Values="$(curl http://169.254.169.254/latest/meta-data/instance-id)" | jq '.Volumes[] | select(. | .Attachments[0].Device == "/dev/sdf") | .VolumeId' -cr)
+                /usr/local/bin/aws ec2 modify-volume --volume-id $VOLUME_ID --volume-type gp3 --iops 3000 --throughput 125 &
               - ClusterId:
                   "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
                 BaseInfrastructure:
@@ -3253,6 +3253,7 @@ Resources:
                   poweroff
                 fi
                 cp -r ${FreezerLocation} ${PrunedFreezerLocation} || true
+                chown -R geth /var/lib/ethereum-pruned/
 
 
                 ## STEP 4: Sync the new volume up to date so we're snapshotting the latest available data
