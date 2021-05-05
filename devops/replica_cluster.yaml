@@ -234,6 +234,10 @@ Parameters:
     Description: How many times have the volumes on this stack been pruned (this is managed by the stack, and can be ignored)
     Default: 0
     Type: Number
+  SnapshotTimestamp:
+    Description: The time the last timestamp was taken (this is managed by the stack and can be ignored)
+    Default: 0
+    Type: Number
 
 
 
@@ -2236,6 +2240,34 @@ Resources:
         - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
       Threshold: 2
       TreatMissingData: breaching
+  SnapshotAgeWarning:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmActions:
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasWarningWebhook, !Ref WarningNotifications, !Ref 'AWS::NoValue' ]
+      AlarmDescription: "Alarms when the latest snapshot exceeds a certain age"
+      ComparisonOperator: "GreaterThanThreshold"
+      EvaluationPeriods: 2
+      Metrics:
+        - Id: current
+          MetricStat:
+            Metric:
+              MetricName: "UnixTimestamp"
+              Namespace: Consul
+            Period: 60
+            Stat: Maximum
+          Label: Unix Timestamp
+          ReturnData: false
+        - Id: delta
+          Expression: !Sub "(current - ${SnapshotTimestamp})"
+      OKActions:
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasWarningWebhook, !Ref WarningNotifications, !Ref 'AWS::NoValue' ]
+      Threshold: 43200 # 12 hours in seconds
+      TreatMissingData: breaching
 
   ReplicaLG:
     Type: AWS::Logs::LogGroup
@@ -2953,7 +2985,7 @@ Resources:
                 # CFN will set any parameters we don't provide back to their default values,
                 # so get all of the parameters, update SnapshotID, and update the stack with
                 # the new parameters.
-                PARAMETERS=$(aws cloudformation describe-stacks --stack-name ${AWS::StackName} | jq '.Stacks[0].Parameters | map(if .ParameterKey == "SnapshotId" then .ParameterValue="'$SNAPSHOT_ID'" else . end)' -c)
+                PARAMETERS=$(aws cloudformation describe-stacks --stack-name ${AWS::StackName} | jq '.Stacks[0].Parameters | map(if .ParameterKey == "SnapshotId" then .ParameterValue="'$SNAPSHOT_ID'" else . end)' -c | map(if .ParameterKey == "SnapshotTimestamp" then .ParameterValue="'$(date +%s)'" else . end)' -c)
 
                 # Resize Disks
                 ORIGINAL_DISK_SIZE=`aws ec2 describe-volumes --volume-ids "$VOLUME_ID" | jq '.Volumes[] | .Size' -cr`
@@ -2995,7 +3027,7 @@ Resources:
                   # CFN will set any parameters we don't provide back to their default values,
                   # so get all of the parameters, update SnapshotID, and update the stack with
                   # the new parameters.
-                  PARAMETERS=$(aws cloudformation describe-stacks --stack-name ${AWS::StackName} | jq '.Stacks[0].Parameters | map(if .ParameterKey == "SnapshotId" then .ParameterValue="'$NEW_SNAPSHOT_ID'" else . end)' -c)
+                  PARAMETERS=$(aws cloudformation describe-stacks --stack-name ${AWS::StackName} | jq '.Stacks[0].Parameters | map(if .ParameterKey == "SnapshotId" then .ParameterValue="'$NEW_SNAPSHOT_ID'" else . end)' -c | map(if .ParameterKey == "SnapshotTimestamp" then .ParameterValue="'$(date +%s)'" else . end)' -c)
                   aws cloudformation update-stack --stack-name ${AWS::StackName} --use-previous-template --capabilities CAPABILITY_IAM --parameters="$PARAMETERS"
 
                   #DELETE OLD SNAPSHOT ONCE EVERYTHING UPDATED
@@ -3301,7 +3333,7 @@ Resources:
                 # CFN will set any parameters we don't provide back to their default values,
                 # so get all of the parameters, update SnapshotID, and update the stack with
                 # the new parameters.
-                PARAMETERS=$(aws cloudformation describe-stacks --stack-name ${AWS::StackName} | jq '.Stacks[0].Parameters | map(if .ParameterKey == "SnapshotId" then .ParameterValue="'$SNAPSHOT_ID'" else . end)' -c)
+                PARAMETERS=$(aws cloudformation describe-stacks --stack-name ${AWS::StackName} | jq '.Stacks[0].Parameters | map(if .ParameterKey == "SnapshotId" then .ParameterValue="'$SNAPSHOT_ID'" else . end)' -c | map(if .ParameterKey == "SnapshotTimestamp" then .ParameterValue="'$(date +%s)'" else . end)' -c)
 
                 # Resize Disks
                 ORIGINAL_DISK_SIZE=`aws ec2 describe-volumes --volume-id "$DEST_VOLUME_ID" | jq '.Volumes[] | .Size' -cr`
