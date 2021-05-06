@@ -2985,7 +2985,7 @@ Resources:
                 # CFN will set any parameters we don't provide back to their default values,
                 # so get all of the parameters, update SnapshotID, and update the stack with
                 # the new parameters.
-                PARAMETERS=$(aws cloudformation describe-stacks --stack-name ${AWS::StackName} | jq '.Stacks[0].Parameters | map(if .ParameterKey == "SnapshotId" then .ParameterValue="'$SNAPSHOT_ID'" else . end)' -c | map(if .ParameterKey == "SnapshotTimestamp" then .ParameterValue="'$(date +%s)'" else . end)' -c)
+                PARAMETERS=$(aws cloudformation describe-stacks --stack-name ${AWS::StackName} | jq '.Stacks[0].Parameters | map(if .ParameterKey == "SnapshotId" then .ParameterValue="'$SNAPSHOT_ID'" else . end) | map(if .ParameterKey == "SnapshotTimestamp" then .ParameterValue="'$(date +%s)'" else . end)' -c)
 
                 # Resize Disks
                 ORIGINAL_DISK_SIZE=`aws ec2 describe-volumes --volume-ids "$VOLUME_ID" | jq '.Volumes[] | .Size' -cr`
@@ -3027,7 +3027,7 @@ Resources:
                   # CFN will set any parameters we don't provide back to their default values,
                   # so get all of the parameters, update SnapshotID, and update the stack with
                   # the new parameters.
-                  PARAMETERS=$(aws cloudformation describe-stacks --stack-name ${AWS::StackName} | jq '.Stacks[0].Parameters | map(if .ParameterKey == "SnapshotId" then .ParameterValue="'$NEW_SNAPSHOT_ID'" else . end)' -c | map(if .ParameterKey == "SnapshotTimestamp" then .ParameterValue="'$(date +%s)'" else . end)' -c)
+                  PARAMETERS=$(aws cloudformation describe-stacks --stack-name ${AWS::StackName} | jq '.Stacks[0].Parameters | map(if .ParameterKey == "SnapshotId" then .ParameterValue="'$NEW_SNAPSHOT_ID'" else . end) | map(if .ParameterKey == "SnapshotTimestamp" then .ParameterValue="'$(date +%s)'" else . end)' -c)
                   aws cloudformation update-stack --stack-name ${AWS::StackName} --use-previous-template --capabilities CAPABILITY_IAM --parameters="$PARAMETERS"
 
                   #DELETE OLD SNAPSHOT ONCE EVERYTHING UPDATED
@@ -3334,7 +3334,7 @@ Resources:
                 # CFN will set any parameters we don't provide back to their default values,
                 # so get all of the parameters, update SnapshotID, and update the stack with
                 # the new parameters.
-                PARAMETERS=$(aws cloudformation describe-stacks --stack-name ${AWS::StackName} | jq '.Stacks[0].Parameters | map(if .ParameterKey == "SnapshotId" then .ParameterValue="'$SNAPSHOT_ID'" else . end)' -c | map(if .ParameterKey == "SnapshotTimestamp" then .ParameterValue="'$(date +%s)'" else . end)' -c)
+                PARAMETERS=$(aws cloudformation describe-stacks --stack-name ${AWS::StackName} | jq '.Stacks[0].Parameters | map(if .ParameterKey == "SnapshotId" then .ParameterValue="'$SNAPSHOT_ID'" else . end) | map(if .ParameterKey == "SnapshotTimestamp" then .ParameterValue="'$(date +%s)'" else . end)' -c)
 
                 # Resize Disks
                 ORIGINAL_DISK_SIZE=`aws ec2 describe-volumes --volume-id "$DEST_VOLUME_ID" | jq '.Volumes[] | .Size' -cr`
