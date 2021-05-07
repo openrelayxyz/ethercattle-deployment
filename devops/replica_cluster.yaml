@@ -238,6 +238,10 @@ Parameters:
     Description: The time the last timestamp was taken (this is managed by the stack and can be ignored)
     Default: 0
     Type: Number
+  SnapsdbSize:
+    Description: The volume size for master snapshots. If 0, snapshots will not be enabled.
+    Default: 0
+    Type: Number
 
 
 
@@ -518,6 +522,7 @@ Conditions:
   SpecifiesConsulRegion: !Not [ !Equals [ !Ref ConsulPrimaryRegion, "" ] ]
   HasUrgentWebhook: !Not [ !Equals [ !Ref UrgentAlarmWebhook, "" ]]
   HasWarningWebhook: !Not [ !Equals [ !Ref WarningAlarmWebhook, "" ]]
+  HasSnapsdb: !Not [ !Equals [ !Ref SnapsdbSize, "0"]]
 
 Resources:
   LambdaExecutionRole:
@@ -774,6 +779,14 @@ Resources:
                         echo "/dev/sdg  /var/lib/ethereum/overlay    ext4   barrier=0,data=writeback,noatime  1   1" >> /etc/fstab
                       fi
 
+                      if [ -e /dev/sdh ]
+                      then
+                        mkfs.ext4 /dev/sdh
+                        mkdir -p /var/lib/ethereum/snapsdb
+                        mount -o barrier=0,data=writeback /dev/sdh /var/lib/ethereum/snapsdb
+                        echo "/dev/sdh  /var/lib/ethereum/snapsdb    ext4   barrier=0,data=writeback,noatime  1   1" >> /etc/fstab
+                      fi
+
                       chown -R geth /var/lib/ethereum
 
                       yum install -y https://s3.amazonaws.com/amazoncloudwatch-agent/amazon_linux/$ARCH/latest/amazon-cloudwatch-agent.rpm nmap-ncat jq python-pip jq fio || true
@@ -847,6 +860,12 @@ Resources:
                       then
                         OVERLAY_FLAG="--datadir.overlay=/var/lib/ethereum/overlay"
                       fi
+                      if [ -e /dev/sdh ]
+                      then
+                        SNAPS_FLAG="--datadir.snaps=/var/lib/ethereum/snapsdb --snapshot=true"
+                      else
+                        SNAPS_FLAG="--snapshot=false"
+                      fi
 
                       totalm=$(free -m | awk '/^Mem:/{print $2}') ; echo $totalm
                       allocatesafe=$((totalm * 75 / 100))
@@ -913,7 +932,7 @@ Resources:
                       Type=simple
                       LimitNOFILE=655360
                       ExecStartPre=/usr/bin/bash -c '/usr/bin/geth replica --snapshot=false --cache=$allocatesafe ${ReplicaExtraFlags} ${FreezerFlags} --kafka.broker=$KAFKA_ESCAPED_URL""$SEP_ESCAPED""fetch.default=8388608\\&max.waittime=25\\&avoid_leader=1  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown 2>>/tmp/geth-stderr'
-                      ExecStart=/usr/bin/geth ${MasterExtraFlags} ${FreezerFlags} --rpc.allow-unprotected-txs --snapshot=false --txlookuplimit=0 --light.maxpeers 0 --maxpeers 25 --gcmode=archive --kafka.broker=${KafkaBrokerURL}""$SEP""net.maxopenrequests=1\&message.send.max.retries=20000  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --kafka.txpool.topic=${NetworkId}-txpool ${EventsTopicFlag}
+                      ExecStart=/usr/bin/geth ${MasterExtraFlags} ${FreezerFlags} --rpc.allow-unprotected-txs $SNAPS_FLAG --txlookuplimit=0 --light.maxpeers 0 --maxpeers 25 --gcmode=archive --kafka.broker=${KafkaBrokerURL}""$SEP""net.maxopenrequests=1\&message.send.max.retries=20000  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --kafka.txpool.topic=${NetworkId}-txpool ${EventsTopicFlag}
                       TimeoutStartSec=86400
                       TimeoutStopSec=90
                       OnFailure=poweroff.target
@@ -934,7 +953,7 @@ Resources:
                       Type=simple
                       LimitNOFILE=655360
                       ExecStartPre=/usr/bin/bash -c '/usr/bin/geth replica --snapshot=false --cache=$allocatesafe ${ReplicaExtraFlags} ${FreezerFlags} $OVERLAY_FLAG --kafka.broker=$KAFKA_ESCAPED_URL""$SEP_ESCAPED""fetch.default=8388608\\&max.waittime=25\\&avoid_leader=1  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown 2>>/tmp/geth-stderr'
-                      ExecStart=/usr/bin/geth ${MasterExtraFlags} ${FreezerFlags} $OVERLAY_FLAG --rpc.allow-unprotected-txs --snapshot=false --txlookuplimit=0 --light.maxpeers 0 --maxpeers 25 --gcmode=archive --kafka.broker=${KafkaBrokerURL}""$SEP""net.maxopenrequests=1\&message.send.max.retries=20000  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --kafka.txpool.topic=${NetworkId}-txpool ${EventsTopicFlag}
+                      ExecStart=/usr/bin/geth ${MasterExtraFlags} ${FreezerFlags} $OVERLAY_FLAG --rpc.allow-unprotected-txs $SNAPS_FLAG --txlookuplimit=0 --light.maxpeers 0 --maxpeers 25 --gcmode=archive --kafka.broker=${KafkaBrokerURL}""$SEP""net.maxopenrequests=1\&message.send.max.retries=20000  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --kafka.txpool.topic=${InfrastructureStack}-txpool ${EventsTopicFlag}
                       TimeoutStartSec=86400
                       TimeoutStopSec=90
                       OnFailure=poweroff.target
@@ -1234,6 +1253,7 @@ Resources:
             VolumeType: io1
             Iops: !GetAtt VolumeIOPS.Value
             SnapshotId: !Ref SnapshotId
+        - !If [ HasSnapsdb, {DeviceName: "/dev/sdh", Ebs: {VolumeSize: !Ref SnapsdbSize, VolumeType: gp3}}, !Ref 'AWS::NoValue']
         UserData:
           "Fn::Base64":
             "Fn::Sub":
@@ -1558,6 +1578,49 @@ Resources:
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
         - !If [ HasWarningWebhook, !Ref WarningNotifications, !Ref 'AWS::NoValue' ]
       Threshold: 95
+      TreatMissingData: missing
+  MasterSnapsdbDiskAlarm:
+    Condition: HasSnapsdb
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmActions:
+        - !Ref MasterDiskSNS
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasWarningWebhook, !Ref WarningNotifications, !Ref 'AWS::NoValue' ]
+      AlarmDescription: "Alarms when the master snapsdb directory > 90% full"
+      ComparisonOperator: "GreaterThanThreshold"
+      Metrics:
+        - Id: nodevice
+          MetricStat:
+            Metric:
+              MetricName: "disk_used_percent"
+              Namespace: CWAgent
+              Dimensions:
+                - Name: AutoScalingGroupName
+                  Value : !Ref MasterAutoScalingGroup
+                - Name: fstype
+                  Value : "ext4"
+                - Name: path
+                  Value : "/var/lib/ethereum/snapsdb"
+            Period: 60
+            Stat: Maximum
+          Label: EBS Overlay Disk Usage
+          ReturnData: false
+        - Id: delta
+          Expression: "MAX(METRICS())"
+      InsufficientDataActions:
+        - !Ref MasterDiskSNS
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasWarningWebhook, !Ref WarningNotifications, !Ref 'AWS::NoValue' ]
+      EvaluationPeriods: 5
+      OKActions:
+        - !Ref MasterDiskSNS
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasWarningWebhook, !Ref WarningNotifications, !Ref 'AWS::NoValue' ]
+      Threshold: 90
       TreatMissingData: missing
   MasterDiskAlarmEmergency:
     Type: AWS::CloudWatch::Alarm
@@ -2683,7 +2746,6 @@ Resources:
         Value: !Sub ${AWS::StackName}-Replica
         PropagateAtLaunch: 'true'
 
-
   ReplicaLogMetricsFunction:
     Type: "AWS::Lambda::Function"
     Properties:
@@ -2711,7 +2773,6 @@ Resources:
       Principal: !Sub logs.${AWS::Region}.amazonaws.com
       SourceAccount: !Ref 'AWS::AccountId'
       SourceArn: !Sub ${ReplicaLG.Arn}
-
 
   SnapshotterLaunchTemplate:
     Type: AWS::EC2::LaunchTemplate
@@ -3083,7 +3144,6 @@ Resources:
                 # sudo pkill -f geth
                 # wait $pid
 
-
   PrunerLaunchTemplate:
     Type: AWS::EC2::LaunchTemplate
     Properties:
@@ -3368,8 +3428,6 @@ Resources:
                 FreezerFlags: !If [ EnabledFreezerBucket, {"Fn::Sub": ["--datadir.ancient=s3://${Bucket}/${NetworkId}", {Bucket: !If [ HasFreezerBucket, !Ref FreezerBucket, {"Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket"} ]} ]}, ""]
                 FreezerLocation: !If [ EnabledFreezerBucket, {"Fn::Sub": ["s3://${Bucket}/${NetworkId}", {Bucket: !If [ HasFreezerBucket, !Ref FreezerBucket, {"Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket"} ]} ]}, "/var/lib/ethereum/geth/chaindata/ancient"]
                 PrunedFreezerLocation: !If [ EnabledFreezerBucket, {"Fn::Sub": ["s3://${Bucket}/${NetworkId}", {Bucket: !If [ HasFreezerBucket, !Ref FreezerBucket, {"Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket"} ]} ]}, "/var/lib/ethereum-pruned/geth/chaindata/ancient"]
-
-
 
   FallBackLG:
     Type: AWS::Logs::LogGroup
@@ -3759,7 +3817,6 @@ Resources:
       Principal: events.amazonaws.com
       SourceArn: !Sub ${SnapshotSchedulerRule.Arn}
 
-
   DiskSizeLambdaRole:
     Type: "AWS::IAM::Role"
     Properties:
@@ -3943,9 +4000,6 @@ Resources:
       Action: 'lambda:InvokeFunction'
       Principal: events.amazonaws.com
       SourceArn: !Sub ${RemoteMetricsSchedulerRule.Arn}
-
-
-
 
   VolumeGCLambdaRole:
     Type: "AWS::IAM::Role"
