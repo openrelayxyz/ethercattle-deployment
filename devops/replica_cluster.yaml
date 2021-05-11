@@ -2255,9 +2255,54 @@ Resources:
         - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
       Threshold: 1
       TreatMissingData: breaching
+  MasterMinBlockNumberComparisonAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: HasRemoteRPCURL
+    Properties:
+      AlarmActions:
+        - !Ref MasterBlockNumberSNS
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
+      AlarmDescription: "Alarms when the furthest behind master is too far behind other nodes"
+      ComparisonOperator: "GreaterThanThreshold"
+      EvaluationPeriods: 2
+      Metrics:
+        - Id: remote
+          MetricStat:
+            Metric:
+              MetricName: "RemoteBlockNumber"
+              Namespace: BlockData
+              Dimensions:
+                - Name: provider
+                  Value : !Ref RemoteRPCURL
+            Period: 60
+            Stat: Maximum
+          Label: Remote Block Number
+          ReturnData: false
+        - Id: cluster
+          MetricStat:
+            Metric:
+              MetricName: "number"
+              Namespace: BlockData
+              Dimensions:
+                - Name: clusterId
+                  Value : !Ref KafkaTopic
+            Period: 60
+            Stat: Minimum
+          Label: Cluster Block Number
+          ReturnData: false
+        - Id: delta
+          Expression: "(remote - cluster)"
+      OKActions:
+        - !Ref MasterBlockNumberSNS
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
+      Threshold: 20 # Leave some wiggle room because it'll compare the smallest value in a 1 minute period to the biggest value of the other metric, and we can expect a decent bit of fluctuation even when everything is cool
+      TreatMissingData: breaching
   FlumeBlockNumberComparisonAlarm:
     Type: AWS::CloudWatch::Alarm
-    Condition: HasFlume
     Properties:
       AlarmActions:
         - !Ref MasterBlockNumberSNS
@@ -2277,7 +2322,7 @@ Resources:
                 - Name: clusterId
                   Value : !Ref NetworkId
             Period: 60
-            Stat: Maximum
+            Stat: Minimum
           Label: Remote Block Number
           ReturnData: false
         - Id: cluster
@@ -2289,7 +2334,7 @@ Resources:
                 - Name: clusterId
                   Value : !Ref KafkaTopic
             Period: 60
-            Stat: Maximum
+            Stat: Minimum
           Label: Cluster Block Number
           ReturnData: false
         - Id: delta
@@ -2299,7 +2344,8 @@ Resources:
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
         - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
-      Threshold: 2
+      Threshold: 10 # If the lowest value from Flume is 10 behind the lowest value from a master in a period of time, a flume server is not keeping up
+                    # This still isn't perfect, because the metric comes from log messages that won't happen if Flume isn't processing data
       TreatMissingData: breaching
   SnapshotAgeWarning:
     Type: AWS::CloudWatch::Alarm
@@ -3233,6 +3279,12 @@ Resources:
                 do
                   sleep 3
                 done
+
+                ignore="$(readlink -f /dev/sd*) $(readlink -f /dev/xvd*)"
+                cutignore="$(for x in $ignore ; do echo $x | cut -c -12; done | uniq)"
+                devices="$(ls /dev/nvme* | grep -E 'n1$')" || devices=""
+                cutdevices="$(for x in $devices ; do echo $x | cut -c -12; done | uniq)"
+                localnvme=$(for d in $cutdevices; do if ! $(echo "$cutignore"| grep -q $d) ; then echo $d; fi ; done)
 
                 mkfs.ext4 /dev/sdg
 
