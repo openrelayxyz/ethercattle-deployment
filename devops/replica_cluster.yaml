@@ -2600,11 +2600,11 @@ Resources:
         - DeviceName: "/dev/sdf"
           Ebs:
             VolumeSize: !If [ReplicaHDD, !GetAtt HDDSize.Value, !Ref DiskSize]
-            VolumeType: !If [ReplicaHDD, !Ref ReplicaDiskType, "gp3"]
-            Iops: !If [ReplicaHDD, !Ref 'AWS::NoValue', 3000 ]
-            Throughput: !If [ReplicaHDD, !Ref 'AWS::NoValue', 125 ]
+            VolumeType: !If [ReplicaHDD, !Ref ReplicaDiskType, "io1"]
+            # Iops: !If [ReplicaHDD, !Ref 'AWS::NoValue', 3000 ]
+            # Throughput: !If [ReplicaHDD, !Ref 'AWS::NoValue', 125 ]
             # VolumeType: !If [ReplicaHDD, !Ref ReplicaDiskType, "gp3"]
-            # Iops: !If [ReplicaHDD, !Ref 'AWS::NoValue', 4000 ]
+            Iops: !If [ReplicaHDD, !Ref 'AWS::NoValue', !GetAtt VolumeIOPS.Value ]
             # Throughput: !If [ReplicaHDD, !Ref 'AWS::NoValue', 1000 ]
             SnapshotId: !Ref SnapshotId
         - !If [ SmallReplica, {DeviceName: "/dev/sdg", Ebs: {VolumeSize: 25, VolumeType: gp3, Iops: 3000, Throughput: 125}}, {DeviceName: "/dev/sdg", Ebs: {VolumeSize: 150, VolumeType: gp3, Iops: 3000, Throughput: 125}}]
@@ -2618,6 +2618,9 @@ Resources:
                 /root/configure-server.sh || (sleep 30; /root/configure-server.sh || poweroff)
                 /root/start-replica.sh || (sleep 30; /root/start-replica.sh || poweroff)
                 /root/loadtest-disk.sh || poweroff
+                export AWS_DEFAULT_REGION=${AWS::Region}
+                VOLUME_ID=$(aws ec2 describe-volumes --filters Name=attachment.instance-id,Values="$(curl http://169.254.169.254/latest/meta-data/instance-id)" | jq '.Volumes[] | select(. | .Attachments[0].Device == "/dev/sdf") | .VolumeId' -cr)
+                /usr/local/bin/aws ec2 modify-volume --volume-id $VOLUME_ID --volume-type gp3 --iops 3000 --throughput 125 &
               - ClusterId:
                   "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
                 ReplicaHTTPFlag:
@@ -3415,12 +3418,12 @@ Resources:
         - DeviceName: "/dev/sdf"
           Ebs:
             VolumeSize: !If [ReplicaHDD, !GetAtt HDDSize.Value, !Ref DiskSize]
-            VolumeType: !If [ReplicaHDD, !Ref ReplicaDiskType, "gp3"]
-            Iops: !If [ReplicaHDD, !Ref 'AWS::NoValue', 3000 ]
-            Throughput: !If [ReplicaHDD, !Ref 'AWS::NoValue', 125]
+            VolumeType: !If [ReplicaHDD, !Ref ReplicaDiskType, "io1"]
+            # Iops: !If [ReplicaHDD, !Ref 'AWS::NoValue', 3000 ]
+            # Throughput: !If [ReplicaHDD, !Ref 'AWS::NoValue', 125 ]
             # VolumeType: !If [ReplicaHDD, !Ref ReplicaDiskType, "gp3"]
-            # Iops: !If [ReplicaHDD, !Ref 'AWS::NoValue', 4000 ]
-            # Throughput: 1000
+            Iops: !If [ReplicaHDD, !Ref 'AWS::NoValue', !GetAtt VolumeIOPS.Value ]
+            # Throughput: !If [ReplicaHDD, !Ref 'AWS::NoValue', 1000 ]
             SnapshotId: !Ref SnapshotId
         - !If [ SmallReplica, {DeviceName: "/dev/sdg", Ebs: {VolumeSize: 25, VolumeType: gp3, Iops: 3000, Throughput: 125}}, {DeviceName: "/dev/sdg", Ebs: {VolumeSize: 150, VolumeType: gp3, Iops: 3000, Throughput: 125}}]
         UserData:
@@ -3433,6 +3436,9 @@ Resources:
                 /root/configure-server.sh || (sleep 30; /root/configure-server.sh || poweroff)
                 /root/start-fallback.sh || (sleep 30; /root/start-fallback.sh || poweroff)
                 /root/loadtest-disk.sh || poweroff
+                export AWS_DEFAULT_REGION=${AWS::Region}
+                VOLUME_ID=$(aws ec2 describe-volumes --filters Name=attachment.instance-id,Values="$(curl http://169.254.169.254/latest/meta-data/instance-id)" | jq '.Volumes[] | select(. | .Attachments[0].Device == "/dev/sdf") | .VolumeId' -cr)
+                /usr/local/bin/aws ec2 modify-volume --volume-id $VOLUME_ID --volume-type gp3 --iops 3000 --throughput 125 &
               - ClusterId:
                   "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
                 ReplicaHTTPFlag:
