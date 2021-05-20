@@ -1,0 +1,467 @@
+Description: A middleware stack that replaces an Ether Cattle Infrastructure Stack's load balancer with a public one.
+
+Parameters:
+  InfrastructureStack:
+    Type: String
+    Description: The infrastructure stack this target group extends
+  CertificateArn:
+    Type: String
+    Description: The certificate ARN for the public load balancer
+  SNICertificateArns:
+    Type: String
+    Description: A comma separated list of certificate ARNs for the public loadbalancer
+  HostedZone:
+    Type: String
+    Description: Route53 hosted zone for DNS
+  ServiceName:
+    Type: String
+    Description: The name for this service (DNS will be ServiceName.HostedZone)
+  AlarmSNSTopic:
+    Type: String
+    Description: An optional SNS topic to receive notifications from alarms
+  GraphQLPort:
+    Type: Number
+    Default: 8547
+    Description: The port to connect to GraphQL on Replicas
+  WSHealthCheckPort:
+    Type: Number
+    MaxValue: 65535
+    MinValue: 1
+    Default: 8545
+    Description: Port to use for websocket health checks. AWS load balancers don't handle health checks on websockets, so we need to tie this to a different port.
+
+Conditions:
+  HasSNSTopic: !Not [!Equals [ !Ref AlarmSNSTopic, "" ]]
+  HasSNI: !Not [ !Equals [ !Ref SNICertificateArns, ""  ]]
+
+
+Resources:
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal: {Service: [lambda.amazonaws.com]}
+          Action: ['sts:AssumeRole']
+      Path: "/"
+      ManagedPolicyArns:
+      - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+  AggregatedNotifications:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: Aggregated Notifications
+  AlbSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow HTTP(S) Access
+      VpcId:
+        "Fn::ImportValue":
+            !Sub "${InfrastructureStack}-VpcId"
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: '80'
+        ToPort: '80'
+        CidrIp: "0.0.0.0/0"
+      - IpProtocol: tcp
+        FromPort: '443'
+        ToPort: '443'
+        CidrIp: "0.0.0.0/0"
+  RPCALB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Scheme: internet-facing
+      Subnets:
+      - "Fn::ImportValue":
+          !Sub "${InfrastructureStack}-PublicA"
+      - "Fn::ImportValue":
+          !Sub "${InfrastructureStack}-PublicB"
+      - "Fn::ImportValue":
+          !Sub "${InfrastructureStack}-PublicC"
+      LoadBalancerAttributes:
+      - Key: idle_timeout.timeout_seconds
+        Value: '30'
+      SecurityGroups:
+      - !Ref AlbSecurityGroup
+      Tags:
+      - Key: name
+        Value: !Sub "${AWS::StackName}-RPC-Alb"
+      # IpAddressType: dualstack
+  RPCALBListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+      - Type: "forward"
+        TargetGroupArn: !Ref RPCALBGroup
+      LoadBalancerArn: !Ref RPCALB
+      Certificates:
+        - CertificateArn: !Ref CertificateArn
+      Port: '443'
+      Protocol: HTTPS
+  CertificateARNSplitter:
+    Type: AWS::Lambda::Function
+    Properties:
+      Handler: index.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Code:
+        ZipFile: !Sub |
+          var response = require('cfn-response');
+          exports.handler = function(event, context) {
+            response.send(event, context, response.SUCCESS, {Value: event.ResourceProperties.CommaSeparatedArns.split(",").map(function(x) { return {"CertificateArn": x} })});
+          };
+      Runtime: nodejs12.x
+  CertificateArnList:
+    Type: Custom::CertificateARNSplitter
+    Properties:
+      ServiceToken: !GetAtt CertificateARNSplitter.Arn
+      CommaSeparatedArns: !Ref SNICertificateArns
+  RPCALBListenerCertificates:
+    Type: AWS::ElasticLoadBalancingV2::ListenerCertificate
+    Condition: HasSNI
+    Properties:
+      Certificates: !GetAtt CertificateArnList.Value
+      ListenerArn: !Ref RPCALBListener
+  RPCALBHTTPListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+      - Type: "redirect"
+        RedirectConfig:
+          Host: "#{host}"
+          Path: "/#{path}"
+          Port: 443
+          Protocol: "HTTPS"
+          Query: "#{query}"
+          StatusCode: HTTP_301
+      LoadBalancerArn: !Ref RPCALB
+      Port: '80'
+      Protocol: HTTP
+  RPCALBGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckIntervalSeconds: 30
+      UnhealthyThresholdCount: 2
+      HealthyThresholdCount: 5
+      Port: 8545
+      Protocol: HTTP
+      VpcId:
+        "Fn::ImportValue":
+            !Sub "${InfrastructureStack}-VpcId"
+      Tags:
+        - Key: Service
+          Value: !Sub "${ServiceName}.rpc.${HostedZone}"
+  RPCALBDNS:
+    Type: "AWS::Route53::RecordSet"
+    Properties:
+      AliasTarget:
+        DNSName: !GetAtt RPCALB.DNSName
+        EvaluateTargetHealth: False
+        HostedZoneId: !GetAtt RPCALB.CanonicalHostedZoneID
+      HostedZoneName: !Sub "${HostedZone}."
+      Name: !Sub "${ServiceName}.rpc.${HostedZone}"
+      Type: A
+      Weight: 1
+      SetIdentifier: !Sub "${AWS::StackName}"
+  RPCALBWildcardDNS:
+    Type: "AWS::Route53::RecordSet"
+    Properties:
+      AliasTarget:
+        DNSName: !GetAtt RPCALB.DNSName
+        EvaluateTargetHealth: False
+        HostedZoneId: !GetAtt RPCALB.CanonicalHostedZoneID
+      HostedZoneName: !Sub "${HostedZone}."
+      Name: !Sub "*.${ServiceName}.rpc.${HostedZone}"
+      Type: A
+      Weight: 1
+      SetIdentifier: !Sub "${AWS::StackName}"
+  GraphQLALBGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckIntervalSeconds: 30
+      UnhealthyThresholdCount: 2
+      HealthyThresholdCount: 5
+      Matcher:
+        HttpCode: "200,403"
+      Port: !Ref GraphQLPort
+      Protocol: HTTP
+      VpcId:
+        "Fn::ImportValue":
+            !Sub "${InfrastructureStack}-VpcId"
+      Tags:
+        - Key: Service
+          Value: !Sub "${ServiceName}.graphql.${HostedZone}"
+  GraphQLALBDNS:
+    Type: "AWS::Route53::RecordSet"
+    Properties:
+      AliasTarget:
+        DNSName: !GetAtt RPCALB.DNSName
+        EvaluateTargetHealth: False
+        HostedZoneId: !GetAtt RPCALB.CanonicalHostedZoneID
+      HostedZoneName: !Sub "${HostedZone}."
+      Name: !Sub "${ServiceName}.graphql.${HostedZone}"
+      Type: A
+      Weight: 1
+      SetIdentifier: !Sub "${AWS::StackName}"
+  GraphQLALBWildcardDNS:
+    Type: "AWS::Route53::RecordSet"
+    Properties:
+      AliasTarget:
+        DNSName: !GetAtt RPCALB.DNSName
+        EvaluateTargetHealth: False
+        HostedZoneId: !GetAtt RPCALB.CanonicalHostedZoneID
+      HostedZoneName: !Sub "${HostedZone}."
+      Name: !Sub "*.${ServiceName}.graphql.${HostedZone}"
+      Type: A
+      Weight: 1
+      SetIdentifier: !Sub "${AWS::StackName}"
+  GraphQLALBListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      Actions:
+      - Type: forward
+        TargetGroupArn: !Ref GraphQLALBGroup
+      Conditions:
+      - Field: host-header
+        Values:
+        - !Sub "*${ServiceName}.graphql.${HostedZone}"
+      ListenerArn: !Ref RPCALBListener
+      Priority: 49998
+  WebsocketsALBGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckIntervalSeconds: 30
+      UnhealthyThresholdCount: 2
+      HealthyThresholdCount: 5
+      Port: 8546
+      HealthCheckPort: !Ref WSHealthCheckPort
+      HealthCheckPath: "/?queryChecks=0"
+      Protocol: HTTP
+      VpcId:
+        "Fn::ImportValue":
+            !Sub "${InfrastructureStack}-VpcId"
+      Tags:
+        - Key: Service
+          Value: !Sub "${ServiceName}.ws.${HostedZone}"
+  WebsocketsALBDNS:
+    Type: "AWS::Route53::RecordSet"
+    Properties:
+      AliasTarget:
+        DNSName: !GetAtt RPCALB.DNSName
+        EvaluateTargetHealth: False
+        HostedZoneId: !GetAtt RPCALB.CanonicalHostedZoneID
+      HostedZoneName: !Sub "${HostedZone}."
+      Name: !Sub "${ServiceName}.ws.${HostedZone}"
+      Type: A
+      Weight: 1
+      SetIdentifier: !Sub "${AWS::StackName}"
+  WebsocketsALBWildcardDNS:
+    Type: "AWS::Route53::RecordSet"
+    Properties:
+      AliasTarget:
+        DNSName: !GetAtt RPCALB.DNSName
+        EvaluateTargetHealth: False
+        HostedZoneId: !GetAtt RPCALB.CanonicalHostedZoneID
+      HostedZoneName: !Sub "${HostedZone}."
+      Name: !Sub "*.${ServiceName}.ws.${HostedZone}"
+      Type: A
+      Weight: 1
+      SetIdentifier: !Sub "${AWS::StackName}"
+  WebsocketsALBListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      Actions:
+      - Type: forward
+        TargetGroupArn: !Ref WebsocketsALBGroup
+      Conditions:
+      - Field: host-header
+        Values:
+        - !Sub "*${ServiceName}.ws.${HostedZone}"
+      ListenerArn: !Ref RPCALBListener
+      Priority: 49999
+
+
+  UnHealthyHostCountAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmActions:
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+      AlarmDescription: "Alarms when more than 1/4 of replicas are unhealthy"
+      ComparisonOperator: "GreaterThanThreshold"
+      EvaluationPeriods: 1
+      Metrics:
+        - Id: healthy
+          MetricStat:
+            Metric:
+              MetricName: "HealthyHostCount"
+              Namespace: "AWS/ApplicationELB"
+              Dimensions:
+                - Name: TargetGroup
+                  Value : !Sub ${RPCALBGroup.TargetGroupFullName}
+                - Name: LoadBalancer
+                  Value : !Sub ${RPCALB.LoadBalancerFullName}
+            Period: 60
+            Stat: Maximum
+          Label: Healthy Hosts
+          ReturnData: false
+        - Id: unhealthy
+          MetricStat:
+            Metric:
+              MetricName: "UnHealthyHostCount"
+              Namespace: "AWS/ApplicationELB"
+              Dimensions:
+                - Name: TargetGroup
+                  Value : !Sub ${RPCALBGroup.TargetGroupFullName}
+                - Name: LoadBalancer
+                  Value : !Sub ${RPCALB.LoadBalancerFullName}
+            Period: 60
+            Stat: Maximum
+          Label: Unhealthy hosts
+          ReturnData: false
+        - Id: delta
+          Expression: "unhealthy - (healthy / 2)"
+      OKActions:
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+      Threshold: 0
+      TreatMissingData: breaching
+
+
+Outputs:
+  ClusterId:
+    Description: The cluster ID
+    Value:
+      "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
+    Export:
+      Name: !Sub "${AWS::StackName}-ClusterId"
+  RPCALBGroup:
+    Description: The ARN of the alb target group for the RPC load balancer
+    Value: !Ref RPCALBGroup
+    Export:
+      Name: !Sub "${AWS::StackName}-RPCALBGroup"
+  RPCALBGroupName:
+    Description: The full name of the alb target group for the RPC load balancer
+    Value: !Sub ${RPCALBGroup.TargetGroupFullName}
+    Export:
+      Name: !Sub "${AWS::StackName}-RPCALBGroupName"
+  RPCALBName:
+    Description: The full name of the RPC load balancer
+    Value: !Sub ${RPCALB.LoadBalancerFullName}
+    Export:
+      Name: !Sub "${AWS::StackName}-RPCALBName"
+  ALBGroupList:
+    Description: A comma separated list of ALB Groups associated with this stack
+    Value: !Sub "${RPCALBGroup},${GraphQLALBGroup},${WebsocketsALBGroup}"
+    Export:
+      Name: !Sub "${AWS::StackName}-ALBGroupList"
+  GraphQLALBGroup:
+    Description: The ARN of the alb target group for the GraphQL load balancer
+    Value: !Ref GraphQLALBGroup
+    Export:
+      Name: !Sub "${AWS::StackName}-GraphQLALBGroup"
+  WebsocketsALBGroup:
+    Description: The ARN of the alb target group for the Websockets load balancer
+    Value: !Ref WebsocketsALBGroup
+    Export:
+      Name: !Sub "${AWS::StackName}-WebsocketsALBGroup"
+  RPCALBDNS:
+    Description: The DNS of the RPC load balancer
+    Value: !Sub ${RPCALB.DNSName}
+    Export:
+      Name: !Sub "${AWS::StackName}-RPCALBDNS"
+  RPCALBListener:
+    Description: The ARN of the RPC load balancer's listener
+    Value: !Ref RPCALBListener
+    Export:
+      Name: !Sub "${AWS::StackName}-RPCALBListener"
+  RPCALBCanonicalHostedZoneId:
+    Description: The ALB's Canonical hosted zone
+    Value: !Sub ${RPCALB.CanonicalHostedZoneID}
+    Export:
+      Name: !Sub "${AWS::StackName}-RPCALBCanonicalHostedZoneId"
+  VpcId:
+    Description: The VPC the stack is deployed to
+    Value:
+      "Fn::ImportValue": !Sub "${InfrastructureStack}-VpcId"
+    Export:
+      Name: !Sub "${AWS::StackName}-VpcId"
+  VpcBaseIp:
+    Description: The VpcBaseIp the stack is deployed to
+    Value:
+      "Fn::ImportValue": !Sub "${InfrastructureStack}-VpcBaseIp"
+    Export:
+      Name: !Sub "${AWS::StackName}-VpcBaseIp"
+  Kafka2HostnameA:
+    Description: The Kafka hostname for AZ 'a'
+    Value:
+      "Fn::ImportValue": !Sub "${InfrastructureStack}-Kafka2HostnameA"
+    Export:
+      Name: !Sub "${AWS::StackName}-Kafka2HostnameA"
+  Kafka2HostnameB:
+    Description: The Kafka hostname for AZ 'b'
+    Value:
+      "Fn::ImportValue": !Sub "${InfrastructureStack}-Kafka2HostnameB"
+    Export:
+      Name: !Sub "${AWS::StackName}-Kafka2HostnameB"
+  Kafka2HostnameC:
+    Description: The Kafka hostname for AZ 'c'
+    Value:
+      "Fn::ImportValue": !Sub "${InfrastructureStack}-Kafka2HostnameC"
+    Export:
+      Name: !Sub "${AWS::StackName}-Kafka2HostnameC"
+  KafkaBrokerURL:
+    Description: The Kafka Broker URL
+    Value:
+      "Fn::ImportValue": !Sub "${InfrastructureStack}-KafkaBrokerURL"
+    Export:
+      Name: !Sub "${AWS::StackName}-KafkaBrokerURL"
+
+  PublicA:
+    Description: The Subnet in availability zone 'a'
+    Value:
+      "Fn::ImportValue": !Sub "${InfrastructureStack}-PublicA"
+    Export:
+      Name: !Sub "${AWS::StackName}-PublicA"
+  PublicB:
+    Description: The Subnet in availability zone 'b'
+    Value:
+      "Fn::ImportValue": !Sub "${InfrastructureStack}-PublicB"
+    Export:
+      Name: !Sub "${AWS::StackName}-PublicB"
+  PublicC:
+    Description: The Subnet in availability zone 'c'
+    Value:
+      "Fn::ImportValue": !Sub "${InfrastructureStack}-PublicC"
+    Export:
+      Name: !Sub "${AWS::StackName}-PublicC"
+  PrivateA:
+    Description: The Subnet in availability zone 'a'
+    Value:
+      "Fn::ImportValue": !Sub "${InfrastructureStack}-PrivateA"
+    Export:
+      Name: !Sub "${AWS::StackName}-PrivateA"
+  PrivateB:
+    Description: The Subnet in availability zone 'b'
+    Value:
+      "Fn::ImportValue": !Sub "${InfrastructureStack}-PrivateB"
+    Export:
+      Name: !Sub "${AWS::StackName}-PrivateB"
+  PrivateC:
+    Description: The Subnet in availability zone 'c'
+    Value:
+      "Fn::ImportValue": !Sub "${InfrastructureStack}-PrivateC"
+    Export:
+      Name: !Sub "${AWS::StackName}-PrivateC"
+  BaseInfrastructure:
+    Description: The base infrastructure stack identifier
+    Value:
+      "Fn::ImportValue": !Sub "${InfrastructureStack}-BaseInfrastructure"
+    Export:
+      Name: !Sub "${AWS::StackName}-BaseInfrastructure"
+  FreezerBucket:
+    Description: The base infrastructure stack identifier
+    Value:
+      "Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket"
+    Export:
+      Name: !Sub "${AWS::StackName}-FreezerBucket"
