@@ -51,7 +51,7 @@ Parameters:
     Type: String
     Description: The bucket containing EtherCattle Geth Binaries
   ECGethVersion:
-    Default: v1.9.5-2
+    Default: v1.10.3-1
     Type: String
     Description: The Ether Cattle Geth Version to deploys
   InfrastructureStack:
@@ -854,8 +854,6 @@ Resources:
                       printf "KafkaHostname=${KafkaBrokerURL}
                       KafkaTopic=${KafkaTopic}
                       NetworkId=${NetworkId}
-                      infraName=${InfrastructureStack}
-                      baseInfraName=${BaseInfrastructure}
                       network=${NetworkId}
                       ReplicaClusterVersion=${ReplicaClusterVersion}
                       AWS_REGION=${AWS::Region}
@@ -874,7 +872,7 @@ Resources:
                       Type=simple
                       LimitNOFILE=655360
                       ExecStartPre=/usr/bin/bash -c '/usr/bin/geth replica --snapshot=false --cache=$allocatesafe ${ReplicaExtraFlags} ${FreezerFlags}  $OVERLAY_FLAG --kafka.broker=$KAFKA_ESCAPED_URL""$SEP_ESCAPED""fetch.default=8388608\\&max.waittime=25\\&avoid_leader=1  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown 2>>/tmp/geth-stderr'
-                      ExecStart=/usr/bin/bash -c '/usr/bin/geth replica --snapshot=false --cache=$allocatesafe ${ReplicaExtraFlags} ${FreezerFlags} $OVERLAY_FLAG --kafka.broker=$KAFKA_ESCAPED_URL --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --kafka.txpool.topic=\$infraName-txpool  --kafka.tx.topic=\$NetworkId-tx --replica.startup.age=45  ${ReplicaHTTPFlag} ${ReplicaGraphQLFlag} ${ReplicaWebsocketsFlag}'
+                      ExecStart=/usr/bin/bash -c '/usr/bin/geth replica --snapshot=false --cache=$allocatesafe ${ReplicaExtraFlags} ${FreezerFlags} $OVERLAY_FLAG --kafka.broker=$KAFKA_ESCAPED_URL --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --kafka.txpool.topic=\$NetworkId-txpool  --kafka.tx.topic=\$NetworkId-tx --replica.startup.age=45  ${ReplicaHTTPFlag} ${ReplicaGraphQLFlag} ${ReplicaWebsocketsFlag}'
                       TimeoutStopSec=90
                       Restart=on-failure
                       TimeoutStartSec=86400
@@ -915,7 +913,7 @@ Resources:
                       Type=simple
                       LimitNOFILE=655360
                       ExecStartPre=/usr/bin/bash -c '/usr/bin/geth replica --snapshot=false --cache=$allocatesafe ${ReplicaExtraFlags} ${FreezerFlags} --kafka.broker=$KAFKA_ESCAPED_URL""$SEP_ESCAPED""fetch.default=8388608\\&max.waittime=25\\&avoid_leader=1  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown 2>>/tmp/geth-stderr'
-                      ExecStart=/usr/bin/geth ${MasterExtraFlags} ${FreezerFlags} --rpc.allow-unprotected-txs --snapshot=false --txlookuplimit=0 --light.maxpeers 0 --maxpeers 25 --gcmode=archive --kafka.broker=${KafkaBrokerURL}""$SEP""net.maxopenrequests=1\&message.send.max.retries=20000  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --kafka.txpool.topic=${InfrastructureStack}-txpool ${EventsTopicFlag}
+                      ExecStart=/usr/bin/geth ${MasterExtraFlags} ${FreezerFlags} --rpc.allow-unprotected-txs --snapshot=false --txlookuplimit=0 --light.maxpeers 0 --maxpeers 25 --gcmode=archive --kafka.broker=${KafkaBrokerURL}""$SEP""net.maxopenrequests=1\&message.send.max.retries=20000  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --kafka.txpool.topic=${NetworkId}-txpool ${EventsTopicFlag}
                       TimeoutStartSec=86400
                       TimeoutStopSec=90
                       OnFailure=poweroff.target
@@ -936,7 +934,7 @@ Resources:
                       Type=simple
                       LimitNOFILE=655360
                       ExecStartPre=/usr/bin/bash -c '/usr/bin/geth replica --snapshot=false --cache=$allocatesafe ${ReplicaExtraFlags} ${FreezerFlags} $OVERLAY_FLAG --kafka.broker=$KAFKA_ESCAPED_URL""$SEP_ESCAPED""fetch.default=8388608\\&max.waittime=25\\&avoid_leader=1  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown 2>>/tmp/geth-stderr'
-                      ExecStart=/usr/bin/geth ${MasterExtraFlags} ${FreezerFlags} $OVERLAY_FLAG --rpc.allow-unprotected-txs --snapshot=false --txlookuplimit=0 --light.maxpeers 0 --maxpeers 25 --gcmode=archive --kafka.broker=${KafkaBrokerURL}""$SEP""net.maxopenrequests=1\&message.send.max.retries=20000  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --kafka.txpool.topic=${InfrastructureStack}-txpool ${EventsTopicFlag}
+                      ExecStart=/usr/bin/geth ${MasterExtraFlags} ${FreezerFlags} $OVERLAY_FLAG --rpc.allow-unprotected-txs --snapshot=false --txlookuplimit=0 --light.maxpeers 0 --maxpeers 25 --gcmode=archive --kafka.broker=${KafkaBrokerURL}""$SEP""net.maxopenrequests=1\&message.send.max.retries=20000  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --kafka.txpool.topic=${NetworkId}-txpool ${EventsTopicFlag}
                       TimeoutStartSec=86400
                       TimeoutStopSec=90
                       OnFailure=poweroff.target
@@ -2860,7 +2858,7 @@ Resources:
 
                 export AWS_DEFAULT_REGION=${AWS::Region}
                 export AWS_REGION=${AWS::Region}
-                printf "ReplicaClusterVersion=${ReplicaClusterVersion}\nKafkaHostname=${KafkaBrokerURL}\nKafkaTopic=${KafkaTopic}\nNetworkId=${NetworkId}\ninfraName=${InfrastructureStack}\nAWS_REGION=${AWS::Region}\n" > /etc/systemd/system/ethcattle-vars
+                printf "ReplicaClusterVersion=${ReplicaClusterVersion}\nKafkaHostname=${KafkaBrokerURL}\nKafkaTopic=${KafkaTopic}\nNetworkId=${NetworkId}\n\nAWS_REGION=${AWS::Region}\n" > /etc/systemd/system/ethcattle-vars
 
                 if [ -f /usr/bin/replica-snapshot-hook ]
                 then
@@ -3194,7 +3192,7 @@ Resources:
 
                 yum install -y jq
 
-                printf "ReplicaClusterVersion=${ReplicaClusterVersion}\nKafkaHostname=${KafkaBrokerURL}\nKafkaTopic=${KafkaTopic}\nNetworkId=${NetworkId}\ninfraName=${InfrastructureStack}\nAWS_REGION=${AWS::Region}\n" > /etc/systemd/system/ethcattle-vars
+                printf "ReplicaClusterVersion=${ReplicaClusterVersion}\nKafkaHostname=${KafkaBrokerURL}\nKafkaTopic=${KafkaTopic}\nNetworkId=${NetworkId}\n\nAWS_REGION=${AWS::Region}\n" > /etc/systemd/system/ethcattle-vars
 
                 if [ -f /usr/bin/replica-snapshot-hook ]
                 then
@@ -4160,40 +4158,6 @@ Resources:
                     },
                     {
                         "type": "metric",
-                        "x": 18,
-                        "y": 6,
-                        "width": 6,
-                        "height": 6,
-                        "properties": {
-                            "metrics": [
-                                [ "AWS/ApplicationELB", "RequestCountPerTarget", "TargetGroup", "${TargetGroup}", "LoadBalancer", "${LoadBalancer}", { "stat": "Sum", "period": 60 } ],
-                                [ ".", "RequestCount", ".", "${TargetGroup}", ".", "${LoadBalancer}", { "stat": "Sum", "period": 60 } ]
-                            ],
-                            "view": "timeSeries",
-                            "stacked": false,
-                            "region": "${AWS::Region}",
-                            "title": "Requests Per Replica",
-                            "period": 300
-                        }
-                    },
-                    {
-                        "type": "metric",
-                        "x": 0,
-                        "y": 12,
-                        "width": 6,
-                        "height": 6,
-                        "properties": {
-                            "view": "timeSeries",
-                            "stacked": false,
-                            "metrics": [
-                                [ "AWS/ApplicationELB", "TargetResponseTime", "TargetGroup", "${TargetGroup}", "LoadBalancer", "${LoadBalancer}" ]
-                            ],
-                            "region": "${AWS::Region}",
-                            "title": "Response Time"
-                        }
-                    },
-                    {
-                        "type": "metric",
                         "x": 6,
                         "y": 12,
                         "width": 6,
@@ -4248,6 +4212,4 @@ Resources:
                     }${DashExt}
                 ]
               }
-          - TargetGroup: {"Fn::ImportValue": !Sub "${InfrastructureStack}-RPCALBGroupName"}
-            LoadBalancer: {"Fn::ImportValue": !Sub "${InfrastructureStack}-RPCALBName"}
-            DashExt: !If [ HasDashboardExtensions, {"Fn::ImportValue": !Ref DashboardExtension}, "" ]
+          - DashExt: !If [ HasDashboardExtensions, {"Fn::ImportValue": !Ref DashboardExtension}, "" ]
