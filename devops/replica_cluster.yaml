@@ -953,7 +953,7 @@ Resources:
                       Type=simple
                       LimitNOFILE=655360
                       ExecStartPre=/usr/bin/bash -c '/usr/bin/geth replica --snapshot=false --cache=$allocatesafe ${ReplicaExtraFlags} ${FreezerFlags} $OVERLAY_FLAG --kafka.broker=$KAFKA_ESCAPED_URL""$SEP_ESCAPED""fetch.default=8388608\\&max.waittime=25\\&avoid_leader=1  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown 2>>/tmp/geth-stderr'
-                      ExecStart=/usr/bin/geth ${MasterExtraFlags} ${FreezerFlags} $OVERLAY_FLAG --rpc.allow-unprotected-txs $SNAPS_FLAG --txlookuplimit=0 --light.maxpeers 0 --maxpeers 25 --gcmode=archive --kafka.broker=${KafkaBrokerURL}""$SEP""net.maxopenrequests=1\&message.send.max.retries=20000  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --kafka.txpool.topic=${InfrastructureStack}-txpool ${EventsTopicFlag}
+                      ExecStart=/usr/bin/geth ${MasterExtraFlags} ${FreezerFlags} $OVERLAY_FLAG --rpc.allow-unprotected-txs $SNAPS_FLAG --txlookuplimit=0 --light.maxpeers 0 --maxpeers 25 --gcmode=archive --kafka.broker=${KafkaBrokerURL}""$SEP""net.maxopenrequests=1\&message.send.max.retries=20000  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --kafka.txpool.topic=${NetworkId}-txpool ${EventsTopicFlag}
                       TimeoutStartSec=86400
                       TimeoutStopSec=90
                       OnFailure=poweroff.target
@@ -3279,12 +3279,6 @@ Resources:
                 do
                   sleep 3
                 done
-
-                ignore="$(readlink -f /dev/sd*) $(readlink -f /dev/xvd*)"
-                cutignore="$(for x in $ignore ; do echo $x | cut -c -12; done | uniq)"
-                devices="$(ls /dev/nvme* | grep -E 'n1$')" || devices=""
-                cutdevices="$(for x in $devices ; do echo $x | cut -c -12; done | uniq)"
-                localnvme=$(for d in $cutdevices; do if ! $(echo "$cutignore"| grep -q $d) ; then echo $d; fi ; done)
 
                 mkfs.ext4 /dev/sdg
 
