@@ -3230,7 +3230,7 @@ Resources:
           Ebs:
             VolumeSize: 8
             VolumeType: gp3
-        - DeviceName: "/dev/sdf"
+        - DeviceName: "/dev/sdg"
           Ebs:
             VolumeSize: !Ref PrunedDiskSize
             VolumeType: gp3
@@ -3277,8 +3277,8 @@ Resources:
                   fi
                   poweroff
                 fi
-                DEST_VOLUME_ID=$(aws ec2 describe-volumes --filters Name=attachment.instance-id,Values="$INSTANCE_ID" | jq '.Volumes[] | select(. | .Attachments[0].Device == "/dev/sdf") | .VolumeId' -cr)
-                aws ec2 attach-volume --device=/dev/sdg --instance-id=$INSTANCE_ID --volume-id=$DEST_VOLUME_ID
+                DEST_VOLUME_ID=$(aws ec2 describe-volumes --filters Name=attachment.instance-id,Values="$INSTANCE_ID" | jq '.Volumes[] | select(. | .Attachments[0].Device == "/dev/sdg") | .VolumeId' -cr)
+                aws ec2 attach-volume --device=/dev/sdf --instance-id=$INSTANCE_ID --volume-id=$SOURCE_VOLUME_ID
 
                 while [ "$(aws ec2 describe-volumes --volume-id $SOURCE_VOLUME_ID | jq -r .Volumes[0].State)" != "in-use" ]
                 do
