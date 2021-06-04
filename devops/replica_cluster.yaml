@@ -242,6 +242,14 @@ Parameters:
     Description: The volume size for master snapshots. If 0, snapshots will not be enabled.
     Default: 0
     Type: Number
+  PrunerInstanceType:
+    Description: Instance type to be used for pruning
+    AllowedValues:
+    - i3en.large
+    - r5a.large,r5.large
+    Default: r5a.large,r5.large
+    Type: String
+
 
 
 
@@ -3101,7 +3109,7 @@ Resources:
                 ORIGINAL_DISK_SIZE=`aws ec2 describe-volumes --volume-ids "$VOLUME_ID" | jq '.Volumes[] | .Size' -cr`
                 NEW_DISK_SIZE=$((ORIGINAL_DISK_SIZE*115/100))
 
-                ## manually grepping for sdf (mount direcotry above) because we don't really need to worry about the others.
+                ## manually grepping for sdf (mount directory above) because we don't really need to worry about the others.
                 df -H | grep -vE '^Filesystem|tmpfs|cdrom' | grep $(readlink -f /dev/sdf) | awk '{ print $5 " " $1 }' | while read output;
                 do
                   echo $output
@@ -3222,6 +3230,10 @@ Resources:
           Ebs:
             VolumeSize: 8
             VolumeType: gp3
+        - DeviceName: "/dev/sdg"
+          Ebs:
+            VolumeSize: !Ref PrunedDiskSize
+            VolumeType: gp3
         UserData:
           "Fn::Base64":
             "Fn::Sub":
@@ -3265,19 +3277,10 @@ Resources:
                   fi
                   poweroff
                 fi
+                DEST_VOLUME_ID=$(aws ec2 describe-volumes --filters Name=attachment.instance-id,Values="$INSTANCE_ID" | jq '.Volumes[] | select(. | .Attachments[0].Device == "/dev/sdg") | .VolumeId' -cr)
                 aws ec2 attach-volume --device=/dev/sdf --instance-id=$INSTANCE_ID --volume-id=$SOURCE_VOLUME_ID
-                DEST_VOLUME_ID=$(aws ec2 create-volume --availability-zone $AVAILABILITY_ZONE --size ${PrunedDiskSize} --volume-type gp3 --tag-specifications '{"ResourceType": "volume", "Tags": [{"Key": "SnapshotVolume","Value": "${AWS::StackName}-${AWS::Region}-${NextPrunerGeneration.Sum}"}, {"Key": "Name", "Value": "${AWS::StackName}-SnapshotVolume"}]}' | jq -r .VolumeId)
-                while [ "$(aws ec2 describe-volumes --volume-id $DEST_VOLUME_ID | jq -r .Volumes[0].State)" != "available" ]
-                do
-                  sleep 3
-                done
-                aws ec2 attach-volume --device=/dev/sdg --instance-id=$INSTANCE_ID --volume-id=$DEST_VOLUME_ID
 
                 while [ "$(aws ec2 describe-volumes --volume-id $SOURCE_VOLUME_ID | jq -r .Volumes[0].State)" != "in-use" ]
-                do
-                  sleep 3
-                done
-                while [ "$(aws ec2 describe-volumes --volume-id $DEST_VOLUME_ID | jq -r .Volumes[0].State)" != "in-use" ]
                 do
                   sleep 3
                 done
@@ -3292,7 +3295,25 @@ Resources:
 
                 mkdir -p /var/lib/ethereum
                 mkdir -p /var/lib/ethereum-pruned
-                mount -o barrier=0,data=writeback /dev/sdf /var/lib/ethereum
+
+                ignore="$(readlink -f /dev/sd*) $(readlink -f /dev/xvd*)"
+                cutignore="$(for x in $ignore ; do echo $x | cut -c -12; done | uniq)"
+                devices="$(ls /dev/nvme* | grep -E 'n1$')" || devices=""
+                cutdevices="$(for x in $devices ; do echo $x | cut -c -12; done | uniq)"
+                localnvme=$(for d in $cutdevices; do if ! $(echo "$cutignore"| grep -q $d) ; then echo $d; fi ; done)
+                if [ ! -z "$localnvme" ]
+                then
+                  # If there is a localnvme volume, copy everything from the old snapshot volume to the localnvme volume.
+                  # Pruning goes much faster from NVME volumes due to low latency.
+                  mkfs.ext4 $localnvme
+                  mount -o barrier=0,data=writeback $localnvme /var/lib/ethereum
+                  mkdir -p /var/lib/ethereum-slow
+                  mount -o barrier=0,data=writeback /dev/sdf /var/lib/ethereum-slow
+                  cp -r /var/lib/ethereum-slow/* /var/lib/ethereum
+                else
+                  mount -o barrier=0,data=writeback /dev/sdf /var/lib/ethereum
+                fi
+
                 mount -o barrier=0,data=writeback /dev/sdg /var/lib/ethereum-pruned
 
                 resize2fs /dev/sdf
@@ -3455,7 +3476,7 @@ Resources:
                 ORIGINAL_DISK_SIZE=`aws ec2 describe-volumes --volume-id "$DEST_VOLUME_ID" | jq '.Volumes[] | .Size' -cr`
                 NEW_DISK_SIZE=$((ORIGINAL_DISK_SIZE*115/100))
 
-                ## manually grepping for sdf (mount direcotry above) because we don't really need to worry about the others.
+                ## manually grepping for sdf (mount directory above) because we don't really need to worry about the others.
                 df -H | grep -vE '^Filesystem|tmpfs|cdrom' | grep $(readlink -f /dev/sdg) | awk '{ print $5 " " $1 }' | while read output;
                 do
                   echo $output
@@ -3845,6 +3866,7 @@ Resources:
         Variables:
           LAUNCH_TEMPLATE_ID: !Ref PrunerLaunchTemplate
           LAUNCH_TEMPLATE_VERSION: !Sub "${PrunerLaunchTemplate.LatestVersionNumber}"
+          INSTANCE_TYPES: !Ref PrunerInstanceType
           SUBNET_ID:
             "Fn::ImportValue":
                 !Sub "${InfrastructureStack}-PublicA"
