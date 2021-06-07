@@ -3370,8 +3370,6 @@ Resources:
                 chown -R geth /var/lib/ethereum-pruned
                 chown -R geth /var/lib/ethereum
 
-                fio --filename=/dev/sdf --rw=read --bs=128k --iodepth=32 --ioengine=libaio --prio=7 --prioclass=3 --thinktime=2 --rate_iops=4000 --direct=1 --name=volume-initialize &
-
                 if ! sudo -Eu geth /usr/bin/geth migratestate ${FreezerLocation} /var/lib/ethereum/geth/chaindata /var/lib/ethereum-pruned/geth/chaindata ${KafkaTopic}
                 then
                   if [ "${AggregatedNotifications}" != "" ]
@@ -3380,13 +3378,14 @@ Resources:
                   fi
                   if [ "${AlarmSNSTopic}" != "" ]
                   then
-                    aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - Bad State Trie" --message="Migrating the state to a new volume failed.')"
+                    aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - State Migration Failed" --message="Migrating the state to a new volume failed.')"
                   fi
                   if [ "${S3BackupLogsBucket}" != "" ]
                   then
                     cat /var/log/cloud-init-output.log | aws s3 cp - s3://${S3BackupLogsBucket}/ethercattle/${NetworkId}/pruner-failure-$(date '+%Y%m%d-%H%M%S').log || true
                   fi
-                  poweroff
+                  # poweroff
+                  exit 1
                 fi
                 cp -r ${FreezerLocation} ${PrunedFreezerLocation} || true
                 chown -R geth /var/lib/ethereum-pruned/

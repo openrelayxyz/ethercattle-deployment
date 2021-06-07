@@ -394,7 +394,8 @@ Resources:
         - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
       AlarmDescription: "Alarms when more than 1/4 of replicas are unhealthy"
       ComparisonOperator: "GreaterThanThreshold"
-      EvaluationPeriods: 1
+      EvaluationPeriods: 3
+      DatapointsToAlarm: 2
       Metrics:
         - Id: healthy
           MetricStat:
