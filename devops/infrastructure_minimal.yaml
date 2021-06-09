@@ -128,6 +128,11 @@ Resources:
       CidrBlock: !Join ["", [!Ref VpcBaseIp, ".", !Ref SubnetAOctet, ".0/24"]]
       AvailabilityZone: !Join ["", [!Ref 'AWS::Region', "a"]]
       MapPublicIpOnLaunch: true
+      Tags:
+        - {
+            "Key": "Name",
+            "Value": !Sub "${AWS::StackName}-PublicA"
+          }
   PublicB:
     Type: AWS::EC2::Subnet
     Properties:
@@ -135,6 +140,11 @@ Resources:
       CidrBlock: !Join ["", [!Ref VpcBaseIp, ".", !Ref SubnetBOctet, ".0/24"]]
       AvailabilityZone: !Join ["", [!Ref 'AWS::Region', "b"]]
       MapPublicIpOnLaunch: true
+      Tags:
+        - {
+            "Key": "Name",
+            "Value": !Sub "${AWS::StackName}-PublicB"
+          }
   PublicC:
     Type: AWS::EC2::Subnet
     Properties:
@@ -142,6 +152,11 @@ Resources:
       CidrBlock: !Join ["", [!Ref VpcBaseIp, ".", !Ref SubnetCOctet, ".0/24"]]
       AvailabilityZone: !Join ["", [!Ref 'AWS::Region', "c"]]
       MapPublicIpOnLaunch: true
+      Tags:
+        - {
+            "Key": "Name",
+            "Value": !Sub "${AWS::StackName}-PublicC"
+          }
   PrivateA:
     Type: AWS::EC2::Subnet
     Properties:
@@ -149,6 +164,11 @@ Resources:
       CidrBlock: !Join ["", [!Ref VpcBaseIp, ".", !Ref PrivateAOctet, ".0/24"]]
       AvailabilityZone: !Join ["", [!Ref 'AWS::Region', "a"]]
       MapPublicIpOnLaunch: false
+      Tags:
+        - {
+            "Key": "Name",
+            "Value": !Sub "${AWS::StackName}-PrivateA"
+          }
   PrivateB:
     Type: AWS::EC2::Subnet
     Properties:
@@ -156,6 +176,11 @@ Resources:
       CidrBlock: !Join ["", [!Ref VpcBaseIp, ".", !Ref PrivateBOctet, ".0/24"]]
       AvailabilityZone: !Join ["", [!Ref 'AWS::Region', "b"]]
       MapPublicIpOnLaunch: false
+      Tags:
+        - {
+            "Key": "Name",
+            "Value": !Sub "${AWS::StackName}-PrivateB"
+          }
   PrivateC:
     Type: AWS::EC2::Subnet
     Properties:
@@ -163,14 +188,29 @@ Resources:
       CidrBlock: !Join ["", [!Ref VpcBaseIp, ".", !Ref PrivateCOctet, ".0/24"]]
       AvailabilityZone: !Join ["", [!Ref 'AWS::Region', "c"]]
       MapPublicIpOnLaunch: false
+      Tags:
+        - {
+            "Key": "Name",
+            "Value": !Sub "${AWS::StackName}-PrivateC"
+          }
   PublicRouteTable:
     Type: AWS::EC2::RouteTable
     Properties:
       VpcId: !Ref VpcId
+      Tags:
+        - {
+            "Key": "Name",
+            "Value": !Sub "${AWS::StackName}-Public"
+          }
   PrivateRouteTable:
     Type: AWS::EC2::RouteTable
     Properties:
       VpcId: !Ref VpcId
+      Tags:
+        - {
+            "Key": "Name",
+            "Value": !Sub "${AWS::StackName}-Private"
+          }
   PublicInternetGatewayRoute:
     Type: AWS::EC2::Route
     Properties:
