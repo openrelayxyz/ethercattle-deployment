@@ -227,6 +227,10 @@ Parameters:
   ConsulPrimaryRegion:
     Description: The AWS region of the primary Consul cluster. If not set, defaults to this region.
     Type: String
+  ConsulCIDRBlock:
+    Description: The CIDR Block of Consul clients that may connect to these services.
+    Default: 10.255.255.255/32
+    Type: String
   UrgentAlarmWebhook:
     Description: URL for webhooks pertaining to urgent alarms
     Type: String
@@ -2407,17 +2411,17 @@ Resources:
         # Consul sidecar proxy ports
         FromPort: '21000'
         ToPort: '21016'
-        CidrIp: !Join ["", ["Fn::ImportValue": !Sub "${InfrastructureStack}-VpcBaseIp", ".0.0/14"]]
+        CidrIp: !Ref ConsulCIDRBlock
       - IpProtocol: tcp
         # Consul agent gossip
         FromPort: '8301'
         ToPort: '8301'
-        CidrIp: !Join ["", ["Fn::ImportValue": !Sub "${InfrastructureStack}-VpcBaseIp", ".0.0/14"]]
+        CidrIp: !Ref ConsulCIDRBlock
       - IpProtocol: udp
         # Consul agent gossip
         FromPort: '8301'
         ToPort: '8301'
-        CidrIp: !Join ["", ["Fn::ImportValue": !Sub "${InfrastructureStack}-VpcBaseIp", ".0.0/14"]]
+        CidrIp: !Ref ConsulCIDRBlock
       - IpProtocol: tcp
         FromPort: '8546'
         ToPort: '8546'
