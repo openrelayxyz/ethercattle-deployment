@@ -207,6 +207,9 @@ Parameters:
     Description: A high level version number for the replica cluster. Used for blue / green deployments
     Default: "1"
     Type: String
+  ConsulAccountName:
+    Type: String
+    Description: Datacenter prefix for consul
   ConsulEc2RetryTagKey:
     Description:
       The EC2 instance tag key to filter on when joining to other Consul
@@ -2596,7 +2599,7 @@ Resources:
                         "advertise_addr": "PrivateIpAddress",
                         "bind_addr": "PrivateIpAddress",
                         "node_name": "InstanceId",
-                        "datacenter": "${AWS::Region}",
+                        "datacenter": "${ConsulAccountName}--${AWS::Region}",
                         "server": false,
                         "ui" : false,
                         "leave_on_terminate" : true,
