@@ -260,6 +260,10 @@ Parameters:
     Description: Kafka offset to be used for resuming the current snapshot. This will be cleared when a snapshot is taken.
     Type: String
     Default: ""
+  MSKClusterName:
+    Description: If using MSK for Kafka, this will enable OffsetLag Alarms. Leave blank to disable alarms, or if not using MSK.
+    Type: String
+    Default: ""
 
 
 Metadata:
@@ -280,6 +284,7 @@ Metadata:
           - FlumeURL
           - FreezerBucket
           - EnableS3Freezer
+          - MSKClusterName
       - Label:
           default: Cluster
         Parameters:
@@ -394,6 +399,8 @@ Metadata:
         default: Fallback On Demand Percentage
       FreezerBucket:
         default: Freezer S3 Bucket
+      MSKClusterName:
+        default: MSK Cluster Name
 
 Mappings:
   InstanceSizes:
@@ -541,6 +548,7 @@ Conditions:
   HasWarningWebhook: !Not [ !Equals [ !Ref WarningAlarmWebhook, "" ]]
   HasSnapsdb: !Not [ !Equals [ !Ref SnapsdbSize, "0"]]
   HasSnapshotOffset: !Not [ !Equals [ !Ref SnapshotOffset, ""]]
+  HasMSKName: !Not [!Equals [ !Ref MSKClusterName, "" ]]
 
 Resources:
   LambdaExecutionRole:
@@ -4157,7 +4165,39 @@ Resources:
       Principal: events.amazonaws.com
       SourceArn: !Sub ${VolumeGCSchedulerRule.Arn}
 
-
+  TransactionOffsetLag:
+    Condition: HasMSKName
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: "Warns when transactions are not beign relayed"
+      ComparisonOperator: "GreaterThanThreshold"
+      Dimensions:
+        - Name: Cluster Name
+          Value: !Ref MSKClusterName
+        - Name: Consumer Group
+          Value: !Sub "${KafkaTopic}-cg"
+        - Name: Topic
+          Value: !Sub "${NetworkId}-tx"
+      AlarmActions:
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
+      InsufficientDataActions:
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
+      EvaluationPeriods: 2
+      DatapointsToAlarm: 2
+      MetricName: "MaxOffsetLag"
+      Namespace: AWS/Kafka
+      OKActions:
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
+      Period: 60
+      Statistic: Maximum
+      Threshold: 10
+      TreatMissingData: ignore
 
   CloudwatchDashboard:
     Type: AWS::CloudWatch::Dashboard
