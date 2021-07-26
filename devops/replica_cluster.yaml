@@ -2250,6 +2250,7 @@ Resources:
       AlarmDescription: "Alarms when the block number is missing"
       ComparisonOperator: "GreaterThanThreshold"
       EvaluationPeriods: 2
+      DatapointsToAlarm: 2
       Metrics:
         - Id: remote
           MetricStat:
@@ -2296,6 +2297,7 @@ Resources:
       AlarmDescription: "Alarms when the furthest behind master is too far behind other nodes"
       ComparisonOperator: "GreaterThanThreshold"
       EvaluationPeriods: 2
+      DatapointsToAlarm: 2
       Metrics:
         - Id: remote
           MetricStat:
