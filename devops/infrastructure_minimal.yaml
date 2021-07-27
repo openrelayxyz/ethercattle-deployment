@@ -1,0 +1,371 @@
+Description: Ether Cattle infrastructure (Internal Load Balancers, Kafka external)
+
+Parameters:
+
+  ClusterId:
+    Type: String
+    Description: An identifier for this ethercattle cluster.
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: The VPC to deploy this stack into
+  VpcBaseIp:
+    Type: String
+    Description: First two octets of the VPC's ipv4 CIDR (eg. "10.129")
+  InternetGatewayId:
+    Type: String
+    Description: The resource ID of the Internet gateway for the specified VPC
+  SubnetAOctet:
+    Type: Number
+    MaxValue: 255
+    MinValue: 0
+    Description: An unused IP block on this VPC
+    Default: 160
+  SubnetBOctet:
+    Type: Number
+    MaxValue: 255
+    MinValue: 0
+    Description: An unused IP block on this VPC
+    Default: 161
+  SubnetCOctet:
+    Type: Number
+    MaxValue: 255
+    MinValue: 0
+    Description: An unused IP block on this VPC
+    Default: 162
+  PrivateAOctet:
+    Type: Number
+    MaxValue: 255
+    MinValue: 0
+    Description: An unused IP block on this VPC
+    Default: 163
+  PrivateBOctet:
+    Type: Number
+    MaxValue: 255
+    MinValue: 0
+    Description: An unused IP block on this VPC
+    Default: 164
+  PrivateCOctet:
+    Type: Number
+    MaxValue: 255
+    MinValue: 0
+    Description: An unused IP block on this VPC
+    Default: 165
+  NotificationEmail:
+    Type: String
+    Description: An optional e-mail address to receive notifications from alarms
+  AlarmSNSTopic:
+    Type: String
+    Description: An optional SNS topic to receive notifications from alarms
+  FreezerBucketInput:
+    Type: String
+    Description: An optional S3 Bucket (bucket name only) for storing the Geth freezer. If not specified, a bucket will be created
+
+
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: Cluster
+        Parameters:
+          - ClusterId
+      - Label:
+          default: Network
+        Parameters:
+          - VpcId
+          - InternetGatewayId
+          - VpcBaseIp
+          - SubnetAOctet
+          - SubnetBOctet
+          - SubnetCOctet
+          - PrivateAOctet
+          - PrivateBOctet
+          - PrivateCOctet
+      - Label:
+          default: Notifications
+        Parameters:
+          - NotificationEmail
+          - AlarmSNSTopic
+    ParameterLabels:
+      ClusterId:
+        default: Cluster ID
+      ClusterAmi:
+        default: ECS-optmized AMI
+      VpcId:
+        default: VPC ID
+      VpcBaseIp:
+        default: VPC Base IP
+      InternetGatewayId:
+        default: Internet Gateway
+      SubnetAOctet:
+        default: Unused IP Octet
+      SubnetBOctet:
+        default: Unused IP Octet
+      SubnetCOctet:
+        default: Unused IP Octet
+      PrivateAOctet:
+        default: Unused IP Octet
+      PrivateBOctet:
+        default: Unused IP Octet
+      PrivateCOctet:
+        default: Unused IP Octet
+      NotificationEmail:
+        default: Notification Email Address
+      AlarmSNSTopic:
+        default: SNS Topic for Alarms
+
+Conditions:
+  HasNotificationEmail: !Not [!Equals [ !Ref NotificationEmail, "" ]]
+  HasSNSTopic: !Not [!Equals [ !Ref AlarmSNSTopic, "" ]]
+  CreateFreezerBucket: !Equals [ !Ref FreezerBucketInput, "" ]
+
+Resources:
+  # TODO: Sooner or later we should probably put some of this on private subnets
+  PublicA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VpcId
+      CidrBlock: !Join ["", [!Ref VpcBaseIp, ".", !Ref SubnetAOctet, ".0/24"]]
+      AvailabilityZone: !Join ["", [!Ref 'AWS::Region', "a"]]
+      MapPublicIpOnLaunch: true
+      Tags:
+        - {
+            "Key": "Name",
+            "Value": !Sub "${AWS::StackName}-PublicA"
+          }
+  PublicB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VpcId
+      CidrBlock: !Join ["", [!Ref VpcBaseIp, ".", !Ref SubnetBOctet, ".0/24"]]
+      AvailabilityZone: !Join ["", [!Ref 'AWS::Region', "b"]]
+      MapPublicIpOnLaunch: true
+      Tags:
+        - {
+            "Key": "Name",
+            "Value": !Sub "${AWS::StackName}-PublicB"
+          }
+  PublicC:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VpcId
+      CidrBlock: !Join ["", [!Ref VpcBaseIp, ".", !Ref SubnetCOctet, ".0/24"]]
+      AvailabilityZone: !Join ["", [!Ref 'AWS::Region', "c"]]
+      MapPublicIpOnLaunch: true
+      Tags:
+        - {
+            "Key": "Name",
+            "Value": !Sub "${AWS::StackName}-PublicC"
+          }
+  PrivateA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VpcId
+      CidrBlock: !Join ["", [!Ref VpcBaseIp, ".", !Ref PrivateAOctet, ".0/24"]]
+      AvailabilityZone: !Join ["", [!Ref 'AWS::Region', "a"]]
+      MapPublicIpOnLaunch: false
+      Tags:
+        - {
+            "Key": "Name",
+            "Value": !Sub "${AWS::StackName}-PrivateA"
+          }
+  PrivateB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VpcId
+      CidrBlock: !Join ["", [!Ref VpcBaseIp, ".", !Ref PrivateBOctet, ".0/24"]]
+      AvailabilityZone: !Join ["", [!Ref 'AWS::Region', "b"]]
+      MapPublicIpOnLaunch: false
+      Tags:
+        - {
+            "Key": "Name",
+            "Value": !Sub "${AWS::StackName}-PrivateB"
+          }
+  PrivateC:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VpcId
+      CidrBlock: !Join ["", [!Ref VpcBaseIp, ".", !Ref PrivateCOctet, ".0/24"]]
+      AvailabilityZone: !Join ["", [!Ref 'AWS::Region', "c"]]
+      MapPublicIpOnLaunch: false
+      Tags:
+        - {
+            "Key": "Name",
+            "Value": !Sub "${AWS::StackName}-PrivateC"
+          }
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VpcId
+      Tags:
+        - {
+            "Key": "Name",
+            "Value": !Sub "${AWS::StackName}-Public"
+          }
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VpcId
+      Tags:
+        - {
+            "Key": "Name",
+            "Value": !Sub "${AWS::StackName}-Private"
+          }
+  PublicInternetGatewayRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: '0.0.0.0/0'
+      GatewayId: !Ref InternetGatewayId
+  PublicARouteTableAssociation:
+    Type: "AWS::EC2::SubnetRouteTableAssociation"
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicA
+  PublicBRouteTableAssociation:
+    Type: "AWS::EC2::SubnetRouteTableAssociation"
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicB
+  PublicCRouteTableAssociation:
+      Type: "AWS::EC2::SubnetRouteTableAssociation"
+      Properties:
+        RouteTableId: !Ref PublicRouteTable
+        SubnetId: !Ref PublicC
+  PrivateARouteTableAssociation:
+    Type: "AWS::EC2::SubnetRouteTableAssociation"
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      SubnetId: !Ref PrivateA
+  PrivateBRouteTableAssociation:
+    Type: "AWS::EC2::SubnetRouteTableAssociation"
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      SubnetId: !Ref PrivateB
+  PrivateCRouteTableAssociation:
+    Type: "AWS::EC2::SubnetRouteTableAssociation"
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      SubnetId: !Ref PrivateC
+
+  AggregatedNotifications:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: Aggregated Notifications
+  AggregatedNotificationsSubscription:
+    Type: AWS::SNS::Subscription
+    Condition: HasNotificationEmail
+    Properties:
+      Endpoint: !Ref NotificationEmail
+      Protocol: email
+      TopicArn: !Ref AggregatedNotifications
+
+  FreezerBucket:
+    Type: AWS::S3::Bucket
+    Condition: CreateFreezerBucket
+    Properties:
+      VersioningConfiguration:
+        Status: Enabled
+
+
+Outputs:
+  ClusterId:
+    Description: The cluster ID
+    Value: !Ref ClusterId
+    Export:
+      Name: !Sub "${AWS::StackName}-ClusterId"
+  RPCALBGroup:
+    Description: The ARN of the alb target group for the RPC load balancer
+    Value: "NONE"
+    Export:
+      Name: !Sub "${AWS::StackName}-RPCALBGroup"
+  RPCALBGroupName:
+    Description: The full name of the alb target group for the RPC load balancer
+    Value: "NONE"
+    Export:
+      Name: !Sub "${AWS::StackName}-RPCALBGroupName"
+  RPCALBName:
+    Description: The full name of the RPC load balancer
+    Value: "NONE"
+    Export:
+      Name: !Sub "${AWS::StackName}-RPCALBName"
+  ALBGroupList:
+    Description: A comma separated list of ALB Groups associated with this stack
+    Value: "NONE"
+    Export:
+      Name: !Sub "${AWS::StackName}-ALBGroupList"
+  GraphQLALBGroup:
+    Description: The ARN of the alb target group for the GraphQL load balancer
+    Value: "NONE"
+    Export:
+      Name: !Sub "${AWS::StackName}-GraphQLALBGroup"
+  GraphQLALBGroupName:
+    Description: The ARN of the alb target group for the GraphQL load balancer
+    Value: "NONE"
+    Export:
+      Name: !Sub "${AWS::StackName}-GraphQLALBGroupName"
+  WebsocketsALBGroup:
+    Description: The ARN of the alb target group for the Websockets load balancer
+    Value: "NONE"
+    Export:
+      Name: !Sub "${AWS::StackName}-WebsocketsALBGroup"
+  RPCALBDNS:
+    Description: The DNS of the RPC load balancer
+    Value: "NONE"
+    Export:
+      Name: !Sub "${AWS::StackName}-RPCALBDNS"
+  RPCALBListener:
+    Description: The ARN of the RPC load balancer's listener
+    Value: "NONE"
+    Export:
+      Name: !Sub "${AWS::StackName}-RPCALBListener"
+  VpcId:
+    Description: The VPC the stack is deployed to
+    Value: !Ref VpcId
+    Export:
+      Name: !Sub "${AWS::StackName}-VpcId"
+  VpcBaseIp:
+    Description: The VpcBaseIp the stack is deployed to
+    Value: !Ref VpcBaseIp
+    Export:
+      Name: !Sub "${AWS::StackName}-VpcBaseIp"
+  PublicA:
+    Description: The Subnet in availability zone 'a'
+    Value: !Ref PublicA
+    Export:
+      Name: !Sub "${AWS::StackName}-PublicA"
+  PublicB:
+    Description: The Subnet in availability zone 'b'
+    Value: !Ref PublicB
+    Export:
+      Name: !Sub "${AWS::StackName}-PublicB"
+  PublicC:
+    Description: The Subnet in availability zone 'c'
+    Value: !Ref PublicC
+    Export:
+      Name: !Sub "${AWS::StackName}-PublicC"
+  PrivateA:
+    Description: The Subnet in availability zone 'a'
+    Value: !Ref PrivateA
+    Export:
+      Name: !Sub "${AWS::StackName}-PrivateA"
+  PrivateB:
+    Description: The Subnet in availability zone 'b'
+    Value: !Ref PrivateB
+    Export:
+      Name: !Sub "${AWS::StackName}-PrivateB"
+  PrivateC:
+    Description: The Subnet in availability zone 'c'
+    Value: !Ref PrivateC
+    Export:
+      Name: !Sub "${AWS::StackName}-PrivateC"
+  BaseInfrastructure:
+    Description: The base infrastructure stack identifier
+    Value: !Sub ${AWS::StackName}
+    Export:
+      Name: !Sub "${AWS::StackName}-BaseInfrastructure"
+  FreezerBucket:
+    Description: S3 Bucket to cointain Geth freezers
+    Value: !If [CreateFreezerBucket, !Ref FreezerBucket, !Ref FreezerBucketInput]
+    Export:
+      Name: !Sub "${AWS::StackName}-FreezerBucket"

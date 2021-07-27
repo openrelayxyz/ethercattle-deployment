@@ -51,7 +51,7 @@ Parameters:
     Type: String
     Description: The bucket containing EtherCattle Geth Binaries
   ECGethVersion:
-    Default: v1.9.5-2
+    Default: v1.10.3-1
     Type: String
     Description: The Ether Cattle Geth Version to deploys
   InfrastructureStack:
@@ -207,6 +207,9 @@ Parameters:
     Description: A high level version number for the replica cluster. Used for blue / green deployments
     Default: "1"
     Type: String
+  ConsulAccountName:
+    Type: String
+    Description: Datacenter prefix for consul
   ConsulEc2RetryTagKey:
     Description:
       The EC2 instance tag key to filter on when joining to other Consul
@@ -223,6 +226,10 @@ Parameters:
     ConstraintDescription: Must match EC2 Tag Name requirements.
   ConsulPrimaryRegion:
     Description: The AWS region of the primary Consul cluster. If not set, defaults to this region.
+    Type: String
+  ConsulCIDRBlock:
+    Description: The CIDR Block of Consul clients that may connect to these services.
+    Default: 10.255.255.255/32
     Type: String
   UrgentAlarmWebhook:
     Description: URL for webhooks pertaining to urgent alarms
@@ -249,8 +256,14 @@ Parameters:
     - r5a.large,r5.large
     Default: r5a.large,r5.large
     Type: String
-
-
+  SnapshotOffset:
+    Description: Kafka offset to be used for resuming the current snapshot. This will be cleared when a snapshot is taken.
+    Type: String
+    Default: ""
+  MSKClusterName:
+    Description: If using MSK for Kafka, this will enable OffsetLag Alarms. Leave blank to disable alarms, or if not using MSK.
+    Type: String
+    Default: ""
 
 
 Metadata:
@@ -271,6 +284,7 @@ Metadata:
           - FlumeURL
           - FreezerBucket
           - EnableS3Freezer
+          - MSKClusterName
       - Label:
           default: Cluster
         Parameters:
@@ -385,6 +399,8 @@ Metadata:
         default: Fallback On Demand Percentage
       FreezerBucket:
         default: Freezer S3 Bucket
+      MSKClusterName:
+        default: MSK Cluster Name
 
 Mappings:
   InstanceSizes:
@@ -531,6 +547,8 @@ Conditions:
   HasUrgentWebhook: !Not [ !Equals [ !Ref UrgentAlarmWebhook, "" ]]
   HasWarningWebhook: !Not [ !Equals [ !Ref WarningAlarmWebhook, "" ]]
   HasSnapsdb: !Not [ !Equals [ !Ref SnapsdbSize, "0"]]
+  HasSnapshotOffset: !Not [ !Equals [ !Ref SnapshotOffset, ""]]
+  HasMSKName: !Not [!Equals [ !Ref MSKClusterName, "" ]]
 
 Resources:
   LambdaExecutionRole:
@@ -872,7 +890,7 @@ Resources:
                       then
                         SNAPS_FLAG="--datadir.snaps=/var/lib/ethereum/snapsdb --snapshot=true"
                       else
-                        SNAPS_FLAG="--snapshot=false"
+                        SNAPS_FLAG="--snapshot=false --syncmode=fast"
                       fi
 
                       totalm=$(free -m | awk '/^Mem:/{print $2}') ; echo $totalm
@@ -900,8 +918,8 @@ Resources:
                       EnvironmentFile=/etc/systemd/system/ethcattle-vars
                       Type=simple
                       LimitNOFILE=655360
-                      ExecStartPre=/usr/bin/bash -c '/usr/bin/geth replica --snapshot=false --cache=$allocatesafe ${ReplicaExtraFlags} ${FreezerFlags}  $OVERLAY_FLAG --kafka.broker=$KAFKA_ESCAPED_URL""$SEP_ESCAPED""fetch.default=8388608\\&max.waittime=25\\&avoid_leader=1  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown 2>>/tmp/geth-stderr'
-                      ExecStart=/usr/bin/bash -c '/usr/bin/geth replica --snapshot=false --cache=$allocatesafe ${ReplicaExtraFlags} ${FreezerFlags} $OVERLAY_FLAG --kafka.broker=$KAFKA_ESCAPED_URL --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --kafka.txpool.topic=\$infraName-txpool  --kafka.tx.topic=\$NetworkId-tx --replica.startup.age=45  ${ReplicaHTTPFlag} ${ReplicaGraphQLFlag} ${ReplicaWebsocketsFlag}'
+                      ExecStartPre=/usr/bin/bash -c '/usr/bin/geth replica --snapshot=false --cache=$allocatesafe ${ReplicaExtraFlags} ${FreezerFlags}  $OVERLAY_FLAG --kafka.broker=$KAFKA_ESCAPED_URL""$SEP_ESCAPED""fetch.default=8388608\\&max.waittime=25\\&avoid_leader=1  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopicString} --replica.syncshutdown 2>>/tmp/geth-stderr'
+                      ExecStart=/usr/bin/bash -c '/usr/bin/geth replica --snapshot=false --cache=$allocatesafe ${ReplicaExtraFlags} ${FreezerFlags} $OVERLAY_FLAG --kafka.broker=$KAFKA_ESCAPED_URL --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopicString} --kafka.txpool.topic=\$NetworkId-txpool  --kafka.tx.topic=\$NetworkId-tx --replica.startup.age=45  ${ReplicaHTTPFlag} ${ReplicaGraphQLFlag} ${ReplicaWebsocketsFlag}'
                       TimeoutStopSec=90
                       Restart=on-failure
                       TimeoutStartSec=86400
@@ -920,8 +938,8 @@ Resources:
                       EnvironmentFile=/etc/systemd/system/ethcattle-vars
                       Type=simple
                       LimitNOFILE=655360
-                      # ExecStartPre=/usr/bin/geth replica --snapshot=false ${FreezerFlags}  $OVERLAY_FLAG  --cache=$allocatesafe ${FreezerFlags} --kafka.broker=$KAFKA_ESCAPED_URL""$SEP_ESCAPED""fetch.default=8388608\\&max.waittime=25\\&avoid_leader=1  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown 2>>/tmp/geth-stderr || true
-                      ExecStart=/usr/bin/bash -c '/usr/bin/geth ${FreezerFlags} ${MasterExtraFlags} --rpc.allow-unprotected-txs --snapshot=false --txlookuplimit=0 $OVERLAY_FLAG  --cache=$allocatesafe ${FreezerFlags} --datadir=/var/lib/ethereum --light.maxpeers 0 --maxpeers 25 ${ReplicaHTTPFlag} ${ReplicaGraphQLFlag} ${ReplicaWebsocketsFlag}'
+                      # ExecStartPre=/usr/bin/geth replica --snapshot=false ${FreezerFlags}  $OVERLAY_FLAG  --cache=$allocatesafe ${FreezerFlags} --kafka.broker=$KAFKA_ESCAPED_URL""$SEP_ESCAPED""fetch.default=8388608\\&max.waittime=25\\&avoid_leader=1  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopicString} --replica.syncshutdown 2>>/tmp/geth-stderr || true
+                      ExecStart=/usr/bin/bash -c '/usr/bin/geth ${FreezerFlags} ${MasterExtraFlags} --rpc.allow-unprotected-txs --snapshot=false --syncmode=fast --txlookuplimit=0 $OVERLAY_FLAG  --cache=$allocatesafe ${FreezerFlags} --datadir=/var/lib/ethereum --light.maxpeers 0 --maxpeers 25 ${ReplicaHTTPFlag} ${ReplicaGraphQLFlag} ${ReplicaWebsocketsFlag}'
                       TimeoutStopSec=90
                       TimeoutStartSec=86400
                       RestartSec=10s
@@ -941,8 +959,8 @@ Resources:
                       EnvironmentFile=/etc/systemd/system/ethcattle-vars
                       Type=simple
                       LimitNOFILE=655360
-                      ExecStartPre=/usr/bin/bash -c '/usr/bin/geth replica --snapshot=false --cache=$allocatesafe ${ReplicaExtraFlags} ${FreezerFlags} --kafka.broker=$KAFKA_ESCAPED_URL""$SEP_ESCAPED""fetch.default=8388608\\&max.waittime=25\\&avoid_leader=1  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown 2>>/tmp/geth-stderr'
-                      ExecStart=/usr/bin/geth ${MasterExtraFlags} ${FreezerFlags} --rpc.allow-unprotected-txs $SNAPS_FLAG --txlookuplimit=0 --light.maxpeers 0 --maxpeers 25 --gcmode=archive --kafka.broker=${KafkaBrokerURL}""$SEP""net.maxopenrequests=1\&message.send.max.retries=20000  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --kafka.txpool.topic=${InfrastructureStack}-txpool ${EventsTopicFlag}
+                      ExecStartPre=/usr/bin/bash -c '/usr/bin/geth replica --snapshot=false --cache=$allocatesafe ${ReplicaExtraFlags} ${FreezerFlags} --kafka.broker=$KAFKA_ESCAPED_URL""$SEP_ESCAPED""fetch.default=8388608\\&max.waittime=25\\&avoid_leader=1  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopicString} --replica.syncshutdown 2>>/tmp/geth-stderr'
+                      ExecStart=/usr/bin/geth ${MasterExtraFlags} ${FreezerFlags} --rpc.allow-unprotected-txs $SNAPS_FLAG --txlookuplimit=0 --light.maxpeers 0 --maxpeers 25 --gcmode=archive --kafka.broker=${KafkaBrokerURL}""$SEP""net.maxopenrequests=1\&message.send.max.retries=20000  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --kafka.txpool.topic=${NetworkId}-txpool ${EventsTopicFlag}
                       TimeoutStartSec=86400
                       TimeoutStopSec=90
                       OnFailure=poweroff.target
@@ -962,8 +980,8 @@ Resources:
                       EnvironmentFile=/etc/systemd/system/ethcattle-vars
                       Type=simple
                       LimitNOFILE=655360
-                      ExecStartPre=/usr/bin/bash -c '/usr/bin/geth replica --snapshot=false --cache=$allocatesafe ${ReplicaExtraFlags} ${FreezerFlags} $OVERLAY_FLAG --kafka.broker=$KAFKA_ESCAPED_URL""$SEP_ESCAPED""fetch.default=8388608\\&max.waittime=25\\&avoid_leader=1  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown 2>>/tmp/geth-stderr'
-                      ExecStart=/usr/bin/geth ${MasterExtraFlags} ${FreezerFlags} $OVERLAY_FLAG --rpc.allow-unprotected-txs $SNAPS_FLAG --txlookuplimit=0 --light.maxpeers 0 --maxpeers 25 --gcmode=archive --kafka.broker=${KafkaBrokerURL}""$SEP""net.maxopenrequests=1\&message.send.max.retries=20000  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --kafka.txpool.topic=${InfrastructureStack}-txpool ${EventsTopicFlag}
+                      ExecStartPre=/usr/bin/bash -c '/usr/bin/geth replica --snapshot=false --cache=$allocatesafe ${ReplicaExtraFlags} ${FreezerFlags} $OVERLAY_FLAG --kafka.broker=$KAFKA_ESCAPED_URL""$SEP_ESCAPED""fetch.default=8388608\\&max.waittime=25\\&avoid_leader=1  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopicString} --replica.syncshutdown 2>>/tmp/geth-stderr'
+                      ExecStart=/usr/bin/geth ${MasterExtraFlags} ${FreezerFlags} $OVERLAY_FLAG --rpc.allow-unprotected-txs $SNAPS_FLAG --txlookuplimit=0 --light.maxpeers 0 --maxpeers 25 --gcmode=archive --kafka.broker=${KafkaBrokerURL}""$SEP""net.maxopenrequests=1\&message.send.max.retries=20000  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --kafka.txpool.topic=${NetworkId}-txpool ${EventsTopicFlag}
                       TimeoutStartSec=86400
                       TimeoutStopSec=90
                       OnFailure=poweroff.target
@@ -1021,6 +1039,7 @@ Resources:
                         "Fn::ImportValue": !Sub "${InfrastructureStack}-BaseInfrastructure"
                       FreezerFlags: !If [ EnabledFreezerBucket, {"Fn::Sub": ["--datadir.ancient=s3://${Bucket}/${NetworkId}", {Bucket: !If [ HasFreezerBucket, !Ref FreezerBucket, {"Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket"} ]} ]}, ""]
                       EventsTopicFlag: !If [ HasEventsTopic, !Sub "--kafka.event.topic ${EventsTopic}", ""]
+                      KafkaTopicString: !If [ HasSnapshotOffset, !Sub "${KafkaTopic}:${SnapshotOffset}", !Ref KafkaTopic ]
                 mode: "000700"
                 owner: root
                 group: root
@@ -2231,6 +2250,7 @@ Resources:
       AlarmDescription: "Alarms when the block number is missing"
       ComparisonOperator: "GreaterThanThreshold"
       EvaluationPeriods: 2
+      DatapointsToAlarm: 2
       Metrics:
         - Id: remote
           MetricStat:
@@ -2277,6 +2297,7 @@ Resources:
       AlarmDescription: "Alarms when the furthest behind master is too far behind other nodes"
       ComparisonOperator: "GreaterThanThreshold"
       EvaluationPeriods: 2
+      DatapointsToAlarm: 2
       Metrics:
         - Id: remote
           MetricStat:
@@ -2414,17 +2435,17 @@ Resources:
         # Consul sidecar proxy ports
         FromPort: '21000'
         ToPort: '21016'
-        CidrIp: !Join ["", ["Fn::ImportValue": !Sub "${InfrastructureStack}-VpcBaseIp", ".0.0/14"]]
+        CidrIp: !Ref ConsulCIDRBlock
       - IpProtocol: tcp
         # Consul agent gossip
         FromPort: '8301'
         ToPort: '8301'
-        CidrIp: !Join ["", ["Fn::ImportValue": !Sub "${InfrastructureStack}-VpcBaseIp", ".0.0/14"]]
+        CidrIp: !Ref ConsulCIDRBlock
       - IpProtocol: udp
         # Consul agent gossip
         FromPort: '8301'
         ToPort: '8301'
-        CidrIp: !Join ["", ["Fn::ImportValue": !Sub "${InfrastructureStack}-VpcBaseIp", ".0.0/14"]]
+        CidrIp: !Ref ConsulCIDRBlock
       - IpProtocol: tcp
         FromPort: '8546'
         ToPort: '8546'
@@ -2606,7 +2627,7 @@ Resources:
                         "advertise_addr": "PrivateIpAddress",
                         "bind_addr": "PrivateIpAddress",
                         "node_name": "InstanceId",
-                        "datacenter": "${AWS::Region}",
+                        "datacenter": "${ConsulAccountName}--${AWS::Region}",
                         "server": false,
                         "ui" : false,
                         "leave_on_terminate" : true,
@@ -2852,7 +2873,7 @@ Resources:
                       chown -R geth /tmp/overlay
 
                       # make sure that geth is able to start as a full node and catch up with peers
-                      sudo -Eu geth /usr/bin/geth ${MasterExtraFlags} --datadir.overlay=/tmp/overlay --rpc.allow-unprotected-txs --snapshot=false --txlookuplimit=0 --cache=$allocatesafe --light.maxpeers 0 --maxpeers 25 --rpc --rpcaddr 0.0.0.0 --rpcport 8545 --datadir=/var/lib/ethereum ${FreezerFlags} &
+                      sudo -Eu geth /usr/bin/geth ${MasterExtraFlags} --datadir.overlay=/tmp/overlay --rpc.allow-unprotected-txs --snapshot=false --syncmode=fast --txlookuplimit=0 --cache=$allocatesafe --light.maxpeers 0 --maxpeers 25 --rpc --rpcaddr 0.0.0.0 --rpcport 8545 --datadir=/var/lib/ethereum ${FreezerFlags} &
                       pid=$!
                       test_pass=0
                       while [ $test_pass -le 1 ]
@@ -2991,7 +3012,7 @@ Resources:
                 KAFKA_ESCAPED_URL="$(printf "${KafkaBrokerURL}"| sed 's^&^\\&^g')"
                 /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource SnapshotterLaunchTemplate --configsets s_scripting --region ${AWS::Region} --role ${SnapshotterNodeRole}
 
-                # sudo -Eu geth /usr/bin/geth ${MasterExtraFlags} --rpc.allow-unprotected-txs --snapshot=false --txlookuplimit=0 --cache=$allocatesafe --light.maxpeers 0 --maxpeers 0 --rpc --rpcaddr 0.0.0.0 --rpcport 8545 --datadir=/var/lib/ethereum ${FreezerFlags} &
+                # sudo -Eu geth /usr/bin/geth ${MasterExtraFlags} --rpc.allow-unprotected-txs --snapshot=false --syncmode=fast --txlookuplimit=0 --cache=$allocatesafe --light.maxpeers 0 --maxpeers 0 --rpc --rpcaddr 0.0.0.0 --rpcport 8545 --datadir=/var/lib/ethereum ${FreezerFlags} &
                 # pid=$!
                 # test_pass=0
                 # while [ $test_pass -le 1 ]
@@ -3012,7 +3033,7 @@ Resources:
 
                 # Update from kafka
 
-                sudo -Eu geth /usr/bin/geth replica --snapshot=false --cache=$allocatesafe ${ReplicaExtraFlags} ${FreezerFlags} --kafka.broker=$KAFKA_ESCAPED_URL""$SEP""avoid_leader=1 --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown
+                sudo -Eu geth /usr/bin/geth replica --snapshot=false --cache=$allocatesafe ${ReplicaExtraFlags} ${FreezerFlags} --kafka.broker=$KAFKA_ESCAPED_URL""$SEP""avoid_leader=1 --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopicString} --replica.syncshutdown
                 if ! sudo -Eu geth /usr/bin/geth verifystatetrie ${FreezerFlags} --datadir=/var/lib/ethereum ${SnapshotValidationThreshold}
                 then
                   if [ "${AggregatedNotifications}" != "" ]
@@ -3103,7 +3124,7 @@ Resources:
                 # CFN will set any parameters we don't provide back to their default values,
                 # so get all of the parameters, update SnapshotID, and update the stack with
                 # the new parameters.
-                PARAMETERS=$(aws cloudformation describe-stacks --stack-name ${AWS::StackName} | jq '.Stacks[0].Parameters | map(if .ParameterKey == "SnapshotId" then .ParameterValue="'$SNAPSHOT_ID'" else . end) | map(if .ParameterKey == "SnapshotTimestamp" then .ParameterValue="'$(date +%s)'" else . end)' -c)
+                PARAMETERS=$(aws cloudformation describe-stacks --stack-name ${AWS::StackName} | jq '.Stacks[0].Parameters | map(if .ParameterKey == "SnapshotId" then .ParameterValue="'$SNAPSHOT_ID'" else . end) | map(if .ParameterKey == "SnapshotTimestamp" then .ParameterValue="'$(date +%s)'" else . end) | map(if .ParameterKey == "SnapshotOffset" then .ParameterValue="" else . end)' -c)
 
                 # Resize Disks
                 ORIGINAL_DISK_SIZE=`aws ec2 describe-volumes --volume-ids "$VOLUME_ID" | jq '.Volumes[] | .Size' -cr`
@@ -3160,10 +3181,11 @@ Resources:
                 ClusterId:
                   "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
                 FreezerFlags: !If [ EnabledFreezerBucket, {"Fn::Sub": ["--datadir.ancient=s3://${Bucket}/${NetworkId}", {Bucket: !If [ HasFreezerBucket, !Ref FreezerBucket, {"Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket"} ]} ]}, ""]
+                KafkaTopicString: !If [ HasSnapshotOffset, !Sub "${KafkaTopic}:${SnapshotOffset}", !Ref KafkaTopic ]
 
                 # Goes Above at Placeholder
                 # # Check and see if all blocks that were pulled down are actually there and not returning null.
-                # sudo -Eu geth /usr/bin/geth ${MasterExtraFlags} --rpc.allow-unprotected-txs --snapshot=false --txlookuplimit=0 --cache=$allocatesafe --light.maxpeers 0 --maxpeers 0 --rpc --rpcaddr 0.0.0.0 --rpcport 8545 --datadir=/var/lib/ethereum ${FreezerFlags} &
+                # sudo -Eu geth /usr/bin/geth ${MasterExtraFlags} --rpc.allow-unprotected-txs --snapshot=false --syncmode=fast --txlookuplimit=0 --cache=$allocatesafe --light.maxpeers 0 --maxpeers 0 --rpc --rpcaddr 0.0.0.0 --rpcport 8545 --datadir=/var/lib/ethereum ${FreezerFlags} &
                 # pid=$!
                 # test_pass=0
                 # while [ $test_pass -le 1 ]
@@ -3284,12 +3306,6 @@ Resources:
                 do
                   sleep 3
                 done
-
-                ignore="$(readlink -f /dev/sd*) $(readlink -f /dev/xvd*)"
-                cutignore="$(for x in $ignore ; do echo $x | cut -c -12; done | uniq)"
-                devices="$(ls /dev/nvme* | grep -E 'n1$')" || devices=""
-                cutdevices="$(for x in $devices ; do echo $x | cut -c -12; done | uniq)"
-                localnvme=$(for d in $cutdevices; do if ! $(echo "$cutignore"| grep -q $d) ; then echo $d; fi ; done)
 
                 mkfs.ext4 /dev/sdg
 
@@ -4151,7 +4167,39 @@ Resources:
       Principal: events.amazonaws.com
       SourceArn: !Sub ${VolumeGCSchedulerRule.Arn}
 
-
+  TransactionOffsetLag:
+    Condition: HasMSKName
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: "Warns when transactions are not beign relayed"
+      ComparisonOperator: "GreaterThanThreshold"
+      Dimensions:
+        - Name: Cluster Name
+          Value: !Ref MSKClusterName
+        - Name: Consumer Group
+          Value: !Sub "${KafkaTopic}-cg"
+        - Name: Topic
+          Value: !Sub "${NetworkId}-tx"
+      AlarmActions:
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
+      InsufficientDataActions:
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
+      EvaluationPeriods: 2
+      DatapointsToAlarm: 2
+      MetricName: "MaxOffsetLag"
+      Namespace: AWS/Kafka
+      OKActions:
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
+      Period: 60
+      Statistic: Maximum
+      Threshold: 10
+      TreatMissingData: ignore
 
   CloudwatchDashboard:
     Type: AWS::CloudWatch::Dashboard
@@ -4288,40 +4336,6 @@ Resources:
                     },
                     {
                         "type": "metric",
-                        "x": 18,
-                        "y": 6,
-                        "width": 6,
-                        "height": 6,
-                        "properties": {
-                            "metrics": [
-                                [ "AWS/ApplicationELB", "RequestCountPerTarget", "TargetGroup", "${TargetGroup}", "LoadBalancer", "${LoadBalancer}", { "stat": "Sum", "period": 60 } ],
-                                [ ".", "RequestCount", ".", "${TargetGroup}", ".", "${LoadBalancer}", { "stat": "Sum", "period": 60 } ]
-                            ],
-                            "view": "timeSeries",
-                            "stacked": false,
-                            "region": "${AWS::Region}",
-                            "title": "Requests Per Replica",
-                            "period": 300
-                        }
-                    },
-                    {
-                        "type": "metric",
-                        "x": 0,
-                        "y": 12,
-                        "width": 6,
-                        "height": 6,
-                        "properties": {
-                            "view": "timeSeries",
-                            "stacked": false,
-                            "metrics": [
-                                [ "AWS/ApplicationELB", "TargetResponseTime", "TargetGroup", "${TargetGroup}", "LoadBalancer", "${LoadBalancer}" ]
-                            ],
-                            "region": "${AWS::Region}",
-                            "title": "Response Time"
-                        }
-                    },
-                    {
-                        "type": "metric",
                         "x": 6,
                         "y": 12,
                         "width": 6,
@@ -4376,6 +4390,4 @@ Resources:
                     }${DashExt}
                 ]
               }
-          - TargetGroup: {"Fn::ImportValue": !Sub "${InfrastructureStack}-RPCALBGroupName"}
-            LoadBalancer: {"Fn::ImportValue": !Sub "${InfrastructureStack}-RPCALBName"}
-            DashExt: !If [ HasDashboardExtensions, {"Fn::ImportValue": !Ref DashboardExtension}, "" ]
+          - DashExt: !If [ HasDashboardExtensions, {"Fn::ImportValue": !Ref DashboardExtension}, "" ]
