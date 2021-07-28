@@ -959,7 +959,6 @@ Resources:
                       EnvironmentFile=/etc/systemd/system/ethcattle-vars
                       Type=simple
                       LimitNOFILE=655360
-                      ExecStartPre=/usr/bin/bash -c '/usr/bin/geth replica --snapshot=false --cache=$allocatesafe ${ReplicaExtraFlags} ${FreezerFlags} --kafka.broker=$KAFKA_ESCAPED_URL""$SEP_ESCAPED""fetch.default=8388608\\&max.waittime=25\\&avoid_leader=1  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopicString} --replica.syncshutdown 2>>/tmp/geth-stderr'
                       ExecStart=/usr/bin/geth ${MasterExtraFlags} ${FreezerFlags} --rpc.allow-unprotected-txs $SNAPS_FLAG --txlookuplimit=0 --light.maxpeers 0 --maxpeers 25 --gcmode=archive --kafka.broker=${KafkaBrokerURL}""$SEP""net.maxopenrequests=1\&message.send.max.retries=20000  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --kafka.txpool.topic=${NetworkId}-txpool ${EventsTopicFlag}
                       TimeoutStartSec=86400
                       TimeoutStopSec=90
@@ -968,6 +967,11 @@ Resources:
                       [Install]
                       WantedBy=multi-user.target
                       " > /etc/systemd/system/geth-master.service
+
+                      printf "export AWS_REGION=us-east-2
+                      export AWS_DEFAULT_REGION=us-east-2
+                      /usr/bin/bash -c '/usr/bin/geth replica --snapshot=false --cache=$allocatesafe ${ReplicaExtraFlags} ${FreezerFlags} --kafka.broker=$KAFKA_ESCAPED_URL""$SEP_ESCAPED""fetch.default=8388608\\&max.waittime=25\\&avoid_leader=1  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopicString} --replica.syncshutdown 2>>/tmp/geth-stderr'
+                      " > /root/master-pre.sh
 
                       printf "[Unit]
                       Description=Ethereum go client
@@ -1059,6 +1063,9 @@ Resources:
                       systemctl enable geth-master.service
                       systemctl enable geth-tx.service
                       systemctl enable geth-peer-data.service
+
+                      chmod +x /root/master-pre.sh
+                      /root/master-pre.sh
 
                       systemctl start geth-master.service || true &
                       sleep 5
