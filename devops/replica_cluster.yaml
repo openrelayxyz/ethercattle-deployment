@@ -1772,7 +1772,7 @@ Resources:
         - !Ref MasterMemSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
-        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
+        - !If [ HasWarningWebhook, !Ref WarningNotifications, !Ref 'AWS::NoValue' ]
       AlarmDescription: !Sub "Alarms when the master RAM < ${MasterMemoryThresholdLow} for 5 minutes"
       ComparisonOperator: "LessThanThreshold"
       Dimensions:
@@ -1782,7 +1782,7 @@ Resources:
         - !Ref MasterMemSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
-        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
+        - !If [ HasWarningWebhook, !Ref WarningNotifications, !Ref 'AWS::NoValue' ]
       EvaluationPeriods: 5
       MetricName: "mem_used_percent"
       Namespace: CWAgent
@@ -1790,7 +1790,7 @@ Resources:
         - !Ref MasterMemSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
-        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
+        - !If [ HasWarningWebhook, !Ref WarningNotifications, !Ref 'AWS::NoValue' ]
       Period: 60
       Statistic: Minimum
       Threshold: !Ref MasterMemoryThresholdLow
