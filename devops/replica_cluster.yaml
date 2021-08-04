@@ -971,7 +971,7 @@ Resources:
                       printf "export AWS_REGION=${AWS::Region}
                       export AWS_DEFAULT_REGION=${AWS::Region}
                       /usr/bin/bash -c '/usr/bin/geth replica --snapshot=false --cache=$allocatesafe ${ReplicaExtraFlags} ${FreezerFlags} --kafka.broker=$KAFKA_ESCAPED_URL""$SEP_ESCAPED""fetch.default=8388608\\&max.waittime=25\\&avoid_leader=1  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopicString} --replica.syncshutdown 2>>/tmp/geth-stderr'
-                      " > /root/master-pre.sh
+                      chown -R geth /var/lib/ethereum" > /root/master-pre.sh
 
                       printf "[Unit]
                       Description=Ethereum go client
