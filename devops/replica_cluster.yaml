@@ -3507,6 +3507,15 @@ Resources:
                   aws cloudformation update-stack --stack-name ${AWS::StackName} --use-previous-template --capabilities CAPABILITY_IAM --parameters="$PARAMETERS_FINAL"
                 done
 
+                if [ "${AggregatedNotifications}" != "" ]
+                then
+                  aws sns publish --topic-arn=${AggregatedNotifications} --subject="${AWS::StackName} - Pruning Complete" --message="The pruning process for ${KafkaTopic} has completed. It is important that at least one master for this stack be restarted soon, but that requires manual intervention."
+                fi
+                if [ "${AlarmSNSTopic}" != "" ]
+                then
+                  aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - Pruning Complete" --message="The pruning process for ${KafkaTopic} has completed. It is important that at least one master for this stack be restarted soon, but that requires manual intervention."
+                fi
+
 
                 if [ "${S3BackupLogsBucket}" != "" ]
                 then
