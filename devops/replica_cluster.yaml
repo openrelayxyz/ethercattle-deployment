@@ -253,6 +253,7 @@ Parameters:
     Description: Instance type to be used for pruning
     AllowedValues:
     - i3en.large
+    - i3en.xlarge
     - r5a.large,r5.large
     Default: r5a.large,r5.large
     Type: String
