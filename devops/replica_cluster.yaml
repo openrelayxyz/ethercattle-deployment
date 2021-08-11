@@ -848,6 +848,8 @@ Resources:
                       systemctl start amazon-cloudwatch-agent.service
                       systemctl enable journald-cloudwatch-logs
                       systemctl start journald-cloudwatch-logs
+                      systemctl enable termination-detection.service
+                      systemctl start termination-detection.service
                     - ClusterId:
                         "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
                       ReplicaHTTPFlag:
@@ -1029,6 +1031,21 @@ Resources:
                       Restart=on-failure
                       RestartSec=10s
                       " > /etc/systemd/system/geth-peer-data.service
+
+                      printf "[Unit]
+                      Description=Detect and shut down from termination signal
+                      After=syslog.target
+
+                      [Service]
+                      User=root
+                      Group=root
+                      Type=simple
+                      ExecStart=/root/termination-detection.sh
+                      KillMode=process
+                      TimeoutStopSec=90
+                      Restart=on-failure
+                      RestartSec=10s
+                      " > /etc/systemd/system/termination-detection.service
 
 
                     - ClusterId:
@@ -1230,6 +1247,32 @@ Resources:
                         "Fn::ImportValue": !Sub "${InfrastructureStack}-BaseInfrastructure"
                       FreezerFlags: !If [ EnabledFreezerBucket, {"Fn::Sub": ["--datadir.ancient=s3://${Bucket}/${NetworkId}", {Bucket: !If [ HasFreezerBucket, !Ref FreezerBucket, {"Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket"} ]} ]}, ""]
                       EventsTopicFlag: !If [ HasEventsTopic, !Sub "--kafka.event.topic ${EventsTopic}", ""]
+                mode: "000700"
+                owner: root
+                group: root
+              /root/termination-detection.sh:
+                content:
+                  "Fn::Sub":
+                    - |
+                      #!/bin/bash
+                      TOKEN=`curl -s -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600"`
+                      while sleep 5; do
+                          HTTP_CODE=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -s -w %{http_code} -o /dev/null http://169.254.169.254/latest/meta-data/spot/instance-action)
+                          if [[ "$HTTP_CODE" -eq 401 ]] ; then
+                              # echo "Refreshing Authentication Token"
+                              TOKEN=`curl -s -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 30"`
+                          elif [[ "$HTTP_CODE" -eq 200 ]] ; then
+                              echo "Detected termination signal. Shutting down"
+                              systemctl stop proxy || true
+                              /root/stop-all.sh
+                              sleep 10
+                              poweroff
+                          # else
+                              # echo "Not Interrupted"
+                          fi
+                      done
+                    - ClusterId:
+                        "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
                 mode: "000700"
                 owner: root
                 group: root
