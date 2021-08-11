@@ -848,6 +848,8 @@ Resources:
                       systemctl start amazon-cloudwatch-agent.service
                       systemctl enable journald-cloudwatch-logs
                       systemctl start journald-cloudwatch-logs
+                      systemctl enable termination-detection.service
+                      systemctl start termination-detection.service
                     - ClusterId:
                         "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
                       ReplicaHTTPFlag:
@@ -1029,6 +1031,21 @@ Resources:
                       Restart=on-failure
                       RestartSec=10s
                       " > /etc/systemd/system/geth-peer-data.service
+
+                      printf "[Unit]
+                      Description=Detect and shut down from termination signal
+                      After=syslog.target
+
+                      [Service]
+                      User=root
+                      Group=root
+                      Type=simple
+                      ExecStart=/root/termination-detection.sh
+                      KillMode=process
+                      TimeoutStopSec=90
+                      Restart=on-failure
+                      RestartSec=10s
+                      " > /etc/systemd/system/termination-detection.service
 
 
                     - ClusterId:
@@ -1233,6 +1250,32 @@ Resources:
                 mode: "000700"
                 owner: root
                 group: root
+              /root/termination-detection.sh:
+                content:
+                  "Fn::Sub":
+                    - |
+                      #!/bin/bash
+                      TOKEN=`curl -s -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600"`
+                      while sleep 5; do
+                          HTTP_CODE=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -s -w %{http_code} -o /dev/null http://169.254.169.254/latest/meta-data/spot/instance-action)
+                          if [[ "$HTTP_CODE" -eq 401 ]] ; then
+                              # echo "Refreshing Authentication Token"
+                              TOKEN=`curl -s -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 30"`
+                          elif [[ "$HTTP_CODE" -eq 200 ]] ; then
+                              echo "Detected termination signal. Shutting down"
+                              systemctl stop proxy || true
+                              /root/stop-all.sh
+                              sleep 10
+                              poweroff
+                          # else
+                              # echo "Not Interrupted"
+                          fi
+                      done
+                    - ClusterId:
+                        "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
+                mode: "000700"
+                owner: root
+                group: root
               /root/loadtest-disk.sh:
                 content:
                   "Fn::Sub":
@@ -1327,6 +1370,7 @@ Resources:
       MinSize: !Ref MasterCount
       MaxSize: 7
       HealthCheckType: EC2
+      CapacityRebalance: true
       MixedInstancesPolicy:
         InstancesDistribution:
           SpotAllocationStrategy: !Ref MasterSpotAllocationStrategy
@@ -2821,6 +2865,7 @@ Resources:
       MinSize: !Ref ReplicaTargetCapacity
       MaxSize: !Ref ReplicaMaxCapacity
       HealthCheckType: EC2
+      CapacityRebalance: true
       TargetGroupARNs: !If [NoTG, !Ref "AWS::NoValue", !Split [ ",", !If [HasATG, !Ref AlternateTargetGroup, {"Fn::ImportValue": !Sub "${InfrastructureStack}-ALBGroupList"}]]]
       MetricsCollection:
       - Granularity: 1Minute
@@ -3657,6 +3702,7 @@ Resources:
       MinSize: !Ref FallbackTargetCapacity
       MaxSize: !Ref FallbackMaxCapacity
       HealthCheckType: EC2
+      CapacityRebalance: true
       TargetGroupARNs: !If [NoTG, !Ref "AWS::NoValue", !Split [ ",", !If [HasATG, !Ref AlternateTargetGroup, {"Fn::ImportValue": !Sub "${InfrastructureStack}-ALBGroupList"}]]]
       MetricsCollection:
       - Granularity: 1Minute
