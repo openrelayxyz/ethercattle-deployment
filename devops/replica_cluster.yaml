@@ -54,6 +54,10 @@ Parameters:
     Default: v1.10.3-1
     Type: String
     Description: The Ether Cattle Geth Version to deploys
+  MasterGethVersion:
+    Default: ""
+    Type: String
+    Description: If set, an alternate version of Geth to use on masters. If not set, ECGethVersion will be deployed.
   InfrastructureStack:
     Type: String
     Description: The infrastructure stack this cluster connects to
@@ -294,6 +298,7 @@ Metadata:
           - NetworkId
           - S3GethBucketName
           - ECGethVersion
+          - MasterGethVersion
           - SnapshotId
           - S3BackupLogsBucket
       - Label:
@@ -350,6 +355,8 @@ Metadata:
         default: S3 Geth Bucket
       ECGethVersion:
         default: Ether Cattle Geth Version Number
+      MasterGethVersion:
+        default: Ether Cattle Geth Version for Masters
       InfrastructureStack:
         default: Infrastructure CloudFormation Stack
       KeyName:
@@ -1072,6 +1079,20 @@ Resources:
                       #!/bin/bash -xe
                       printf "log_group = \"${MasterLG}\"
                       state_file = \"/var/lib/journald-cloudwatch-logs/state\"" > /usr/local/etc/journald-cloudwatch-logs.conf
+
+                      if [ "${MasterGethVersion}" != "" ]
+                      then
+                        if [ "$(arch)" == "x86_64" ]
+                        then
+                          ARCH="amd64"
+                        elif [ "$(arch)" == "aarch64" ]
+                        then
+                          ARCH="arm64"
+                        fi
+                        GETH_BIN="geth-linux-$ARCH"
+                        aws s3 cp s3://${S3GethBucketName}/${MasterGethVersion}/$GETH_BIN /usr/bin/geth
+                        chmod +x /usr/bin/geth
+                      fi
 
                       rm -f /var/lib/ethereum/geth/nodekey || true
                       rm /var/lib/ethereum/geth.ipc || true
