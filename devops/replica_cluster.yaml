@@ -848,8 +848,8 @@ Resources:
                       systemctl start amazon-cloudwatch-agent.service
                       systemctl enable journald-cloudwatch-logs
                       systemctl start journald-cloudwatch-logs
-                      systemctl enable termination-detection.service
-                      systemctl start termination-detection.service
+                      # systemctl enable termination-detection.service
+                      # systemctl start termination-detection.service
                     - ClusterId:
                         "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
                       ReplicaHTTPFlag:
