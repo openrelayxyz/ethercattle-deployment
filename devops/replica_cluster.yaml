@@ -1368,6 +1368,7 @@ Resources:
       MinSize: !Ref MasterCount
       MaxSize: 7
       HealthCheckType: EC2
+      CapacityRebalance: false
       MixedInstancesPolicy:
         InstancesDistribution:
           SpotAllocationStrategy: !Ref MasterSpotAllocationStrategy
@@ -2862,6 +2863,7 @@ Resources:
       MinSize: !Ref ReplicaTargetCapacity
       MaxSize: !Ref ReplicaMaxCapacity
       HealthCheckType: EC2
+      CapacityRebalance: false
       TargetGroupARNs: !If [NoTG, !Ref "AWS::NoValue", !Split [ ",", !If [HasATG, !Ref AlternateTargetGroup, {"Fn::ImportValue": !Sub "${InfrastructureStack}-ALBGroupList"}]]]
       MetricsCollection:
       - Granularity: 1Minute
@@ -3698,6 +3700,7 @@ Resources:
       MinSize: !Ref FallbackTargetCapacity
       MaxSize: !Ref FallbackMaxCapacity
       HealthCheckType: EC2
+      CapacityRebalance: false
       TargetGroupARNs: !If [NoTG, !Ref "AWS::NoValue", !Split [ ",", !If [HasATG, !Ref AlternateTargetGroup, {"Fn::ImportValue": !Sub "${InfrastructureStack}-ALBGroupList"}]]]
       MetricsCollection:
       - Granularity: 1Minute
