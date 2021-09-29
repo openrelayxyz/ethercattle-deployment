@@ -33,7 +33,7 @@ In a trustless peer-to-peer system, these steps are unavoidable. Malicious
 peers could provide incorrect information, so it is necessary to validate all
 of the information received from untrusted peers. But given several nodes
 managed by the same operator, it is generally safe for those nodes to trust
-eachother, allowing individual nodes to avoid some of the computationally
+each other, allowing individual nodes to avoid some of the computationally
 intensive and disk intensive steps that make the initialization process time
 consuming.
 
