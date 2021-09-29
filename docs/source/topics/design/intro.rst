@@ -58,7 +58,7 @@ authenticate state data provided by the RPC node. This means that publicly
 hosted nodes could serve inaccurate information with no way for the client to
 know. This puts public RPC providers in a position where they could potentially
 abuse their clients' trust for profit. It also makes them a target for hackers
-who might wish to serve inaccurate state informatino.
+who might wish to serve inaccurate state information.
 
 Second, it means that a fundamental part of an organization's system depends on
 a third party that offers no SLA. RPC hosts like Infura are generally available
