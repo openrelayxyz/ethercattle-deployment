@@ -6,7 +6,7 @@ can be treated as Cattle, rather than Pets. That is to say, when cattle gets
 badly injured its owner will typically discard it and replace it with
 a new animal, but when a pet gets badly injured its owner will typically do
 everything within reason to nurse the animal back to health. We want services
-to be easily replaceable, and when a service begins to fail healthcecks we want
+to be easily replaceable, and when a service begins to fail healthchecks we want
 to discard it and replace it with a healthy instance.
 
 For a service to be treated as cattle, it typically has the following
@@ -58,7 +58,7 @@ authenticate state data provided by the RPC node. This means that publicly
 hosted nodes could serve inaccurate information with no way for the client to
 know. This puts public RPC providers in a position where they could potentially
 abuse their clients' trust for profit. It also makes them a target for hackers
-who might wish to serve inaccurate state informatino.
+who might wish to serve inaccurate state information.
 
 Second, it means that a fundamental part of an organization's system depends on
 a third party that offers no SLA. RPC hosts like Infura are generally available
