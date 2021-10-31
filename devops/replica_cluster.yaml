@@ -420,7 +420,6 @@ Mappings:
         - InstanceType: m5.xlarge
         - InstanceType: m5d.xlarge
         - InstanceType: m5dn.xlarge
-        - InstanceType: r4.large
         - InstanceType: r5.large
         - InstanceType: r5d.large
         - InstanceType: r5dn.large
