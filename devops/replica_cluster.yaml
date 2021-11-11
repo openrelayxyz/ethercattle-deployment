@@ -430,7 +430,6 @@ Mappings:
         - InstanceType: m5.large
         - InstanceType: m5a.large
         - InstanceType: m5ad.large
-        - InstanceType: m5.large
         - InstanceType: m5d.large
         - InstanceType: m5dn.large
       small:
@@ -452,7 +451,6 @@ Mappings:
         - InstanceType: m5.large
         - InstanceType: m5a.large
         - InstanceType: m5ad.large
-        - InstanceType: m5.large
         - InstanceType: m5d.large
         - InstanceType: m5dn.large
       small:
