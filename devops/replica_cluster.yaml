@@ -426,8 +426,13 @@ Mappings:
         - InstanceType: r5a.large
         - InstanceType: r5ad.large
       medium:
-        - InstanceType: t3.large
-        - InstanceType: t3a.large
+        - InstanceType: m6i.large
+        - InstanceType: m5.large
+        - InstanceType: m5a.large
+        - InstanceType: m5ad.large
+        - InstanceType: m5.large
+        - InstanceType: m5d.large
+        - InstanceType: m5dn.large
       small:
         - InstanceType: t3.medium
         - InstanceType: t3a.medium
@@ -443,8 +448,13 @@ Mappings:
         # - InstanceType: c5d.xlarge
         # - InstanceType: c5ad.2xlarge
       medium:
-        - InstanceType: t3.large
-        - InstanceType: t3a.large
+        - InstanceType: m6i.large
+        - InstanceType: m5.large
+        - InstanceType: m5a.large
+        - InstanceType: m5ad.large
+        - InstanceType: m5.large
+        - InstanceType: m5d.large
+        - InstanceType: m5dn.large
       small:
         - InstanceType: t3.medium
         - InstanceType: t3a.medium
