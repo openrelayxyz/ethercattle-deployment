@@ -420,7 +420,6 @@ Mappings:
         - InstanceType: m5.xlarge
         - InstanceType: m5d.xlarge
         - InstanceType: m5dn.xlarge
-        - InstanceType: r4.large
         - InstanceType: r5.large
         - InstanceType: r5d.large
         - InstanceType: r5dn.large
@@ -2945,7 +2944,7 @@ Resources:
                       chown -R geth /tmp/overlay
 
                       # make sure that geth is able to start as a full node and catch up with peers
-                      sudo -Eu geth /usr/bin/geth ${MasterExtraFlags} --datadir.overlay=/tmp/overlay --rpc.allow-unprotected-txs --snapshot=false --syncmode=fast --txlookuplimit=0 --cache=$allocatesafe --light.maxpeers 0 --maxpeers 25 --rpc --rpcaddr 0.0.0.0 --rpcport 8545 --datadir=/var/lib/ethereum ${FreezerFlags} &
+                      sudo -Eu geth /usr/bin/geth ${MasterExtraFlags} --datadir.overlay=/tmp/overlay --rpc.allow-unprotected-txs --snapshot=false --syncmode=fast --txlookuplimit=0 --cache=$allocatesafe --light.maxpeers 0 --maxpeers 25 --http --http.addr 0.0.0.0 --http.port 8545 --datadir=/var/lib/ethereum ${FreezerFlags} &
                       pid=$!
                       test_pass=0
                       while [ $test_pass -le 1 ]
@@ -3084,7 +3083,7 @@ Resources:
                 KAFKA_ESCAPED_URL="$(printf "${KafkaBrokerURL}"| sed 's^&^\\&^g')"
                 /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource SnapshotterLaunchTemplate --configsets s_scripting --region ${AWS::Region} --role ${SnapshotterNodeRole}
 
-                # sudo -Eu geth /usr/bin/geth ${MasterExtraFlags} --rpc.allow-unprotected-txs --snapshot=false --syncmode=fast --txlookuplimit=0 --cache=$allocatesafe --light.maxpeers 0 --maxpeers 0 --rpc --rpcaddr 0.0.0.0 --rpcport 8545 --datadir=/var/lib/ethereum ${FreezerFlags} &
+                # sudo -Eu geth /usr/bin/geth ${MasterExtraFlags} --rpc.allow-unprotected-txs --snapshot=false --syncmode=fast --txlookuplimit=0 --cache=$allocatesafe --light.maxpeers 0 --maxpeers 0 --http --http.addr 0.0.0.0 --http.port 8545 --datadir=/var/lib/ethereum ${FreezerFlags} &
                 # pid=$!
                 # test_pass=0
                 # while [ $test_pass -le 1 ]
@@ -3257,7 +3256,7 @@ Resources:
 
                 # Goes Above at Placeholder
                 # # Check and see if all blocks that were pulled down are actually there and not returning null.
-                # sudo -Eu geth /usr/bin/geth ${MasterExtraFlags} --rpc.allow-unprotected-txs --snapshot=false --syncmode=fast --txlookuplimit=0 --cache=$allocatesafe --light.maxpeers 0 --maxpeers 0 --rpc --rpcaddr 0.0.0.0 --rpcport 8545 --datadir=/var/lib/ethereum ${FreezerFlags} &
+                # sudo -Eu geth /usr/bin/geth ${MasterExtraFlags} --rpc.allow-unprotected-txs --snapshot=false --syncmode=fast --txlookuplimit=0 --cache=$allocatesafe --light.maxpeers 0 --maxpeers 0 --http --http.addr 0.0.0.0 --http.port 8545 --datadir=/var/lib/ethereum ${FreezerFlags} &
                 # pid=$!
                 # test_pass=0
                 # while [ $test_pass -le 1 ]
@@ -3670,7 +3669,7 @@ Resources:
               - ClusterId:
                   "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
                 ReplicaHTTPFlag:
-                    !If [HasReplicaHTTP, "--rpc --rpcaddr 0.0.0.0 --rpcport 8545", ""]
+                    !If [HasReplicaHTTP, "--http --http.addr 0.0.0.0 --http.port 8545", ""]
                 ReplicaGraphQLFlag:
                     # Wow that's a lot of escaping!
                     !If [HasReplicaGraphQL, "--graphql --graphql.addr 0.0.0.0 --graphql.port 8547 --graphql.vhosts \\\\\\'*\\\\\\'", ""]
